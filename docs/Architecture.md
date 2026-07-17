@@ -104,6 +104,23 @@ doctrine block on every turn. Fighting compliance through ever-present prose is 
 ClaudeWorkbench moves *away* from — it is the reason for the switch to Claude. The sidecar system
 prompt stays minimal; correctness comes from the gate plus skills pulled on demand.
 
+**Concrete sidecar enforcement (not just intent).** The sidecar constrains the agent so the gate
+cannot be side-stepped:
+
+- **CWD = the watched solution's folder**, auto-derived from the host `/health` (tracks whatever
+  `WatchedSolutionPath` is configured). The agent reasons in the real workspace context.
+- **Read-only on the watched workspace.** `Read`/`Grep`/`Glob` are allowed; `Write`, `Edit`,
+  `MultiEdit`, `NotebookEdit`, and `Bash` are in `disallowedTools`. The agent therefore cannot mutate
+  watched source with its native tools — every change must go through the `claude-workbench` MCP
+  (`refresh_file`/`submit_file` → `stage_candidate_for_review` → operator review → `record_diff_decision`),
+  which is where the `canUseTool` approval gate lives.
+- **Optional MCP-only reads.** Per turn (`POST /prompt { readTools: false }`) the native read tools are
+  also disallowed, forcing *all* access — reads included — through the MCP surface (`get_file`,
+  `find_indexed_symbols`). Off by default (reads via native tools are ergonomic and safe).
+- **`strictMcpConfig: true`.** Only the `claude-workbench` server is exposed; the machine's account/
+  user MCP connectors (project `.mcp.json`, `~/.claude` connectors, plugins) are ignored, so nothing
+  unrelated leaks into the agent's tool surface.
+
 ## Auth — subscription verified for personal use
 
 **Verified end-to-end (2026-07-17), SDK `@anthropic-ai/claude-agent-sdk` 0.3.212.** With
