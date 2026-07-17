@@ -57,6 +57,7 @@ internal static class Program
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
         builder.Services.AddSingleton<AgentSettingsService>();
         builder.Services.AddSingleton<DirectoryBrowserService>();
+        builder.Services.AddSingleton<RuntimeProvisioner>();
         builder.Services.AddSingleton<WorkspaceCoordinator>();
         builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
         builder.Services.AddSingleton<SidecarEventStream>();
@@ -70,6 +71,15 @@ internal static class Program
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
         WebApplication app = builder.Build();
+
+        // Ensure the already-configured workspace's runtime (skeleton + task DB) exists
+        // at startup. Idempotent; no index rebuild here (that is on-demand / on select).
+        WorkspaceManager startupWorkspace = app.Services.GetRequiredService<WorkspaceManager>();
+        if (startupWorkspace.HasWorkspace)
+        {
+            app.Services.GetRequiredService<RuntimeProvisioner>().EnsureRuntime(startupWorkspace.Settings);
+        }
+
         app.MapStaticAssets();
         app.UseAntiforgery();
         app.MapMcp("/mcp");

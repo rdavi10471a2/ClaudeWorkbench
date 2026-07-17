@@ -9,16 +9,20 @@ namespace ClaudeWorkbench.Host.Services;
 public sealed class WorkspaceCoordinator
 {
     private readonly WorkspaceManager workspace;
+    private readonly RuntimeProvisioner provisioner;
 
-    public WorkspaceCoordinator(WorkspaceManager workspace)
+    public WorkspaceCoordinator(WorkspaceManager workspace, RuntimeProvisioner provisioner)
     {
         this.workspace = workspace;
+        this.provisioner = provisioner;
     }
 
     public async Task SelectAsync(string watchedSolutionPath)
     {
         workspace.SwitchTo(watchedSolutionPath);
         MonitorSettingsLoader.SaveLocal(workspace.RepositoryRoot, watchedSolutionPath, workspace.RuntimeRoot);
+        // Full runtime: skeleton dirs + task-board DB, then build the index.
+        provisioner.EnsureRuntime(workspace.Settings);
         await workspace.ProvisionAsync();
     }
 }
