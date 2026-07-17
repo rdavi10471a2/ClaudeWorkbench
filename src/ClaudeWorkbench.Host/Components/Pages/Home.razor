@@ -67,9 +67,6 @@ else
                     <RadzenTabsItem Text="Assistant">
                         <AssistantTab />
                     </RadzenTabsItem>
-                    <RadzenTabsItem Text="@($"Approvals ({Approvals.PendingApprovals.Count})")">
-                        <ApprovalsTab />
-                    </RadzenTabsItem>
                     <RadzenTabsItem Text="Source">
                         <SourcePanel />
                     </RadzenTabsItem>
@@ -82,6 +79,8 @@ else
     </main>
 
     <AgentSettingsDialog Visible="@settingsOpen" OnClose="@(() => settingsOpen = false)" />
+
+    <MergeReviewDialog />
 
     @if (workspacePickerOpen)
     {
