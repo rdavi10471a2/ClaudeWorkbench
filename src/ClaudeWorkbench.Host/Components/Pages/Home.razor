@@ -1,6 +1,7 @@
 @page "/"
 @implements IDisposable
 @inject IOperatorConsole Session
+@inject IApprovalQueue Approvals
 
 @* Faithful Coding Services shell (command bar + work panel + RadzenTabs), ported
    from CodexAppServerDemo. Binds only to IOperatorConsole — no sidecar/Claude
@@ -53,7 +54,7 @@
                     <RadzenTabsItem Text="Assistant">
                         <AssistantTab />
                     </RadzenTabsItem>
-                    <RadzenTabsItem Text="@($"Approvals ({Session.PendingApprovals.Count})")">
+                    <RadzenTabsItem Text="@($"Approvals ({Approvals.PendingApprovals.Count})")">
                         <ApprovalsTab />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Activity">

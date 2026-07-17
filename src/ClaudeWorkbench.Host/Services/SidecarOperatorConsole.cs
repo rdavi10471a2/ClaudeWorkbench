@@ -3,10 +3,11 @@ using ClaudeWorkbench.Host.Console;
 
 namespace ClaudeWorkbench.Host.Services;
 
-// The one adapter that bridges the neutral IOperatorConsole the UI binds to and
-// the sidecar/Claude specifics (SidecarEventStream + SidecarClient + SidecarEvent).
-// All translation of wire shapes -> view models happens here and nowhere else.
-public sealed class SidecarOperatorConsole : IOperatorConsole, IDisposable
+// Sidecar-backed adapter for the turn/session seam (IOperatorConsole) and the
+// blocked-work seam (IApprovalQueue). The one place aware of the sidecar event
+// shapes; the approval-queue half is in the SidecarOperatorConsole.Approvals
+// partial. Swap this adapter to retarget the UI at a different backend.
+public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApprovalQueue, IDisposable
 {
     private readonly SidecarEventStream stream;
     private readonly SidecarClient client;
@@ -39,16 +40,6 @@ public sealed class SidecarOperatorConsole : IOperatorConsole, IDisposable
         }
     }
 
-    public IReadOnlyList<ApprovalRequest> PendingApprovals
-    {
-        get
-        {
-            return stream.PendingGates()
-                .Select(gate => new ApprovalRequest(gate.GateId, gate.Tool, gate.FilePath))
-                .ToArray();
-        }
-    }
-
     public IReadOnlyList<ActivityEntry> Activity
     {
         get
@@ -63,11 +54,6 @@ public sealed class SidecarOperatorConsole : IOperatorConsole, IDisposable
     public async Task SendAsync(string prompt)
     {
         await client.PromptAsync(prompt);
-    }
-
-    public async Task ResolveAsync(string approvalId, bool approve, string? reason = null)
-    {
-        await client.ResolveGateAsync(approvalId, approve ? "allow" : "deny", reason);
     }
 
     public void Dispose()

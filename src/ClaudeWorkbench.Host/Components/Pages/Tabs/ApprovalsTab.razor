@@ -1,18 +1,18 @@
 @implements IDisposable
-@inject IOperatorConsole Session
+@inject IApprovalQueue Approvals
 
 <div class="approvals">
-    @if (Session.PendingApprovals.Count == 0)
+    @if (Approvals.PendingApprovals.Count == 0)
     {
         <div class="approvals-empty">No pending approvals. Mutating actions will pause here for review.</div>
     }
     else
     {
-        @foreach (ApprovalRequest approval in Session.PendingApprovals)
+        @foreach (ApprovalRequest approval in Approvals.PendingApprovals)
         {
             <div class="gate-card">
                 <div class="gate-head">
-                    <span class="gate-tool">@approval.Action</span>
+                    <span class="gate-tool">@approval.Tool</span>
                     @if (!string.IsNullOrWhiteSpace(approval.Target))
                     {
                         <span class="gate-file">@approval.Target</span>
@@ -36,7 +36,7 @@
 @code {
     protected override void OnInitialized()
     {
-        Session.Changed += OnChanged;
+        Approvals.Changed += OnChanged;
     }
 
     private void OnChanged()
@@ -46,11 +46,11 @@
 
     private async Task ResolveAsync(string approvalId, bool approve)
     {
-        await Session.ResolveAsync(approvalId, approve);
+        await Approvals.ResolveApprovalAsync(approvalId, approve);
     }
 
     public void Dispose()
     {
-        Session.Changed -= OnChanged;
+        Approvals.Changed -= OnChanged;
     }
 }
