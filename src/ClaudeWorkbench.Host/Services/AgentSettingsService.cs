@@ -15,7 +15,10 @@ public sealed class AgentSettingsService
 
     public AgentSettingsService(MonitorSettings settings)
     {
-        path = Path.Combine(settings.RuntimeRoot, "agent-settings.json");
+        // Monitor-general setting (not per-watched-solution), so it lives with the
+        // monitor's own config next to appsettings.json — not under the per-solution
+        // RuntimeRoot.
+        path = Path.Combine(settings.RepositoryRoot, "config", "agent-settings.json");
         policy = Load();
     }
 
