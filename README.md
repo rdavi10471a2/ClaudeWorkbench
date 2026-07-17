@@ -1,45 +1,103 @@
 # ClaudeWorkbench
 
-Blazor operator console for governed, watched-source AI edits — driven by Claude via the Agent SDK.
+A Blazor operator console for **governed, watched-source AI edits**, driven by **Claude** through the Claude Agent SDK.
 
-## Lineage
+The agent proposes changes to a watched solution; every change is composed against a local *Working* candidate, staged, and held at a human **accept/reject** gate before it ever touches real source. The engine that enforces this — indexing, edit sessions, staging, review gates, and an MCP tool surface — is extracted from **AIMonitor** and runs UI-agnostic here, with **no WinForms**.
 
-- **AIMonitor** — the governed engine (indexing, edit sessions, staging, review gates, MCP tool surface). Extracted here, UI-agnostic, **no WinForms**.
-- **CodexAppServerDemo** — the Blazor control-surface pattern and agent-driver shape (Codex is being replaced by Claude).
-- **New** — a `claude-sidecar` (Claude Agent SDK) replacing the Codex JSON-RPC client, and sidecar-event logging replacing the man-in-the-middle MCP proxy.
+> Status: **engine extracted and green**; the Blazor host + Claude sidecar are the next phase. See [Roadmap](#roadmap).
 
-## What is deliberately left behind from AIMonitor
+---
 
-- WinForms App, the MCP proxy hub, and the stdio bridge (the man-in-the-middle telemetry path).
-- The pipe-based log mirror. The engine keeps a thin file sink (`IMonitorLogger` + `JsonLinesMonitorLogger`); MCP-call telemetry is re-emitted from Agent SDK `tool_use`/`tool_result` + hooks in the sidecar.
+## Why this exists
 
-## Extraction (one testable layer at a time)
+Two proven pieces, recombined, with the backend swapped to Claude:
 
-Engine dependency order (each layer builds + its ported tests pass before the next):
+- **AIMonitor** — the governed engine (the hard part: Roslyn indexing, the two compile gates, session staging, post-accept freshness). Extracted here without its WinForms shell, MCP proxy hub, or stdio bridge.
+- **CodexAppServerDemo** — the Blazor control-surface pattern and the agent-driver shape. Codex is being replaced by Claude.
+- **New** — a thin `claude-sidecar` (Agent SDK) that drives Claude and registers the MCP surface, replacing the Codex JSON-RPC client; and sidecar-event logging replacing the old man-in-the-middle MCP proxy.
 
-- [x] **Core** — settings, workspace paths, stable identifiers (7/7)
-- [x] **Logging** — thinned: `IMonitorLogger` + `JsonLinesMonitorLogger` + in-proc `MonitorLogService`; pipe/proxy dropped (3/3)
-- [x] **MSBuild** (6/6)
-- [x] **Data** (27/28; 1 skipped — razor-generated env skew, see below)
-- [x] **Workflow** (42/42; includes ClaudeSmokes over ported `samples/`)
-- [x] **Runtime** (2/2)
-- [x] **Indexing** (6/6)
-- [x] **McpServer** — pipe-client logger swapped for the thin `JsonLinesMonitorLogger` sink; no proxy/bridge (builds)
-- [x] **Cli** — engine-side console (kept as the runner for the non-unit/Integration suites; not in the ClaudeWorkbench runtime path)
-- [ ] Blazor host + `claude-sidecar` (Agent SDK) + sidecar-event logging — see [docs/Architecture.md](docs/Architecture.md)
+The move to Claude is deliberate: **real skills, hooks, and a programmatic operator gate** instead of policy prose you fight every turn.
 
-Engine builds with 0 errors, no WinForms/proxy/bridge. One test is `[Fact(Skip)]`: the
-razor-generated-reference row assertion is environment-dependent (host Roslyn vs SDK Razor
-generator); the `razor:*` code-behind path stays covered.
+## The governed loop
 
-The non-unit smoke runners (`ToolSmokeTests`, `LanguageCorpusSmokeTests`, `SmokeTests`) are console
-`Main` programs — they build but are run via the CLI/manually, not `dotnet test`.
+```
+choose workspace → discover (index) → refresh_file / new_file → governed edit
+   → stage session → operator review → accept / reject → post-accept reindex
+```
 
-Project/namespace names are kept as `AIMonitor.*` during extraction so the port stays mechanical and the ported tests prove fidelity (identical code compiles, identical tests pass). Rebranding, if wanted, is a later isolated pass.
+- **Reason in the cloud, edit locally.** The model reasons from compact context; watched-source changes are composed against explicit local Working candidates and promoted only through review.
+- **The gate is code, not a prompt.** Mutations (file writes, `accept_staged_review`) are intercepted by the sidecar's `PreToolUse` hook, surfaced to the Blazor UI, and applied only on operator approval.
+- **Freshness is restored at accept.** The solution index rebuilds after an accepted decision — that is the normal point where downstream truth is refreshed.
+
+## Architecture
+
+```
+Blazor host (ClaudeWorkbench)  ── spawns ──►  claude-sidecar (Node, Claude Agent SDK)
+   │  hosts the engine + MCP surface             │  registers the MCP surface, drives Claude,
+   │  renders UI + live log                      │  streams tool/turn events back to the host
+   └── AIMonitor.* engine  (extracted; no WinForms / proxy / bridge)
+        Core · Logging(thin) · MSBuild · Data · Workflow · Runtime · Indexing · McpServer
+```
+
+Details, including exactly how the sidecar registers the MCP surface and the logging model, are in
+**[docs/Architecture.md](docs/Architecture.md)**. Short version:
+
+- **MCP binding** — the sidecar is the MCP client; the Agent SDK connects to the engine's MCP server via its `mcpServers` option (recommended: the Blazor host serves MCP in-proc over HTTP; the sidecar registers a URL). Tools appear to the agent as `mcp__workbench__*`. No proxy or bridge in the path.
+- **Auth** — uses the machine's existing Claude **subscription login** (no `ANTHROPIC_API_KEY`; the SDK falls back to cached OAuth / `claude setup-token`). No API key or corporate account for interactive/subscription use.
+- **Logging** — the engine logs to a JSON-lines file (and raises in-proc events for a live view); MCP-call telemetry is re-emitted from the sidecar's `tool_use`/`tool_result` events and hooks, not sniffed off a pipe.
+
+## Repository layout
+
+```
+src/
+  AIMonitor.Core/        settings, workspace paths, stable identifiers
+  AIMonitor.Logging/     thin sink: IMonitorLogger + JsonLinesMonitorLogger + in-proc MonitorLogService
+  AIMonitor.MSBuild/     MSBuild/Roslyn project + document loading
+  AIMonitor.Data/        SQLite solution index store
+  AIMonitor.Workflow/    edit sessions, staging, review gates
+  AIMonitor.Runtime/     runtime state / orchestration
+  AIMonitor.Indexing/    Roslyn semantic extraction → index
+  AIMonitor.McpServer/   MCP tool surface (governed discovery + mutation + review)
+  AIMonitor.Cli/         engine-side console runner (not in the runtime path; runs the non-unit suites)
+tests/
+  unit/                  xUnit per-layer tests
+  integration/           end-to-end over the CLI + engine
+  smoke/                 console smoke runners (built, run via CLI/manually — not dotnet test)
+samples/watched-solutions/   fixtures the ClaudeSmokes/integration tests operate on
+docs/                    Architecture.md and design notes
+```
+
+Project/namespace names are kept as `AIMonitor.*` from the extraction so the port stayed mechanical and the ported tests prove fidelity. Rebranding, if ever wanted, is an isolated later pass.
 
 ## Build & test
 
 ```powershell
 dotnet build ClaudeWorkbench.slnx
-dotnet test ClaudeWorkbench.slnx
+dotnet test  ClaudeWorkbench.slnx
 ```
+
+The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test state:
+
+| Layer | Tests |
+|---|---|
+| Core · Logging · Runtime | 7 · 3 · 2 |
+| MSBuild · Indexing | 6 · 6 |
+| Workflow (incl. ClaudeSmokes over `samples/`) | 42 |
+| Data | 27 pass · 1 skipped |
+| Integration | 68 pass · 1 skipped |
+
+- **One `[Fact(Skip)]`** (Data): the `razor-generated:*` reference-row assertion is environment-dependent — those rows only index when the host Roslyn matches the SDK's Razor source generator. The `razor:*` code-behind path stays covered. (Document-don't-pin.)
+- **Skipped in Integration**: a by-design skip carried over from AIMonitor.
+- **Smoke runners** (`ToolSmokeTests`, `LanguageCorpusSmokeTests`, `SmokeTests`) are console `Main` programs — they build but are executed via the CLI/manually, not `dotnet test`.
+
+## Roadmap
+
+- [x] Extract the AIMonitor engine, layer by layer, no WinForms/proxy/bridge, tests green
+- [ ] In-proc ASP.NET MCP endpoint on the engine's tool classes (HTTP transport for the sidecar)
+- [ ] `claude-sidecar` (Agent SDK): session lifecycle, `PreToolUse` operator gate, event stream
+- [ ] Blazor host: workspace dashboard, staging/review queue, live log, operator gate UI
+- [ ] Convert the old policy-text doctrine into first-class Claude skills
+
+## Provenance
+
+Lineage: [AIMonitor](https://github.com/rdavi10471a2/AIMonitor) (engine) + CodexAppServerDemo (Blazor control-surface pattern) → ClaudeWorkbench (Claude backend). The engine here is a faithful extraction; identical code compiles and the ported tests pass.
