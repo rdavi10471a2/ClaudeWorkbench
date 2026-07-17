@@ -187,6 +187,16 @@ async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Prom
     cwd: workspaceCwd,
     disallowedTools: disallowed,
     strictMcpConfig: policy.strictMcpConfig,
+    // SDK isolation mode: load NO filesystem settings. Without this the SDK
+    // defaults to user+project+local sources, which (a) leaks the operator's
+    // personal ~/.claude/settings.json allow-rules into the governed agent,
+    // potentially pre-authorizing tools we mean to gate, and (b) resolves
+    // project/local settings from cwd = the watched solution, reading/writing
+    // .claude/* inside a read-only tree. Governance here is purely programmatic
+    // (canUseTool + disallowedTools, recomputed each turn from agent-settings.json),
+    // so no file config should apply. [] also disables CLAUDE.md loading, which
+    // matches the "no turn-start policy / no monitor CLAUDE.md injection" rule.
+    settingSources: [],
     // No systemPrompt: governance is the gate + on-demand skills, not turn-start
     // policy prose. Do not inject a monitor-style CLAUDE.md here.
   };
