@@ -149,6 +149,39 @@
 .wsp-sln {
     font-weight: 700;
     color: #1e4fd6;
+    border-color: #cfdcff;
+    background: #f4f7ff;
+}
+
+.wsp-sln:hover {
+    border-color: #5b82f1;
+    background: #eaf0ff;
+}
+
+.wsp-sln-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wsp-select {
+    flex: 0 0 auto;
+    color: #ffffff;
+    background: #2457e6;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: .72rem;
+    font-weight: 800;
+}
+
+.wsp-hint {
+    padding: 8px 18px;
+    color: #33485f;
+    background: #f8fbff;
+    border-bottom: 1px solid #eef2f6;
+    font-size: .82rem;
 }
 
 .wsp-ic {

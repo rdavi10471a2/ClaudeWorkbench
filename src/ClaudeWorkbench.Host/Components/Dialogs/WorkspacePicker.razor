@@ -15,6 +15,8 @@
 
         <div class="wsp-path"><strong>@snapshot.CurrentPath</strong></div>
 
+        <div class="wsp-hint">Browse with <b>Drives</b> / <b>Folders</b>, then <b>click a solution</b> under &ldquo;Solutions&rdquo; to select and index it.</div>
+
         @if (!string.IsNullOrWhiteSpace(snapshot.ErrorMessage))
         {
             <div class="wsp-error">@snapshot.ErrorMessage</div>
@@ -58,7 +60,9 @@
                 @foreach (DirectoryEntryViewModel solution in snapshot.Solutions)
                 {
                     <button type="button" class="wsp-row wsp-sln" @onclick="() => ChooseAsync(solution.FullPath)" disabled="@busy">
-                        <span class="wsp-ic">SLN</span><span>@solution.Name</span>
+                        <span class="wsp-ic">SLN</span>
+                        <span class="wsp-sln-name">@solution.Name</span>
+                        <span class="wsp-select">Select &rarr;</span>
                     </button>
                 }
             </div>

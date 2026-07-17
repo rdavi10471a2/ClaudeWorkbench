@@ -11,3 +11,6 @@ node_modules/
 
 # monitor-general agent tool policy (mutable user state)
 agent-settings.json
+
+# monitor watched-solution config (mutable; written by the workspace picker). Seed from appsettings.template.json.
+**/config/appsettings.json

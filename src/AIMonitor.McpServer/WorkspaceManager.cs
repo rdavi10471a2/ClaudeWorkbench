@@ -107,7 +107,9 @@ public sealed class WorkspaceManager
 
     private static bool WatchedWorkspaceExists(MonitorSettings settings)
     {
-        return File.Exists(settings.WatchedSolutionPath) || Directory.Exists(settings.WatchedProjectFolder);
+        // A valid workspace requires the actual solution file to exist (its folder
+        // existing is not enough — a seeded placeholder path must open the picker).
+        return File.Exists(settings.WatchedSolutionPath);
     }
 
     private sealed class WorkspaceServices

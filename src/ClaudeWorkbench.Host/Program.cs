@@ -22,8 +22,20 @@ internal static class Program
         builder.WebHost.UseStaticWebAssets();
 
         string repositoryRoot = GetOption(args, "--repo-root") ?? builder.Environment.ContentRootPath;
-        string? settingsPath = GetOption(args, "--config");
-        MonitorSettings settings = MonitorSettingsLoader.Load(repositoryRoot, settingsPath);
+        string configPath = GetOption(args, "--config") ?? Path.Combine(repositoryRoot, "config", "appsettings.json");
+        // First run: the mutable config is git-ignored, so seed it from the committed
+        // template (placeholder solution -> the app opens the workspace picker).
+        if (!File.Exists(configPath))
+        {
+            string templatePath = Path.Combine(repositoryRoot, "config", "appsettings.template.json");
+            if (File.Exists(templatePath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+                File.Copy(templatePath, configPath);
+            }
+        }
+
+        MonitorSettings settings = MonitorSettingsLoader.Load(repositoryRoot, configPath);
 
         builder.Services.AddSingleton<IMonitorLogger>(_ =>
             new JsonLinesMonitorLogger(MonitorLogPaths.GetDefaultLogPath(settings)));
