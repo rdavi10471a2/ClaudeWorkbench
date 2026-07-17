@@ -1,23 +1,31 @@
 using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
+using AIMonitor.McpServer;
 
 namespace ClaudeWorkbench.Host.Source;
 
 // Builds the source-browser snapshot from the AIMonitor engine index (in-process)
 // and rebuilds that index. Ported from CodexAppServerDemo's SourceWorkspaceService,
 // simplified to source-only (no test projection) and retargeted at our engine.
+// Reads the current workspace's services through the WorkspaceManager so it
+// retargets when the operator switches watched workspaces.
 public sealed class SourceWorkspace
 {
     private const long MaxReadableFileBytes = 768 * 1024;
 
-    private readonly MonitorSettings settings;
-    private readonly SolutionIndexQueryService query;
+    private readonly WorkspaceManager workspace;
 
-    public SourceWorkspace(MonitorSettings settings, SolutionIndexQueryService query)
+    public SourceWorkspace(WorkspaceManager workspace)
     {
-        this.settings = settings;
-        this.query = query;
+        this.workspace = workspace;
+        workspace.Changed += OnWorkspaceChanged;
+    }
+
+    private void OnWorkspaceChanged()
+    {
+        loaded = false;
+        Refresh();
     }
 
     // --- retained state (singleton) so the Source view survives tab switches,
@@ -71,7 +79,10 @@ public sealed class SourceWorkspace
         Changed?.Invoke();
         try
         {
-            await new SolutionIndexRebuildService().RebuildAsync(settings);
+            if (workspace.HasWorkspace)
+            {
+                await workspace.ProvisionAsync();
+            }
         }
         finally
         {
@@ -91,21 +102,26 @@ public sealed class SourceWorkspace
 
     public SourceWorkspaceSnapshot BuildSnapshot(string? selectedRelativePath, int? selectedLine, string? filter)
     {
-        MonitorStatusResult status = query.GetMonitorStatus();
+        if (!workspace.HasWorkspace)
+        {
+            return SourceWorkspaceSnapshot.Empty("Select a watched workspace to browse source.");
+        }
+
+        MonitorStatusResult status = workspace.Query.GetMonitorStatus();
         if (!status.DatabaseExists)
         {
             return WithMessage(status, filter, "Solution index is missing. Rebuild the index to load source.");
         }
 
-        IReadOnlyList<IndexedProjectRow> projects = query.ListProjects();
-        IReadOnlyList<IndexedDocumentRow> documents = query.ListDocuments();
+        IReadOnlyList<IndexedProjectRow> projects = workspace.Query.ListProjects();
+        IReadOnlyList<IndexedDocumentRow> documents = workspace.Query.ListDocuments();
         if (projects.Count == 0 || documents.Count == 0)
         {
             return WithMessage(status, filter, "Solution index is empty or stale. Rebuild the index to load source.");
         }
 
-        IReadOnlyList<IndexedSymbolRow> symbols = query.ListSymbols();
-        string watchedRoot = settings.WatchedProjectFolder;
+        IReadOnlyList<IndexedSymbolRow> symbols = workspace.Query.ListSymbols();
+        string watchedRoot = workspace.Settings.WatchedProjectFolder;
         IReadOnlyList<SourceFileEntry> files = BuildFiles(watchedRoot, documents, filter);
         IReadOnlyList<SourceTreeNode> tree = BuildTree(projects, documents, symbols, watchedRoot, files);
         SourceFileEntry? selectedEntry = SelectFile(files, selectedRelativePath);
@@ -113,7 +129,7 @@ public sealed class SourceWorkspace
 
         return new SourceWorkspaceSnapshot(
             watchedRoot,
-            settings.WatchedSolutionPath,
+            workspace.Settings.WatchedSolutionPath,
             status.DatabasePath,
             files,
             tree,
@@ -122,16 +138,11 @@ public sealed class SourceWorkspace
             files.Count == 0 ? "No indexed source files matched the current filter." : string.Empty);
     }
 
-    public async Task RebuildIndexAsync()
-    {
-        await new SolutionIndexRebuildService().RebuildAsync(settings);
-    }
-
     private SourceWorkspaceSnapshot WithMessage(MonitorStatusResult status, string? filter, string message)
     {
         return new SourceWorkspaceSnapshot(
-            settings.WatchedProjectFolder,
-            settings.WatchedSolutionPath,
+            workspace.Settings.WatchedProjectFolder,
+            workspace.Settings.WatchedSolutionPath,
             status.DatabasePath,
             [],
             [],

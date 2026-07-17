@@ -17,13 +17,13 @@ internal static class Program
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
         builder.Logging.ClearProviders();
         MonitorSettings settings = LoadSettings(args);
-        builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<IMonitorLogger>(_ =>
             new JsonLinesMonitorLogger(MonitorLogPaths.GetDefaultLogPath(settings)));
-        builder.Services.AddSingleton(SolutionIndexQueryService.Create(settings));
-        builder.Services.AddSingleton(new WorkflowEditService(settings));
-        builder.Services.AddSingleton(new RoslynEditService(settings));
-        builder.Services.AddSingleton(new WorkflowEditPaths(settings));
+        builder.Services.AddSingleton(new WorkspaceManager(
+            settings.RepositoryRoot,
+            settings.RuntimeRoot,
+            settings.WinMergeCandidatePaths,
+            settings));
         builder.Services.AddSingleton<AIMonitorMcpRuntimeState>();
         builder.Services
             .AddMcpServer()

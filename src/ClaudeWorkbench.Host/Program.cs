@@ -25,13 +25,13 @@ internal static class Program
         string? settingsPath = GetOption(args, "--config");
         MonitorSettings settings = MonitorSettingsLoader.Load(repositoryRoot, settingsPath);
 
-        builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<IMonitorLogger>(_ =>
             new JsonLinesMonitorLogger(MonitorLogPaths.GetDefaultLogPath(settings)));
-        builder.Services.AddSingleton(SolutionIndexQueryService.Create(settings));
-        builder.Services.AddSingleton(new WorkflowEditService(settings));
-        builder.Services.AddSingleton(new RoslynEditService(settings));
-        builder.Services.AddSingleton(new WorkflowEditPaths(settings));
+        builder.Services.AddSingleton(new WorkspaceManager(
+            settings.RepositoryRoot,
+            settings.RuntimeRoot,
+            settings.WinMergeCandidatePaths,
+            settings));
         builder.Services.AddSingleton<AIMonitorMcpRuntimeState>();
         builder.Services
             .AddMcpServer(options =>
@@ -59,11 +59,12 @@ internal static class Program
         app.MapStaticAssets();
         app.UseAntiforgery();
         app.MapMcp("/mcp");
-        app.MapGet("/health", (MonitorSettings monitorSettings) => Results.Ok(new
+        app.MapGet("/health", (WorkspaceManager workspace) => Results.Ok(new
         {
             status = "ok",
-            repositoryRoot = monitorSettings.RepositoryRoot,
-            watchedSolutionPath = monitorSettings.WatchedSolutionPath
+            repositoryRoot = workspace.RepositoryRoot,
+            hasWorkspace = workspace.HasWorkspace,
+            watchedSolutionPath = workspace.WatchedSolutionPath
         }));
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.Run();

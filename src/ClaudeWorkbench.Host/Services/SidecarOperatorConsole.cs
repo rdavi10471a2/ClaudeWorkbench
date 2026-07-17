@@ -1,4 +1,4 @@
-using AIMonitor.Core;
+using AIMonitor.McpServer;
 using ClaudeWorkbench.Host.Console;
 
 namespace ClaudeWorkbench.Host.Services;
@@ -11,25 +11,25 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
 {
     private readonly SidecarEventStream stream;
     private readonly SidecarClient client;
-    private readonly MonitorSettings settings;
+    private readonly WorkspaceManager workspace;
     private readonly AgentSettingsService agentSettings;
 
     public SidecarOperatorConsole(
         SidecarEventStream stream,
         SidecarClient client,
-        MonitorSettings settings,
+        WorkspaceManager workspace,
         AgentSettingsService agentSettings)
     {
         this.stream = stream;
         this.client = client;
-        this.settings = settings;
+        this.workspace = workspace;
         this.agentSettings = agentSettings;
         this.stream.Changed += Relay;
     }
 
     public event Action? Changed;
 
-    public string WorkspacePath => settings.WatchedSolutionPath;
+    public string WorkspacePath => workspace.WatchedSolutionPath ?? "(no watched workspace)";
 
     public ConsoleStatus Status => new(stream.Connected, stream.ActiveTurn is not null);
 

@@ -23,34 +23,30 @@ public sealed partial class AIMonitorTools
         WriteIndented = true
     };
 
-    private readonly MonitorSettings settings;
-    private readonly SolutionIndexQueryService queryService;
-    private readonly WorkflowEditService workflowService;
-    private readonly RoslynEditService roslynEditService;
-    private readonly WorkflowEditPaths workflowPaths;
+    private readonly WorkspaceManager workspace;
     private readonly AIMonitorMcpRuntimeState runtimeState;
     private readonly IHostApplicationLifetime applicationLifetime;
     private readonly IMonitorLogger logger;
 
     public AIMonitorTools(
-        MonitorSettings settings,
-        SolutionIndexQueryService queryService,
-        WorkflowEditService workflowService,
-        RoslynEditService roslynEditService,
-        WorkflowEditPaths workflowPaths,
+        WorkspaceManager workspace,
         AIMonitorMcpRuntimeState runtimeState,
         IHostApplicationLifetime applicationLifetime,
         IMonitorLogger logger)
     {
-        this.settings = settings;
-        this.queryService = queryService;
-        this.workflowService = workflowService;
-        this.roslynEditService = roslynEditService;
-        this.workflowPaths = workflowPaths;
+        this.workspace = workspace;
         this.runtimeState = runtimeState;
         this.applicationLifetime = applicationLifetime;
         this.logger = logger;
     }
+
+    // Workspace-scoped services are read through the manager so the whole tool
+    // surface retargets when the operator switches watched workspaces at runtime.
+    private MonitorSettings settings => workspace.Settings;
+    private SolutionIndexQueryService queryService => workspace.Query;
+    private WorkflowEditService workflowService => workspace.EditService;
+    private RoslynEditService roslynEditService => workspace.RoslynEditService;
+    private WorkflowEditPaths workflowPaths => workspace.EditPaths;
 
     private string ComposeToolManifest()
     {
