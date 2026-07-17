@@ -1,0 +1,22 @@
+<Solution>
+  <Project Path="src/AIMonitor.Cli/AIMonitor.Cli.csproj" />
+  <Project Path="src/AIMonitor.Core/AIMonitor.Core.csproj" />
+  <Project Path="src/AIMonitor.Data/AIMonitor.Data.csproj" />
+  <Project Path="src/AIMonitor.Indexing/AIMonitor.Indexing.csproj" />
+  <Project Path="src/AIMonitor.Logging/AIMonitor.Logging.csproj" />
+  <Project Path="src/AIMonitor.MSBuild/AIMonitor.MSBuild.csproj" />
+  <Project Path="src/AIMonitor.McpServer/AIMonitor.McpServer.csproj" />
+  <Project Path="src/AIMonitor.Runtime/AIMonitor.Runtime.csproj" />
+  <Project Path="src/AIMonitor.Workflow/AIMonitor.Workflow.csproj" />
+  <Project Path="tests/integration/AIMonitor.Integration.Tests/AIMonitor.Integration.Tests.csproj" />
+  <Project Path="tests/smoke/AIMonitor.LanguageCorpusSmokeTests/AIMonitor.LanguageCorpusSmokeTests.csproj" />
+  <Project Path="tests/smoke/AIMonitor.SmokeTests/AIMonitor.SmokeTests.csproj" />
+  <Project Path="tests/smoke/AIMonitor.ToolSmokeTests/AIMonitor.ToolSmokeTests.csproj" />
+  <Project Path="tests/unit/AIMonitor.Core.Tests/AIMonitor.Core.Tests.csproj" />
+  <Project Path="tests/unit/AIMonitor.Data.Tests/AIMonitor.Data.Tests.csproj" />
+  <Project Path="tests/unit/AIMonitor.Indexing.Tests/AIMonitor.Indexing.Tests.csproj" />
+  <Project Path="tests/unit/AIMonitor.Logging.Tests/AIMonitor.Logging.Tests.csproj" />
+  <Project Path="tests/unit/AIMonitor.MSBuild.Tests/AIMonitor.MSBuild.Tests.csproj" />
+  <Project Path="tests/unit/AIMonitor.Runtime.Tests/AIMonitor.Runtime.Tests.csproj" />
+  <Project Path="tests/unit/AIMonitor.Workflow.Tests/AIMonitor.Workflow.Tests.csproj" />
+</Solution>

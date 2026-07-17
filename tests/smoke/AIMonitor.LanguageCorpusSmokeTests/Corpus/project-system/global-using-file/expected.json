@@ -1,0 +1,22 @@
+{
+  "name": "project system global using file",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "App/GlobalUsingCaller.cs",
+  "expectedTargetRelativePath": "Shared/GlobalUsingTarget.cs",
+  "expectedKind": "class",
+  "expectedName": "GlobalUsingTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.Shared.GlobalUsingTarget",
+  "informational": true,
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null,
+  "additionalSources": [
+    {
+      "sourceFile": "global-usings.cs.tst",
+      "relativePath": "App/GlobalUsings.cs"
+    },
+    {
+      "sourceFile": "shared-target.cs.tst",
+      "relativePath": "Shared/GlobalUsingTarget.cs"
+    }
+  ]
+}

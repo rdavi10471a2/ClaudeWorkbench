@@ -1,0 +1,12 @@
+{
+  "name": "framework metadata method call",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "FrameworkMethodCases.cs",
+  "expectedKind": "method",
+  "expectedName": "WriteLine",
+  "expectedRoslynDisplay": "System.Console.WriteLine(string?)",
+  "informational": true,
+  "expectedMonitorTarget": false,
+  "expectedReferenceCount": 0,
+  "expectedCallerCount": null
+}

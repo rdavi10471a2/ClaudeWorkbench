@@ -1,0 +1,10 @@
+{
+  "name": "extension method invocation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "ExtensionCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Twice",
+  "expectedRoslynDisplay": "int.Twice()",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

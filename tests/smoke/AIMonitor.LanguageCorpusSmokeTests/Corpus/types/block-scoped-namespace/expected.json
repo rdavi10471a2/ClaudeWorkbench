@@ -1,0 +1,10 @@
+{
+  "name": "block scoped namespace",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "BlockScopedNamespaceCases.cs",
+  "expectedKind": "class",
+  "expectedName": "BlockScopedTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.BlockScoped.BlockScopedTarget",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

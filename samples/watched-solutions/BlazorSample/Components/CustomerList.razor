@@ -1,0 +1,15 @@
+<h3>Customers</h3>
+<input @bind="Filter" />
+<button @onclick="LoadAsync">Load</button>
+
+@code {
+    private CustomerService Service { get; } = new CustomerService();
+
+    public string Filter { get; set; } = "";
+
+    private async Task LoadAsync()
+    {
+        Customer? loaded = await Service.LoadAsync(1);
+        Filter = loaded?.Name ?? "";
+    }
+}

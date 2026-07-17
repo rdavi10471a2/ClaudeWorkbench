@@ -1,0 +1,10 @@
+{
+  "name": "object creation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "ConstructorCases.cs",
+  "expectedKind": "constructor",
+  "expectedName": "Created",
+  "expectedRoslynDisplay": "ExternalCorpus.Created.Created(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

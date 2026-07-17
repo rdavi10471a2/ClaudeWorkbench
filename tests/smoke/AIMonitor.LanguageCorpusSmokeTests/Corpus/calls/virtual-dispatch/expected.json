@@ -1,0 +1,11 @@
+{
+  "name": "virtual dispatch",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "VirtualDispatchCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "ExternalCorpus.VirtualBase.Target()",
+  "expectedReferenceCount": 2,
+  "expectedCallerCount": 1,
+  "expectedRelationshipKinds": [ "overridden_by", "overrides" ]
+}

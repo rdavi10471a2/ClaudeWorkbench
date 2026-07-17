@@ -1,0 +1,10 @@
+{
+  "name": "required property initializer",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "RequiredMemberCases.cs",
+  "expectedKind": "property",
+  "expectedName": "Name",
+  "expectedRoslynDisplay": "ExternalCorpus.RequiredMemberCases.Name",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

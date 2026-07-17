@@ -1,0 +1,10 @@
+{
+  "name": "nested type reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "NestedTypeReferenceCases.cs",
+  "expectedKind": "class",
+  "expectedName": "Nested",
+  "expectedRoslynDisplay": "ExternalCorpus.OuterType.Nested",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

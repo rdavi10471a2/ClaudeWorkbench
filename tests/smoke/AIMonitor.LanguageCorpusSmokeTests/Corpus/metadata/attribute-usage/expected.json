@@ -1,0 +1,10 @@
+{
+  "name": "attribute usage",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "AttributeUsageCases.cs",
+  "expectedKind": "class",
+  "expectedName": "MarkerAttribute",
+  "expectedRoslynDisplay": "ExternalCorpus.MarkerAttribute",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

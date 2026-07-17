@@ -1,0 +1,10 @@
+{
+  "name": "generic method invocation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "GenericMethodCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Echo",
+  "expectedRoslynDisplay": "ExternalCorpus.GenericMethodCases.Echo<int>(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

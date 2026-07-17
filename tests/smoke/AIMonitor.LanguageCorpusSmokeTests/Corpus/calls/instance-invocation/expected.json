@@ -1,0 +1,10 @@
+{
+  "name": "instance invocation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "InstanceInvocationCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "ExternalCorpus.InstanceInvocationCases.Target(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

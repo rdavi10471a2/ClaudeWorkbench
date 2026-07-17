@@ -1,0 +1,10 @@
+{
+  "name": "await using dispose",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "AwaitUsingCases.cs",
+  "expectedKind": "method",
+  "expectedName": "DisposeAsync",
+  "expectedRoslynDisplay": "ExternalCorpus.AsyncResource.DisposeAsync()",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

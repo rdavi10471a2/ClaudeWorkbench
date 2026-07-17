@@ -1,0 +1,10 @@
+{
+  "name": "enum member reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "EnumMemberReferenceCases.cs",
+  "expectedKind": "enum_member",
+  "expectedName": "Ready",
+  "expectedRoslynDisplay": "ExternalCorpus.EnumMemberCases.Ready",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

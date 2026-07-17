@@ -1,0 +1,10 @@
+{
+  "name": "record primary constructor",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "RecordPrimaryConstructorCases.cs",
+  "expectedKind": "constructor",
+  "expectedName": "Person",
+  "expectedRoslynDisplay": "ExternalCorpus.Person.Person(string, int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

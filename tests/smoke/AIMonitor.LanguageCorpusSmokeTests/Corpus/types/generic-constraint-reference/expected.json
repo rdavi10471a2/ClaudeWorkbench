@@ -1,0 +1,10 @@
+{
+  "name": "generic constraint reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "GenericConstraintCases.cs",
+  "expectedKind": "interface",
+  "expectedName": "IConstraintTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.IConstraintTarget",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

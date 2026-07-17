@@ -1,0 +1,10 @@
+{
+  "name": "pattern type reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "PatternTypeCases.cs",
+  "expectedKind": "class",
+  "expectedName": "PatternTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.PatternTarget",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

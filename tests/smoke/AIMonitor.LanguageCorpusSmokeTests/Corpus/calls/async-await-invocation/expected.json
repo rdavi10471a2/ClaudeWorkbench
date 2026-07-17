@@ -1,0 +1,10 @@
+{
+  "name": "async await invocation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "AsyncAwaitCases.cs",
+  "expectedKind": "method",
+  "expectedName": "FetchAsync",
+  "expectedRoslynDisplay": "ExternalCorpus.AsyncAwaitCases.FetchAsync()",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

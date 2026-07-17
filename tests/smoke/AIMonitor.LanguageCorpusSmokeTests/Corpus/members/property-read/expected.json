@@ -1,0 +1,10 @@
+{
+  "name": "property read",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "PropertyCases.cs",
+  "expectedKind": "property",
+  "expectedName": "Count",
+  "expectedRoslynDisplay": "ExternalCorpus.PropertyCases.Count",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

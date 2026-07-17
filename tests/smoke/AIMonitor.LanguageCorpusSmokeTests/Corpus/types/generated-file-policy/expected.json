@@ -1,0 +1,10 @@
+{
+  "name": "generated file policy",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "GeneratedPolicyCases.g.cs",
+  "expectedKind": "class",
+  "expectedName": "GeneratedPolicyTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.GeneratedPolicyTarget",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

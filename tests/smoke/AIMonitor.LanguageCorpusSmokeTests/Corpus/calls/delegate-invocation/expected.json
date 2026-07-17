@@ -1,0 +1,10 @@
+{
+  "name": "delegate invocation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "DelegateInvocationCases.cs",
+  "expectedKind": "field",
+  "expectedName": "handler",
+  "expectedRoslynDisplay": "ExternalCorpus.DelegateTarget.Invoke(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

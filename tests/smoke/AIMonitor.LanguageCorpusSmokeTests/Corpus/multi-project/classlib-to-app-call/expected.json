@@ -1,0 +1,18 @@
+{
+  "name": "multi project shaped classlib to app call",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "App/AppCaller.cs",
+  "expectedTargetRelativePath": "Library/LibraryService.cs",
+  "expectedKind": "method",
+  "expectedName": "Compute",
+  "expectedRoslynDisplay": "ExternalCorpus.Library.LibraryService.Compute(int)",
+  "informational": true,
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1,
+  "additionalSources": [
+    {
+      "sourceFile": "library.cs.tst",
+      "relativePath": "Library/LibraryService.cs"
+    }
+  ]
+}

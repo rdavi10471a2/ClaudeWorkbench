@@ -1,0 +1,11 @@
+{
+  "name": "explicit interface implementation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "ExplicitInterfaceImplementationCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "ExternalCorpus.IExplicitContract.Target()",
+  "expectedReferenceCount": 2,
+  "expectedCallerCount": 1,
+  "expectedRelationshipKinds": [ "implemented_by", "implements_interface_member" ]
+}

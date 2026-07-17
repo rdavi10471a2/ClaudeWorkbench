@@ -1,0 +1,10 @@
+{
+  "name": "property write",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "PropertyWriteCases.cs",
+  "expectedKind": "property",
+  "expectedName": "Count",
+  "expectedRoslynDisplay": "ExternalCorpus.PropertyWriteCases.Count",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

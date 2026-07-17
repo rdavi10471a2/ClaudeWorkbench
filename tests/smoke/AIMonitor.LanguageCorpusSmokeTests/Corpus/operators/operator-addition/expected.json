@@ -1,0 +1,10 @@
+{
+  "name": "operator addition",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "OperatorCases.cs",
+  "expectedKind": "operator",
+  "expectedName": "operator +",
+  "expectedRoslynDisplay": "ExternalCorpus.OperatorCases.operator +(ExternalCorpus.OperatorCases, ExternalCorpus.OperatorCases)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

@@ -1,0 +1,10 @@
+{
+  "name": "event subscription",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "EventCases.cs",
+  "expectedKind": "event",
+  "expectedName": "Changed",
+  "expectedRoslynDisplay": "ExternalCorpus.EventCases.Changed",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

@@ -1,0 +1,10 @@
+{
+  "name": "indexer access",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "IndexerCases.cs",
+  "expectedKind": "indexer",
+  "expectedName": "this[]",
+  "expectedRoslynDisplay": "ExternalCorpus.IndexerCases.this[int]",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

@@ -1,0 +1,10 @@
+{
+  "name": "lambda caller",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "LambdaCallerCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "ExternalCorpus.LambdaCallerCases.Target(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

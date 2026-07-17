@@ -1,0 +1,10 @@
+{
+  "name": "generic type reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "GenericTypeConstructionCases.cs",
+  "expectedKind": "class",
+  "expectedName": "Box",
+  "expectedRoslynDisplay": "ExternalCorpus.Box<int>",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

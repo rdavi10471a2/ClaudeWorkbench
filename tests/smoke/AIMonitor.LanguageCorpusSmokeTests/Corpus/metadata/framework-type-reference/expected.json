@@ -1,0 +1,12 @@
+{
+  "name": "framework metadata type reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "FrameworkTypeCases.cs",
+  "expectedKind": "class",
+  "expectedName": "StringBuilder",
+  "expectedRoslynDisplay": "System.Text.StringBuilder",
+  "informational": true,
+  "expectedMonitorTarget": false,
+  "expectedReferenceCount": 0,
+  "expectedCallerCount": null
+}

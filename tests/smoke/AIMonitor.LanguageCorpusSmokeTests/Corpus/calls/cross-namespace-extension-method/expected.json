@@ -1,0 +1,17 @@
+{
+  "name": "cross namespace extension method",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "CrossNamespaceExtensionCases.cs",
+  "expectedTargetRelativePath": "CrossNamespaceExtensions.cs",
+  "expectedKind": "method",
+  "expectedName": "Triple",
+  "expectedRoslynDisplay": "int.Triple()",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1,
+  "additionalSources": [
+    {
+      "sourceFile": "extensions.cs.tst",
+      "relativePath": "CrossNamespaceExtensions.cs"
+    }
+  ]
+}

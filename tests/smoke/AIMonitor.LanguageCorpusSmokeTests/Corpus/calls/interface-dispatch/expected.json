@@ -1,0 +1,11 @@
+{
+  "name": "interface dispatch",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "InterfaceDispatchCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "ExternalCorpus.IInterfaceDispatchService.Target(int)",
+  "expectedReferenceCount": 2,
+  "expectedCallerCount": 1,
+  "expectedRelationshipKinds": [ "implemented_by", "implements_interface_member" ]
+}

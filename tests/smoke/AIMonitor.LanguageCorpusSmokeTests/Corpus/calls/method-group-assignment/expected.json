@@ -1,0 +1,10 @@
+{
+  "name": "method group assignment",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "MethodGroupCases.cs",
+  "expectedKind": "method",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "ExternalCorpus.MethodGroupCases.Target(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 0
+}

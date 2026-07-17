@@ -1,0 +1,19 @@
+{
+  "name": "multi project shaped shared interface app implementation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "App/AppInterfaceCaller.cs",
+  "expectedTargetRelativePath": "Contracts/ISharedService.cs",
+  "expectedKind": "method",
+  "expectedName": "Run",
+  "expectedRoslynDisplay": "ExternalCorpus.Contracts.ISharedService.Run()",
+  "informational": true,
+  "expectedReferenceCount": 2,
+  "expectedCallerCount": 1,
+  "expectedRelationshipKinds": [ "implemented_by", "implements_interface_member" ],
+  "additionalSources": [
+    {
+      "sourceFile": "contract.cs.tst",
+      "relativePath": "Contracts/ISharedService.cs"
+    }
+  ]
+}

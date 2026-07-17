@@ -1,0 +1,10 @@
+{
+  "name": "field read",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "FieldReadCases.cs",
+  "expectedKind": "field",
+  "expectedName": "count",
+  "expectedRoslynDisplay": "ExternalCorpus.FieldReadCases.count",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

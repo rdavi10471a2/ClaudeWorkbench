@@ -1,0 +1,11 @@
+{
+  "name": "base class reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "BaseClassReferenceCases.cs",
+  "expectedKind": "class",
+  "expectedName": "BaseReferenceTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.BaseReferenceTarget",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null,
+  "expectedRelationshipKinds": [ "derived_type", "inherits_from" ]
+}

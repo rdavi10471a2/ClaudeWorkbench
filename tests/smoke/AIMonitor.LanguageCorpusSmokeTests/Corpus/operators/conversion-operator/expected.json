@@ -1,0 +1,10 @@
+{
+  "name": "conversion operator",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "ConversionOperatorCases.cs",
+  "expectedKind": "conversion",
+  "expectedName": "implicit operator int",
+  "expectedRoslynDisplay": "ExternalCorpus.ConversionCases.implicit operator int(ExternalCorpus.ConversionCases)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

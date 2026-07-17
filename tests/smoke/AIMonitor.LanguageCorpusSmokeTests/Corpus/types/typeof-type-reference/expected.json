@@ -1,0 +1,10 @@
+{
+  "name": "typeof type reference",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "TypeOfCases.cs",
+  "expectedKind": "class",
+  "expectedName": "TypeOfTarget",
+  "expectedRoslynDisplay": "ExternalCorpus.TypeOfTarget",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}

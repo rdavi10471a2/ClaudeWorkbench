@@ -1,0 +1,10 @@
+{
+  "name": "local function invocation",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "LocalFunctionCases.cs",
+  "expectedKind": "local_function",
+  "expectedName": "Target",
+  "expectedRoslynDisplay": "Target(int)",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": 1
+}

@@ -1,0 +1,10 @@
+{
+  "name": "nullable property read",
+  "sourceFile": "source.cs.tst",
+  "relativePath": "NullableCases.cs",
+  "expectedKind": "property",
+  "expectedName": "Name",
+  "expectedRoslynDisplay": "ExternalCorpus.NullableCases.Name",
+  "expectedReferenceCount": 1,
+  "expectedCallerCount": null
+}
