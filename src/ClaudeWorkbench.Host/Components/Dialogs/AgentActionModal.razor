@@ -1,0 +1,121 @@
+@if (CurrentApproval is not null)
+{
+    <div class="agent-modal-overlay" role="dialog" aria-modal="true" aria-label="Agent action required">
+        <section class="agent-modal-card">
+            <div class="agent-modal-header">
+                <div>
+                    <span class="agent-modal-eyebrow">Agent Action Required</span>
+                    <h3>@CurrentApproval.Tool</h3>
+                </div>
+                <div class="agent-modal-status">Waiting for you</div>
+            </div>
+            <div class="agent-modal-body action-mode">
+                <section class="agent-modal-main">
+                    @if (!string.IsNullOrWhiteSpace(CurrentApproval.Target))
+                    {
+                        <div class="agent-modal-section">
+                            <span class="agent-modal-label">Target</span>
+                            <code>@CurrentApproval.Target</code>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(CurrentApproval.InputJson))
+                    {
+                        <div class="agent-modal-section">
+                            <span class="agent-modal-label">Input</span>
+                            <pre class="agent-modal-payload-box">@CurrentApproval.InputJson</pre>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(CurrentApproval.Summary))
+                    {
+                        <div class="agent-modal-section">
+                            <span class="agent-modal-label">Summary</span>
+                            <div class="agent-modal-summary-box">@CurrentApproval.Summary</div>
+                        </div>
+                    }
+                </section>
+            </div>
+            <div class="agent-modal-footer">
+                <RadzenButton Text="Allow"
+                              ButtonStyle="ButtonStyle.Success"
+                              Size="ButtonSize.Small"
+                              Click="@(() => ResolveApprovalAsync(true))" />
+                <RadzenButton Text="Deny"
+                              ButtonStyle="ButtonStyle.Light"
+                              Size="ButtonSize.Small"
+                              Click="@(() => ResolveApprovalAsync(false))" />
+            </div>
+        </section>
+    </div>
+}
+else if (CurrentElicitation is not null)
+{
+    <div class="agent-modal-overlay" role="dialog" aria-modal="true" aria-label="Input requested">
+        <section class="agent-modal-card">
+            <div class="agent-modal-header">
+                <div>
+                    <span class="agent-modal-eyebrow">Input Requested</span>
+                    <h3>Answer to continue</h3>
+                </div>
+                <div class="agent-modal-status">Waiting for you</div>
+            </div>
+            <div class="agent-modal-body action-mode">
+                <section class="agent-modal-main">
+                    <div class="agent-modal-section">
+                        <span class="agent-modal-label">Question</span>
+                        <pre class="agent-modal-rich-box agent-modal-question-box">@CurrentElicitation.Question</pre>
+                    </div>
+                    <div class="agent-modal-section">
+                        <span class="agent-modal-label">Answer</span>
+                        <div class="agent-modal-form-grid">
+                            @foreach (ElicitationField field in CurrentElicitation.Fields)
+                            {
+                                <label class="agent-modal-form-field">
+                                    <span class="agent-modal-field-label">@field.Label</span>
+                                    @if (!string.IsNullOrWhiteSpace(field.Description))
+                                    {
+                                        <small>@field.Description</small>
+                                    }
+                                    @switch (field.Kind)
+                                    {
+                                        case ElicitationFieldKind.Boolean:
+                                            <div class="agent-modal-boolean-choice" role="group">
+                                                <button type="button"
+                                                        class="agent-modal-choice-button @(IsTrue(field.Name) ? "selected" : string.Empty)"
+                                                        @onclick="@(() => Set(field.Name, "true"))">Yes</button>
+                                                <button type="button"
+                                                        class="agent-modal-choice-button @(!IsTrue(field.Name) ? "selected" : string.Empty)"
+                                                        @onclick="@(() => Set(field.Name, "false"))">No</button>
+                                            </div>
+                                            break;
+                                        case ElicitationFieldKind.Enum:
+                                            <select value="@Get(field.Name)" @onchange="@(args => Set(field.Name, args.Value?.ToString()))">
+                                                @foreach (ElicitationFieldOption option in field.Options)
+                                                {
+                                                    <option value="@option.Value">@option.Label</option>
+                                                }
+                                            </select>
+                                            break;
+                                        case ElicitationFieldKind.Number:
+                                            <input type="text" inputmode="decimal" value="@Get(field.Name)"
+                                                   @onchange="@(args => Set(field.Name, args.Value?.ToString()))" />
+                                            break;
+                                        default:
+                                            <textarea rows="3"
+                                                      @onchange="@(args => Set(field.Name, args.Value?.ToString()))">@Get(field.Name)</textarea>
+                                            break;
+                                    }
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </section>
+            </div>
+            <div class="agent-modal-footer">
+                <RadzenButton Text="Submit Answer"
+                              ButtonStyle="ButtonStyle.Success"
+                              Size="ButtonSize.Small"
+                              Click="@SubmitElicitationAsync" />
+            </div>
+        </section>
+    </div>
+}

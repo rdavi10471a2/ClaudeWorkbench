@@ -1,57 +1,92 @@
-@implements IDisposable
-@inject IOperatorConsole Session
-
-<div class="assistant">
-    <div class="assistant-transcript">
-        @foreach (TranscriptEntry entry in Session.Transcript)
-        {
-            <div class="assistant-line @(entry.Kind == TranscriptKind.ToolCall ? "line-tool" : "line-text")">
-                @(entry.Kind == TranscriptKind.ToolCall ? $"→ {entry.Text}" : entry.Text)
+<div class="assistant-host">
+    <div class="assistant-layout" @ref="assistantLayout">
+        <div class="chat-composer" @ref="chatComposer">
+            @if (Working)
+            {
+                <div class="assistant-turn-activity" role="status" aria-live="polite">
+                    <span class="assistant-turn-spinner" aria-hidden="true"></span>
+                    <div class="assistant-turn-copy">
+                        <strong>Thinking...</strong>
+                        <span>Current turn is still running.</span>
+                    </div>
+                </div>
+            }
+            <textarea @ref="chatInput"
+                      class="chat-composer-input"
+                      @bind="draft"
+                      @bind:event="oninput"
+                      placeholder="Inspect the current workspace..."></textarea>
+            <div class="chat-composer-actions">
+                <RadzenButton Icon="policy"
+                              Text="System Evaluation"
+                              Class="chat-prompt-button"
+                              ButtonStyle="ButtonStyle.Light"
+                              Click="@LoadSystemEvaluationPrompt"
+                              Disabled="@Working" />
+                <RadzenButton Icon="send"
+                              Text="Submit Turn"
+                              Class="chat-send-button"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Click="@SubmitAsync"
+                              Disabled="@(Working || string.IsNullOrWhiteSpace(draft))" />
             </div>
-        }
-    </div>
-    <div class="assistant-input">
-        <textarea @bind="prompt"
-                  @bind:event="oninput"
-                  rows="3"
-                  placeholder="Ask Claude to work on the watched solution..."></textarea>
-        <RadzenButton Text="Send"
-                      Icon="send"
-                      Click="@SendAsync"
-                      Disabled="@(busy || string.IsNullOrWhiteSpace(prompt))" />
+        </div>
+
+        <div class="assistant-splitter"
+             @ref="assistantSplitter"
+             title="Drag to resize input and chat history"
+             aria-hidden="true"></div>
+
+        <section class="transcript-panel" @ref="transcriptPanel" aria-label="Chat history">
+            <div class="transcript-header">
+                <span>Chat History</span>
+                <div class="transcript-actions">
+                    <RadzenButton Icon="content_copy"
+                                  Text="Copy"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Size="ButtonSize.Small"
+                                  Click="@CopyAsync"
+                                  Disabled="@(!HasTranscript)" />
+                    <RadzenButton Icon="open_in_new"
+                                  Text="Pop Out"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Size="ButtonSize.Small"
+                                  Click="@PopOutAsync"
+                                  Disabled="@(!HasTranscript)" />
+                </div>
+            </div>
+            <div class="transcript-view" @ref="transcriptView" role="log" aria-label="Chat history">
+                <div class="transcript-body">
+                    @if (!HasTranscript)
+                    {
+                        <div class="empty">
+                            <div class="empty-icon">&#128172;</div>
+                            <div>No messages yet. Ask Claude to inspect the watched solution.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (TranscriptEntry entry in Session.Transcript)
+                        {
+                            @if (entry.Kind == TranscriptKind.ToolCall)
+                            {
+                                <div class="tool-line">&#8594; @entry.Text</div>
+                            }
+                            else
+                            {
+                                <div class="message assistant">
+                                    <div class="message-header">
+                                        <span class="message-meta">Assistant</span>
+                                    </div>
+                                    <div class="message-body">@RenderMarkdown(entry.Text)</div>
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+            </div>
+        </section>
+
+        <AgentActionModal />
     </div>
 </div>
-
-@code {
-    private string prompt = string.Empty;
-    private bool busy;
-
-    protected override void OnInitialized()
-    {
-        Session.Changed += OnChanged;
-    }
-
-    private void OnChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
-    private async Task SendAsync()
-    {
-        busy = true;
-        try
-        {
-            await Session.SendAsync(prompt);
-            prompt = string.Empty;
-        }
-        finally
-        {
-            busy = false;
-        }
-    }
-
-    public void Dispose()
-    {
-        Session.Changed -= OnChanged;
-    }
-}
