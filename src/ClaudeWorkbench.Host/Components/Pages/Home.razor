@@ -5,6 +5,12 @@
    types reach the UI. Branding: the Coding Services logo + the "Powered by
    Coding Services" line beside ClaudeWorkbench. *@
 
+@if (!Workspace.HasWorkspace)
+{
+    <WorkspacePicker Embedded="true" OnClose="@CloseWorkspacePicker" />
+}
+else
+{
 <section class="control-screen">
     <header class="command-bar">
         <div class="title-strip">
@@ -48,7 +54,12 @@
                         <span class="workspace-state-text">Ready</span>
                     }
                 </div>
-                <div></div>
+                <RadzenButton Icon="folder_open"
+                              Text="Change"
+                              ButtonStyle="ButtonStyle.Light"
+                              Size="ButtonSize.Small"
+                              Title="Switch watched solution"
+                              Click="@(() => workspacePickerOpen = true)" />
             </div>
 
             <RadzenTabs RenderMode="TabRenderMode.Client">
@@ -71,4 +82,10 @@
     </main>
 
     <AgentSettingsDialog Visible="@settingsOpen" OnClose="@(() => settingsOpen = false)" />
+
+    @if (workspacePickerOpen)
+    {
+        <WorkspacePicker Embedded="false" OnClose="@CloseWorkspacePicker" />
+    }
 </section>
+}

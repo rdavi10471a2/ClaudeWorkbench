@@ -1,0 +1,67 @@
+@using ClaudeWorkbench.Host.Services
+
+<div class="wsp @(Embedded ? "wsp-embedded" : "wsp-overlay")">
+    <section class="wsp-card">
+        <header class="wsp-header">
+            <div>
+                <span class="wsp-eyebrow">Workspace</span>
+                <h3>@(Embedded ? "Choose a watched solution" : "Switch watched solution")</h3>
+            </div>
+            @if (!Embedded)
+            {
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@Cancel" Disabled="@busy" />
+            }
+        </header>
+
+        <div class="wsp-path"><strong>@snapshot.CurrentPath</strong></div>
+
+        @if (!string.IsNullOrWhiteSpace(snapshot.ErrorMessage))
+        {
+            <div class="wsp-error">@snapshot.ErrorMessage</div>
+        }
+        @if (busy)
+        {
+            <div class="wsp-busy"><span class="wsp-spinner" aria-hidden="true"></span> Initializing workspace and building the index…</div>
+        }
+
+        <div class="wsp-grid">
+            <div class="wsp-col">
+                <div class="wsp-label">Drives</div>
+                @foreach (DirectoryEntryViewModel drive in snapshot.Drives)
+                {
+                    <button type="button" class="wsp-row" @onclick="() => Navigate(drive.FullPath)" disabled="@busy">
+                        <span class="wsp-ic">DRV</span><span>@drive.Name</span>
+                    </button>
+                }
+            </div>
+            <div class="wsp-col">
+                <div class="wsp-label">Folders</div>
+                @if (snapshot.ParentPath is not null)
+                {
+                    <button type="button" class="wsp-row" @onclick="() => Navigate(snapshot.ParentPath!)" disabled="@busy">
+                        <span class="wsp-ic">UP</span><span>Parent</span>
+                    </button>
+                }
+                @foreach (DirectoryEntryViewModel child in snapshot.Children)
+                {
+                    <button type="button" class="wsp-row" @onclick="() => Navigate(child.FullPath)" disabled="@busy">
+                        <span class="wsp-ic">DIR</span><span>@child.Name</span>
+                    </button>
+                }
+            </div>
+            <div class="wsp-col">
+                <div class="wsp-label">Solutions in this folder</div>
+                @if (snapshot.Solutions.Count == 0)
+                {
+                    <div class="wsp-empty">No .sln / .slnx here. Navigate to a folder that contains one.</div>
+                }
+                @foreach (DirectoryEntryViewModel solution in snapshot.Solutions)
+                {
+                    <button type="button" class="wsp-row wsp-sln" @onclick="() => ChooseAsync(solution.FullPath)" disabled="@busy">
+                        <span class="wsp-ic">SLN</span><span>@solution.Name</span>
+                    </button>
+                }
+            </div>
+        </div>
+    </section>
+</div>

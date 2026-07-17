@@ -44,6 +44,8 @@ internal static class Program
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
         builder.Services.AddSingleton<AgentSettingsService>();
+        builder.Services.AddSingleton<DirectoryBrowserService>();
+        builder.Services.AddSingleton<WorkspaceCoordinator>();
         builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());

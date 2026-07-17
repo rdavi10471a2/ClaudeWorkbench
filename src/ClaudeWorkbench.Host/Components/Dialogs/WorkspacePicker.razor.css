@@ -1,0 +1,176 @@
+.wsp-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(18, 30, 46, .38);
+    z-index: 70;
+}
+
+.wsp-embedded {
+    display: grid;
+    place-items: center;
+    height: 100vh;
+    padding: 24px;
+    background: #eef3f7;
+}
+
+.wsp-card {
+    width: min(920px, calc(100% - 24px));
+    max-height: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #c9d7e4;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 24px 56px rgba(16, 28, 44, .24);
+}
+
+.wsp-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    border-bottom: 1px solid #e4ebf1;
+    background: #f8fbff;
+}
+
+.wsp-header h3 {
+    margin: 2px 0 0;
+    color: #16202c;
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.wsp-eyebrow {
+    color: #526a82;
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.wsp-path {
+    padding: 10px 18px;
+    border-bottom: 1px solid #eef2f6;
+    color: #33485f;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: .86rem;
+    font-weight: 700;
+    word-break: break-all;
+}
+
+.wsp-error {
+    padding: 8px 18px;
+    color: #7a1f2d;
+    background: #fff1f3;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.wsp-busy {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    color: #1e4fd6;
+    background: #eef4ff;
+    font-size: .86rem;
+    font-weight: 800;
+}
+
+.wsp-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #cbd8ee;
+    border-top-color: #2457e6;
+    border-radius: 999px;
+    animation: wsp-spin .8s linear infinite;
+}
+
+.wsp-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 18px;
+    overflow: hidden;
+}
+
+.wsp-col {
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.wsp-label {
+    position: sticky;
+    top: 0;
+    padding: 2px 0 6px;
+    color: #526a82;
+    background: #ffffff;
+    font-size: .74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.wsp-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 7px 9px;
+    color: #16202c;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: .86rem;
+}
+
+.wsp-row:hover {
+    border-color: #cdd8e3;
+    background: #f3f7fb;
+}
+
+.wsp-row:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+.wsp-sln {
+    font-weight: 700;
+    color: #1e4fd6;
+}
+
+.wsp-ic {
+    display: inline-grid;
+    place-items: center;
+    min-width: 30px;
+    padding: 1px 4px;
+    border: 1px solid #cdd8e3;
+    border-radius: 5px;
+    color: #526a82;
+    background: #f7fafc;
+    font-size: .62rem;
+    font-weight: 800;
+}
+
+.wsp-empty {
+    color: #7286a0;
+    font-size: .82rem;
+    padding: 6px 2px;
+}
+
+@keyframes wsp-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

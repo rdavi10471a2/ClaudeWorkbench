@@ -161,6 +161,9 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
 };
 
 async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Promise<void> {
+  // Re-resolve CWD each turn so it tracks runtime workspace switches, not just startup.
+  await resolveWorkspaceCwd();
+
   // Compute this turn's tool surface from the operator's policy.
   const enabled = new Set(policy.enabledTools);
   activeAllowedNative = new Set<string>([
