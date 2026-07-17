@@ -63,6 +63,33 @@ accepting writes each accepted file. This lives in `EngineReviewWorkflow.AcceptA
   `PreMergeValidationOverlay`. Approvals stays the gate for the *stage* call; Review is the
   accept/reject on staged records.
 
+## Port faithfully from the example (hard-won UI — do NOT reinvent)
+Bring both over and adapt to our engine, like the Source tab port:
+- `Components/Pages/Home/Tasks/StagedReviewDialog.razor` (+ `.css`, 577 lines) — the full
+  DiffPlex review dialog: `SideBySideDiffBuilder(new Differ()).BuildDiffModel(CurrentText,
+  ProposedText)` -> `SideBySideDiffModel`; **session-flow** (`SessionId` = the edit session;
+  advances through each staged file in order; close = decline, rest stay pending); the three
+  buttons and their enablement:
+  - **Accept Proposed** — enabled when validation is not an error (or already force-approved).
+  - **Accept With Validation Override** — enabled when validation IS an error and not yet
+    force-approved (this is "accept with known" overlay errors).
+  - **Reject** — declines; per operator, reject stops the whole edit session.
+- `Services/Workflow/StagedReviewPageService.cs` (404 lines) — host-side accept/reject:
+  `Accept(workspaceRoot, stagedRecordId, forceApproveValidation)` does
+  `File.Copy(StagedFilePath -> WatchedFilePath, overwrite)` then records the decision (+ the
+  planned-session index-refresh plan); force path calls `ApprovePreMergeValidationFailure`
+  first. `Reject`, `LoadNextForSession`, and the model (`CurrentText`/`ProposedText` for the
+  diff). It already uses `WorkflowEditService`, so it ports onto ours; swap
+  `CodingServicesSettings` for the `WorkspaceManager` (settings + `EditService`).
+
+### Engine reconciliation (the one porting risk)
+`StagedReviewPageService` uses `ApprovePreMergeValidationFailure`,
+`ReviewDecisionWithIndexRefreshResult`, and a decision+refresh wrapper. `AIMonitorTools.
+RecordDiffDecision` already uses `StagedDecisionWorkflow` + `ReviewDecisionWithIndexRefreshResult`
++ `PostAcceptIndexRefreshPlan`, so those exist in the engine (likely referenced from McpServer);
+locate their project and reference it. If `ApprovePreMergeValidationFailure` is absent, the
+force path is `RecordPreMergeValidation(record, validation, forceApproved: true)` (which exists).
+
 ## Testing
 Requires an actual edit turn against a **safe** watched solution (e.g. `Copy (2)`, NOT the
 workbench) so staged records land in the queue — this is why edit + elicitation need to work
