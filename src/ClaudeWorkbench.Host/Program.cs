@@ -21,7 +21,7 @@ internal static class Program
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
         builder.WebHost.UseStaticWebAssets();
 
-        string repositoryRoot = GetOption(args, "--repo-root") ?? Directory.GetCurrentDirectory();
+        string repositoryRoot = GetOption(args, "--repo-root") ?? builder.Environment.ContentRootPath;
         string? settingsPath = GetOption(args, "--config");
         MonitorSettings settings = MonitorSettingsLoader.Load(repositoryRoot, settingsPath);
 

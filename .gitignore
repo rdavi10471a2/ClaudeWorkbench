@@ -5,3 +5,6 @@ obj/
 runtime/
 runtime-child/
 node_modules/
+
+# host runtime state (index / working / staging)
+/runtime/
