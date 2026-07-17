@@ -1,13 +1,12 @@
 @implements IDisposable
-@inject SidecarEventStream Stream
-@inject SidecarClient Sidecar
+@inject IOperatorConsole Session
 
 <div class="assistant">
     <div class="assistant-transcript">
-        @foreach (SidecarEvent evt in Transcript())
+        @foreach (TranscriptEntry entry in Session.Transcript)
         {
-            <div class="assistant-line @LineClass(evt)">
-                @Render(evt)
+            <div class="assistant-line @(entry.Kind == TranscriptKind.ToolCall ? "line-tool" : "line-text")">
+                @(entry.Kind == TranscriptKind.ToolCall ? $"→ {entry.Text}" : entry.Text)
             </div>
         }
     </div>
@@ -29,7 +28,7 @@
 
     protected override void OnInitialized()
     {
-        Stream.Changed += OnChanged;
+        Session.Changed += OnChanged;
     }
 
     private void OnChanged()
@@ -37,31 +36,12 @@
         InvokeAsync(StateHasChanged);
     }
 
-    // Assistant text + tool calls, in arrival order — the readable turn narrative.
-    private IEnumerable<SidecarEvent> Transcript()
-    {
-        return Stream.SnapshotEvents()
-            .Where(evt => evt.Type is "assistant_text" or "tool_call_started");
-    }
-
-    private static string LineClass(SidecarEvent evt)
-    {
-        return evt.Type == "tool_call_started" ? "line-tool" : "line-text";
-    }
-
-    private static string Render(SidecarEvent evt)
-    {
-        return evt.Type == "tool_call_started"
-            ? $"→ {evt.Tool}"
-            : evt.Text ?? string.Empty;
-    }
-
     private async Task SendAsync()
     {
         busy = true;
         try
         {
-            await Sidecar.PromptAsync(prompt);
+            await Session.SendAsync(prompt);
             prompt = string.Empty;
         }
         finally
@@ -72,6 +52,6 @@
 
     public void Dispose()
     {
-        Stream.Changed -= OnChanged;
+        Session.Changed -= OnChanged;
     }
 }

@@ -1,47 +1,74 @@
 @page "/"
 @implements IDisposable
-@inject SidecarEventStream Stream
+@inject IOperatorConsole Session
 
-@* Thin shell only: command bar + tab host. All behaviour lives in the per-tab
-   components (AssistantTab / ApprovalsTab / ActivityTab). No orchestration here. *@
+@* Faithful Coding Services shell (command bar + work panel + RadzenTabs), ported
+   from CodexAppServerDemo. Binds only to IOperatorConsole — no sidecar/Claude
+   types reach the UI. Branding: the Coding Services logo + the "Powered by
+   Coding Services" line beside ClaudeWorkbench. *@
 
-<div class="wb-shell">
-    <header class="wb-topbar">
-        <div class="wb-brand">
-            <span class="wb-brand-name">ClaudeWorkbench</span>
-            <span class="wb-brand-tag">operator console</span>
+<section class="control-screen">
+    <header class="command-bar">
+        <div class="title-strip">
+            <div class="brand-lockup">
+                <img class="brand-logo" src="images/cs_header_logo_56x40.svg" alt="Coding Services" />
+                <div class="brand-text">
+                    <h1>ClaudeWorkbench</h1>
+                    <div class="brand-tagline">Powered by Coding Services</div>
+                </div>
+            </div>
         </div>
-        <div class="wb-status">
-            <span class="wb-dot @(Stream.Connected ? "up" : "down")"></span>
-            <span>@(Stream.Connected ? "sidecar connected" : "sidecar offline")</span>
-            @if (Stream.ActiveTurn is not null)
-            {
-                <span class="wb-live">· working</span>
-            }
+        <div class="command-bar-actions">
+            <span class="wb-status">
+                <span class="wb-dot @(Session.Status.Connected ? "up" : "down")"></span>
+                @(Session.Status.Connected ? "sidecar connected" : "sidecar offline")
+            </span>
         </div>
     </header>
 
-    <main class="wb-main">
-        <RadzenTabs RenderMode="TabRenderMode.Client">
-            <Tabs>
-                <RadzenTabsItem Text="Assistant">
-                    <AssistantTab />
-                </RadzenTabsItem>
-                <RadzenTabsItem Text="@($"Approvals ({Stream.PendingGates().Count})")">
-                    <ApprovalsTab />
-                </RadzenTabsItem>
-                <RadzenTabsItem Text="Activity">
-                    <ActivityTab />
-                </RadzenTabsItem>
-            </Tabs>
-        </RadzenTabs>
+    <main class="control-grid">
+        <section class="work-panel">
+            <div class="workspace-toolbar">
+                <div class="workspace-path">
+                    <strong>@Session.WorkspacePath</strong>
+                </div>
+                <div class="workspace-state">
+                    @if (Session.Status.Working)
+                    {
+                        <span class="workspace-state-text workspace-state-text-live">
+                            <span class="workspace-state-spinner" aria-hidden="true"></span>
+                            <span>Thinking</span>
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="workspace-state-text">Ready</span>
+                    }
+                </div>
+                <div></div>
+            </div>
+
+            <RadzenTabs RenderMode="TabRenderMode.Client">
+                <Tabs>
+                    <RadzenTabsItem Text="Assistant">
+                        <AssistantTab />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="@($"Approvals ({Session.PendingApprovals.Count})")">
+                        <ApprovalsTab />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Activity">
+                        <ActivityTab />
+                    </RadzenTabsItem>
+                </Tabs>
+            </RadzenTabs>
+        </section>
     </main>
-</div>
+</section>
 
 @code {
     protected override void OnInitialized()
     {
-        Stream.Changed += OnChanged;
+        Session.Changed += OnChanged;
     }
 
     private void OnChanged()
@@ -51,6 +78,6 @@
 
     public void Dispose()
     {
-        Stream.Changed -= OnChanged;
+        Session.Changed -= OnChanged;
     }
 }

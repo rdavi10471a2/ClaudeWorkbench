@@ -1,33 +1,32 @@
 @implements IDisposable
-@inject SidecarEventStream Stream
-@inject SidecarClient Sidecar
+@inject IOperatorConsole Session
 
 <div class="approvals">
-    @if (Stream.PendingGates().Count == 0)
+    @if (Session.PendingApprovals.Count == 0)
     {
-        <div class="approvals-empty">No pending approvals. Mutating tool calls will pause here for review.</div>
+        <div class="approvals-empty">No pending approvals. Mutating actions will pause here for review.</div>
     }
     else
     {
-        @foreach (GateInfo gate in Stream.PendingGates())
+        @foreach (ApprovalRequest approval in Session.PendingApprovals)
         {
             <div class="gate-card">
                 <div class="gate-head">
-                    <span class="gate-tool">@gate.Tool</span>
-                    @if (!string.IsNullOrWhiteSpace(gate.FilePath))
+                    <span class="gate-tool">@approval.Action</span>
+                    @if (!string.IsNullOrWhiteSpace(approval.Target))
                     {
-                        <span class="gate-file">@gate.FilePath</span>
+                        <span class="gate-file">@approval.Target</span>
                     }
                 </div>
                 <div class="gate-actions">
                     <RadzenButton Text="Allow"
                                   ButtonStyle="ButtonStyle.Success"
                                   Size="ButtonSize.Small"
-                                  Click="@(() => ResolveAsync(gate.GateId, "allow"))" />
+                                  Click="@(() => ResolveAsync(approval.Id, true))" />
                     <RadzenButton Text="Deny"
                                   ButtonStyle="ButtonStyle.Danger"
                                   Size="ButtonSize.Small"
-                                  Click="@(() => ResolveAsync(gate.GateId, "deny"))" />
+                                  Click="@(() => ResolveAsync(approval.Id, false))" />
                 </div>
             </div>
         }
@@ -37,7 +36,7 @@
 @code {
     protected override void OnInitialized()
     {
-        Stream.Changed += OnChanged;
+        Session.Changed += OnChanged;
     }
 
     private void OnChanged()
@@ -45,13 +44,13 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private async Task ResolveAsync(string gateId, string decision)
+    private async Task ResolveAsync(string approvalId, bool approve)
     {
-        await Sidecar.ResolveGateAsync(gateId, decision);
+        await Session.ResolveAsync(approvalId, approve);
     }
 
     public void Dispose()
     {
-        Stream.Changed -= OnChanged;
+        Session.Changed -= OnChanged;
     }
 }

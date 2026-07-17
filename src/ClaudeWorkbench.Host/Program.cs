@@ -4,6 +4,7 @@ using AIMonitor.Logging;
 using AIMonitor.McpServer;
 using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Components;
+using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
 using ModelContextProtocol.Protocol;
 using Radzen;
@@ -45,6 +46,7 @@ internal static class Program
         builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
+        builder.Services.AddScoped<IOperatorConsole, SidecarOperatorConsole>();
 
         builder.Services.AddRadzenComponents();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
