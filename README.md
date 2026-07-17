@@ -43,7 +43,7 @@ Details, including exactly how the sidecar registers the MCP surface and the log
 **[docs/Architecture.md](docs/Architecture.md)**. Short version:
 
 - **MCP binding** — the sidecar is the MCP client; the Agent SDK connects to the engine's MCP server via its `mcpServers` option (recommended: the Blazor host serves MCP in-proc over HTTP; the sidecar registers a URL). Tools appear to the agent as `mcp__claude-workbench__*` (the HTTP host advertises `serverInfo.name` `claude-workbench` on port `6100`, distinct from the real `ai-monitor`). No proxy or bridge in the path.
-- **Auth** — *unresolved, see [docs/Architecture.md](docs/Architecture.md#auth--unresolved-decision-required).* The Agent SDK's documented auth is `ANTHROPIC_API_KEY` (API billing); running headless on the Pro/Max **subscription** is not the documented path (possible via the `claude` CLI's `setup-token` OAuth for personal use, but unverified and ToS-restricted for shipped products). A money/ToS decision that gates runtime only, not the build.
+- **Auth** — **subscription verified for personal use** (see [docs/Architecture.md](docs/Architecture.md#auth--subscription-verified-for-personal-use)). A full turn ran headless with no `ANTHROPIC_API_KEY`: the SDK inherits the local `claude` CLI's cached subscription login. `ANTHROPIC_API_KEY` (API billing) is only needed to ship to other people, not to run this yourself.
 - **Logging** — the engine logs to a JSON-lines file (and raises in-proc events for a live view); MCP-call telemetry is re-emitted from the sidecar's `tool_use`/`tool_result` events and hooks, not sniffed off a pipe.
 
 ## Repository layout
@@ -66,6 +66,8 @@ tests/
   smoke/                 console smoke runners (built, run via CLI/manually — not dotnet test)
 samples/watched-solutions/   fixtures the ClaudeSmokes/integration tests operate on
 docs/                    Architecture.md and design notes
+sidecar/                 Node/TS Claude Agent SDK driver: canUseTool operator gate,
+                         neutral event contract, SSE stream to the host (events/gate/bus/index)
 ```
 
 Project/namespace names are kept as `AIMonitor.*` from the extraction so the port stayed mechanical and the ported tests prove fidelity. Rebranding, if ever wanted, is an isolated later pass.
@@ -95,7 +97,7 @@ The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test s
 
 - [x] Extract the AIMonitor engine, layer by layer, no WinForms/proxy/bridge, tests green
 - [x] In-proc ASP.NET MCP endpoint on the engine's tool classes (`ClaudeWorkbench.Host`, Streamable HTTP on `:6100`, server name `claude-workbench`, full 60-tool surface smoke-verified)
-- [ ] `claude-sidecar` (Agent SDK): session lifecycle, `PreToolUse` operator gate, event stream
+- [x] `claude-sidecar` (Agent SDK): drives Claude, registers the `claude-workbench` MCP over HTTP, `canUseTool` operator gate (read-only auto-allow, mutations pause), neutral SSE event stream — end-to-end verified on the subscription (read-only turn)
 - [ ] Blazor host: workspace dashboard, staging/review queue, live log, operator gate UI
 - [ ] Bring in AIMonitor's `docs/claude-skills/` cards as-is (the doctrine is already in skill form; the tool surface is identical, so reuse — don't rewrite the policy)
 

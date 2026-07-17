@@ -104,25 +104,25 @@ doctrine block on every turn. Fighting compliance through ever-present prose is 
 ClaudeWorkbench moves *away* from — it is the reason for the switch to Claude. The sidecar system
 prompt stays minimal; correctness comes from the gate plus skills pulled on demand.
 
-## Auth — unresolved, decision required
+## Auth — subscription verified for personal use
 
-**Verified against the current Agent SDK docs (2026-07):** the documented authentication path for
-the Claude Agent SDK is `ANTHROPIC_API_KEY` (API billing, per-token). The docs further state that
-Anthropic does not allow third-party developers to offer claude.ai login / subscription rate limits
-for products built on the SDK. So the original premise — "run it headless on the $100/mo Pro/Max
-subscription, no API key" — is **not** confirmed by the docs; for the documented SDK path it is
-contradicted.
+**Verified end-to-end (2026-07-17), SDK `@anthropic-ai/claude-agent-sdk` 0.3.212.** With
+`ANTHROPIC_API_KEY` explicitly unset, the sidecar drove a full turn on the machine's **Claude
+subscription login**: the SDK spawned the native `claude` CLI, which authenticated from the cached
+`~/.claude/.credentials.json` (subscription, no API key), registered the `claude-workbench` MCP
+server over HTTP, called `get_monitor_status`, and returned `success`. So headless Agent-SDK use on a
+Pro/Max subscription **works for personal use of your own login** — the API key is not required.
 
-**The nuance that keeps it open.** The SDK drives the native `claude` CLI as a subprocess, and
-Claude Code itself supports headless auth via `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`. For
-*personal* use of *your own* subscription that is a real, commonly-used route; the ToS restriction is
-about offering *other people's* claude.ai login through a shipped product. So:
+Boundaries, kept honest:
 
-- **Personal operator console, your subscription** — likely works via the CLI's OAuth token, but it
-  is not the documented SDK path; verify on the actual account before relying on it.
-- **Anything shipped to teammates** — plan on `ANTHROPIC_API_KEY` (or a Bedrock/Vertex/Foundry
-  routing), i.e. API billing separate from the subscription.
+- **Personal operator console, your own login** — works today, proven. No `ANTHROPIC_API_KEY`, no
+  per-token API billing; it consumes the subscription. (`claude setup-token` →
+  `CLAUDE_CODE_OAUTH_TOKEN` is the route if you need a headless token without an interactive login
+  present.)
+- **Shipping to teammates / a hosted product** — the Agent SDK docs state Anthropic does not allow
+  third-party products to offer *other people's* claude.ai login. That path needs
+  `ANTHROPIC_API_KEY` (or Bedrock/Vertex/Foundry routing), i.e. API billing. This is a distribution
+  decision, not a code one, and does not affect the build.
 
-This is a money + ToS decision, not a code decision, and it gates only *runtime*, not the build. It
-is called out here so it is not silently assumed. Nothing in the engine or host requires a choice
-yet.
+The sidecar sets no `ANTHROPIC_API_KEY` and injects no auth; it inherits whatever the local `claude`
+CLI is logged into.
