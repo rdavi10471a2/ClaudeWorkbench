@@ -30,6 +30,16 @@ the staged content — equivalent to WinMerge "accept all / take right"), then c
 No hand-editing during merge (that preserves GATE-1 validity: watched ends byte-equal to
 the validated staged candidate). Editable in-browser merge is a later enhancement.
 
+## Who writes watched source on accept: the Blazor accept code (operator-authorized)
+NOT the agent, NOT an MCP tool. The governance restriction is on the *agent* (read-only,
+MCP-gated). The *operator* accepting a reviewed diff is a privileged host action, so the
+**Blazor accept handler** captures the accepted staged record(s) and writes the output
+file(s) to the watched folder directly (host-side), then records the decision. The write is
+the staged bytes verbatim (the operator reviewed the diff and approved them). For a queue,
+accepting writes each accepted file. This lives in `EngineReviewWorkflow.AcceptAsync`
+(host, in-process): write `StagedFilePath` -> `WatchedFilePath`, then
+`RecordDecision(id, "accepted", StagedHash)`.
+
 ## Flow (per staged record, in-app)
 1. **List** the queue (grouped by session).
 2. **Diff**: DiffPlex `SideBySideDiffBuilder(baselineText, stagedText)`, where
