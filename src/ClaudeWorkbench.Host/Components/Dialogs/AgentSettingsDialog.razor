@@ -1,0 +1,55 @@
+@if (Visible)
+{
+    <div class="settings-overlay" role="dialog" aria-modal="true" aria-label="Agent tool settings">
+        <section class="settings-card">
+            <header class="settings-header">
+                <div>
+                    <span class="settings-eyebrow">Agent</span>
+                    <h3>Tool Settings</h3>
+                </div>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@Cancel" />
+            </header>
+
+            <div class="settings-body">
+                <label class="settings-row">
+                    <input type="checkbox" @bind="draft.AllowNativeReads" />
+                    <div class="settings-text">
+                        <strong>Native read tools (Read / Grep / Glob)</strong>
+                        <small>Let the agent read the watched workspace directly. Off forces all reads through the claude-workbench MCP.</small>
+                    </div>
+                </label>
+
+                <label class="settings-row">
+                    <input type="checkbox" @bind="draft.StrictMcpConfig" />
+                    <div class="settings-text">
+                        <strong>Isolate MCP surface</strong>
+                        <small>Expose only claude-workbench; ignore the machine's account/user connectors (e.g. claude.ai connectors).</small>
+                    </div>
+                </label>
+
+                <div class="settings-section-title">
+                    Optional tools
+                    <span>off by default &mdash; each one widens what the agent can do outside the governed gate</span>
+                </div>
+
+                @foreach (OptionalAgentTool tool in OptionalAgentTools.All)
+                {
+                    <label class="settings-row @(tool.Risky ? "risky" : string.Empty)">
+                        <input type="checkbox"
+                               checked="@draft.EnabledOptionalTools.Contains(tool.Name)"
+                               @onchange="@(args => Toggle(tool.Name, (bool)(args.Value ?? false)))" />
+                        <div class="settings-text">
+                            <strong>@tool.Name @(tool.Risky ? "⚠" : string.Empty)</strong>
+                            <small>@tool.Description</small>
+                        </div>
+                    </label>
+                }
+            </div>
+
+            <footer class="settings-footer">
+                <RadzenButton Text="Save" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@Save" />
+                <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@Cancel" />
+            </footer>
+        </section>
+    </div>
+}

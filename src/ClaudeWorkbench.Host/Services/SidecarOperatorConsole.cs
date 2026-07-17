@@ -12,12 +12,18 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
     private readonly SidecarEventStream stream;
     private readonly SidecarClient client;
     private readonly MonitorSettings settings;
+    private readonly AgentSettingsService agentSettings;
 
-    public SidecarOperatorConsole(SidecarEventStream stream, SidecarClient client, MonitorSettings settings)
+    public SidecarOperatorConsole(
+        SidecarEventStream stream,
+        SidecarClient client,
+        MonitorSettings settings,
+        AgentSettingsService agentSettings)
     {
         this.stream = stream;
         this.client = client;
         this.settings = settings;
+        this.agentSettings = agentSettings;
         this.stream.Changed += Relay;
     }
 
@@ -53,7 +59,14 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
 
     public async Task SendAsync(string prompt)
     {
-        await client.PromptAsync(prompt);
+        AgentToolPolicy policy = agentSettings.Current;
+        object toolPolicy = new
+        {
+            allowNativeReads = policy.AllowNativeReads,
+            strictMcpConfig = policy.StrictMcpConfig,
+            enabledTools = policy.EnabledOptionalTools.ToArray(),
+        };
+        await client.PromptAsync(prompt, toolPolicy);
     }
 
     public void Dispose()

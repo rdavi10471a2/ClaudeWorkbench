@@ -1,7 +1,4 @@
 @page "/"
-@implements IDisposable
-@inject IOperatorConsole Session
-@inject IApprovalQueue Approvals
 
 @* Faithful Coding Services shell (command bar + work panel + RadzenTabs), ported
    from CodexAppServerDemo. Binds only to IOperatorConsole — no sidecar/Claude
@@ -22,8 +19,13 @@
         <div class="command-bar-actions">
             <span class="wb-status">
                 <span class="wb-dot @(Session.Status.Connected ? "up" : "down")"></span>
-                @(Session.Status.Connected ? "sidecar connected" : "sidecar offline")
+                @(Session.Status.Connected ? "Claude available" : "Claude unavailable")
             </span>
+            <RadzenButton Icon="settings"
+                          Text="Settings"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Click="@(() => settingsOpen = true)" />
         </div>
     </header>
 
@@ -67,21 +69,6 @@
             </RadzenTabs>
         </section>
     </main>
+
+    <AgentSettingsDialog Visible="@settingsOpen" OnClose="@(() => settingsOpen = false)" />
 </section>
-
-@code {
-    protected override void OnInitialized()
-    {
-        Session.Changed += OnChanged;
-    }
-
-    private void OnChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
-    public void Dispose()
-    {
-        Session.Changed -= OnChanged;
-    }
-}

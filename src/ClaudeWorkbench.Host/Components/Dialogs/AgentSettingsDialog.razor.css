@@ -1,0 +1,120 @@
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(18, 30, 46, .34);
+    z-index: 60;
+}
+
+.settings-card {
+    width: min(560px, calc(100% - 24px));
+    max-height: calc(100% - 32px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    border: 1px solid #c9d7e4;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 24px 56px rgba(16, 28, 44, .28);
+}
+
+.settings-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    border-bottom: 1px solid #e4ebf1;
+    background: #f8fbff;
+}
+
+.settings-header h3 {
+    margin: 2px 0 0;
+    color: #16202c;
+    font-size: 1.02rem;
+    font-weight: 800;
+}
+
+.settings-eyebrow {
+    color: #526a82;
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.settings-body {
+    min-height: 0;
+    overflow: auto;
+    padding: 14px 18px;
+    display: grid;
+    gap: 10px;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #e4ebf1;
+    border-radius: 10px;
+    background: #fbfdff;
+    cursor: pointer;
+}
+
+.settings-row.risky {
+    border-color: #f0d2c7;
+    background: #fff8f4;
+}
+
+.settings-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+}
+
+.settings-text {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.settings-text strong {
+    color: #16202c;
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+.settings-text small {
+    color: #526a82;
+    font-size: .8rem;
+    line-height: 1.35;
+}
+
+.settings-section-title {
+    margin-top: 6px;
+    color: #31475f;
+    font-size: .82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.settings-section-title span {
+    display: block;
+    color: #7286a0;
+    font-size: .74rem;
+    font-weight: 600;
+    text-transform: none;
+}
+
+.settings-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 18px;
+    border-top: 1px solid #e4ebf1;
+    background: #fbfdff;
+}

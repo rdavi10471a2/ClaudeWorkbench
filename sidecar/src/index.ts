@@ -83,18 +83,36 @@ let activeTurn: string | null = null;
 // The human accept/reject gate. Read-only discovery tools auto-allow so the
 // operator is interrupted only for changes that can reach watched source or the
 // review queue; mutations pause here until the host resolves the gate.
-// Deny-by-default: only these native tools are ever allowed (all read-only). Any
-// tool not here and not a claude-workbench tool is denied — including PowerShell,
-// Bash, writers, Agent, Workflow, and any future/unknown tool.
-const SAFE_NATIVE_TOOLS = new Set<string>(["Read", "Grep", "Glob", "ToolSearch", "TodoWrite"]);
+// Deny-by-default tool surface, driven by the operator's per-turn tool policy.
+// ALWAYS_ALLOWED_NATIVE is needed for the agent to function (ToolSearch loads the
+// MCP tool schemas). READ_TOOLS gate on allowNativeReads. BLOCKABLE_TOOLS are the
+// writers/shells hard-removed unless the operator opts them in.
+const ALWAYS_ALLOWED_NATIVE = ["ToolSearch", "TodoWrite"];
+const READ_TOOLS = ["Read", "Grep", "Glob"];
+const BLOCKABLE_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
 const WORKBENCH_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
+
+interface ToolPolicy {
+  allowNativeReads: boolean;
+  strictMcpConfig: boolean;
+  enabledTools: string[];
+}
+
+const DEFAULT_TOOL_POLICY: ToolPolicy = {
+  allowNativeReads: true,
+  strictMcpConfig: true,
+  enabledTools: [],
+};
+
+// Recomputed at the start of each turn from that turn's policy; canUseTool reads it.
+let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOOLS]);
 
 const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   const turnId = activeTurn ?? "unknown";
 
   // Non-workbench tools: allow the safe read-only set, deny everything else.
   if (!toolName.startsWith(WORKBENCH_TOOL_PREFIX)) {
-    if (SAFE_NATIVE_TOOLS.has(toolName)) {
+    if (activeAllowedNative.has(toolName)) {
       return { behavior: "allow", updatedInput: input };
     }
     return {
@@ -142,14 +160,19 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   return result;
 };
 
-async function runTurn(prompt: string, turnId: string, allowNativeReads: boolean): Promise<void> {
-  // Writers + Bash are always blocked (read-only on the watched workspace; edits
-  // go through the claude-workbench MCP gate). The native read tools are optional
-  // per turn: when allowNativeReads is false, force ALL access through the MCP
-  // surface (get_file / find_indexed_symbols) by disallowing them too.
-  const disallowed = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
-  if (!allowNativeReads) {
-    disallowed.push("Read", "Grep", "Glob");
+async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Promise<void> {
+  // Compute this turn's tool surface from the operator's policy.
+  const enabled = new Set(policy.enabledTools);
+  activeAllowedNative = new Set<string>([
+    ...ALWAYS_ALLOWED_NATIVE,
+    ...(policy.allowNativeReads ? READ_TOOLS : []),
+    ...policy.enabledTools,
+  ]);
+  // Hard-remove the writers/shells unless the operator opted them in; also remove
+  // the read tools when native reads are off (force MCP-only access).
+  const disallowed = BLOCKABLE_TOOLS.filter((tool) => !enabled.has(tool));
+  if (!policy.allowNativeReads) {
+    disallowed.push(...READ_TOOLS);
   }
 
   const options: Options = {
@@ -160,9 +183,7 @@ async function runTurn(prompt: string, turnId: string, allowNativeReads: boolean
     permissionMode: "default",
     cwd: workspaceCwd,
     disallowedTools: disallowed,
-    // Only the claude-workbench server; ignore the machine's account/user MCP
-    // connectors (that is where lastminute.com / claude.ai connectors came from).
-    strictMcpConfig: true,
+    strictMcpConfig: policy.strictMcpConfig,
     // No systemPrompt: governance is the gate + on-demand skills, not turn-start
     // policy prose. Do not inject a monitor-style CLAUDE.md here.
   };
@@ -279,10 +300,15 @@ app.post("/prompt", (req, res) => {
     res.status(400).json({ error: "prompt is required." });
     return;
   }
+  const raw = (req.body?.toolPolicy ?? {}) as Partial<ToolPolicy>;
+  const policy: ToolPolicy = {
+    allowNativeReads: raw.allowNativeReads !== false,
+    strictMcpConfig: raw.strictMcpConfig !== false,
+    enabledTools: Array.isArray(raw.enabledTools) ? raw.enabledTools.map(String) : [],
+  };
   const turnId = randomUUID();
-  const allowNativeReads = req.body?.readTools !== false;
   activeTurn = turnId;
-  void runTurn(prompt, turnId, allowNativeReads);
+  void runTurn(prompt, turnId, policy);
   res.status(202).json({ turnId });
 });
 

@@ -1,6 +1,3 @@
-@implements IDisposable
-@inject IOperatorConsole Session
-
 <div class="activity">
     @foreach (ActivityEntry entry in Session.Activity)
     {
@@ -10,20 +7,3 @@
         </div>
     }
 </div>
-
-@code {
-    protected override void OnInitialized()
-    {
-        Session.Changed += OnChanged;
-    }
-
-    private void OnChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
-    public void Dispose()
-    {
-        Session.Changed -= OnChanged;
-    }
-}

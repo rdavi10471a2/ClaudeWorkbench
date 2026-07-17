@@ -13,9 +13,9 @@ public sealed class SidecarClient
         this.http = http;
     }
 
-    public async Task<string?> PromptAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<string?> PromptAsync(string prompt, object toolPolicy, CancellationToken cancellationToken = default)
     {
-        HttpResponseMessage response = await http.PostAsJsonAsync("/prompt", new { prompt }, cancellationToken);
+        HttpResponseMessage response = await http.PostAsJsonAsync("/prompt", new { prompt, toolPolicy }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             return null;

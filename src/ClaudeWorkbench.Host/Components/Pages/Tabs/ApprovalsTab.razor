@@ -1,6 +1,3 @@
-@implements IDisposable
-@inject IApprovalQueue Approvals
-
 <div class="approvals">
     @if (Approvals.PendingApprovals.Count == 0)
     {
@@ -32,25 +29,3 @@
         }
     }
 </div>
-
-@code {
-    protected override void OnInitialized()
-    {
-        Approvals.Changed += OnChanged;
-    }
-
-    private void OnChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ResolveAsync(string approvalId, bool approve)
-    {
-        await Approvals.ResolveApprovalAsync(approvalId, approve);
-    }
-
-    public void Dispose()
-    {
-        Approvals.Changed -= OnChanged;
-    }
-}
