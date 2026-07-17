@@ -44,10 +44,10 @@ const q = query({
   prompt,
   options: {
     mcpServers: {
-      workbench: { type: "http", url: "http://localhost:6289/mcp" }
+      "claude-workbench": { type: "http", url: "http://localhost:6100/mcp" }
     },
     // gate + observe every governed tool call
-    hooks: { PreToolUse: [{ matcher: "mcp__workbench__.*", hooks: [operatorGate] }] },
+    hooks: { PreToolUse: [{ matcher: "mcp__claude-workbench__.*", hooks: [operatorGate] }] },
   },
 });
 ```
@@ -60,7 +60,7 @@ exactly why the pipe transport was dropped. The sidecar stays thin.
 
 ```ts
 mcpServers: {
-  workbench: {
+  "claude-workbench": {
     type: "stdio",
     command: "dotnet",
     args: ["<abs>/AIMonitor.McpServer.dll", "--repo-root", "<repo>", "--config", "<config>"],
@@ -68,14 +68,23 @@ mcpServers: {
 }
 ```
 
-Either way the agent sees the tools as `mcp__workbench__<tool>` (e.g. `mcp__workbench__refresh_file`,
-`mcp__workbench__stage_edit_session_for_review`, `mcp__workbench__accept_staged_review`). Allow them
-via `allowedTools`/`permissionMode`; gate mutations (accept/reject, file writes) through the
-`PreToolUse` hook, which pauses and asks the Blazor operator UI, then returns allow/deny.
+Either way the agent sees the tools as `mcp__claude-workbench__<tool>` (e.g.
+`mcp__claude-workbench__refresh_file`, `mcp__claude-workbench__stage_candidate_for_review`,
+`mcp__claude-workbench__record_diff_decision`). Allow them via `allowedTools`/`permissionMode`; gate
+mutations (staging, `record_diff_decision`, file writes) through the `PreToolUse` hook, which pauses
+and asks the Blazor operator UI, then returns allow/deny.
 
-The extracted `AIMonitor.McpServer` today is the stdio console host. Adding the in-proc ASP.NET HTTP
-endpoint is a host-layer task (reuses the tool classes unchanged), scheduled with the Blazor host +
-sidecar work, not part of the engine extraction.
+## HTTP MCP host (implemented)
+
+`src/ClaudeWorkbench.Host` is the in-proc ASP.NET host (option A above). It reuses the engine's
+`AIMonitorTools` tool class unchanged (`.AddMcpServer(...).WithHttpTransport().WithTools<AIMonitorTools>()`),
+so the same governed surface the stdio console exposes is served over Streamable HTTP at `/mcp`, plus a
+`/health` probe. It advertises `serverInfo.name` = **`claude-workbench`** (deliberately distinct from
+the real monitor's `ai-monitor`, so it is unmistakable in an MCP server list) and defaults to
+**`http://localhost:6100`** (`appsettings.json` → `Kestrel:Endpoints:Http`; the real monitor is left
+its own port). It takes the same `--repo-root`/`--config` arguments as the console host to locate the
+watched-solution `Monitor` settings. Smoke-verified: `initialize` → `tools/list` returns the full
+60-tool surface.
 
 ## Auth
 
