@@ -1,0 +1,119 @@
+@using System.Text.Json
+
+@if (File is not null)
+{
+    <iframe class="source-webview" title="Read-only source viewer" srcdoc="@RenderWebViewHtml(File)"></iframe>
+}
+
+@code {
+    [Parameter]
+    public SourceFileDocument? File { get; set; }
+
+    private static string RenderWebViewHtml(SourceFileDocument file)
+    {
+        string payload = JsonSerializer.Serialize(new
+        {
+            path = file.FullPath,
+            text = file.Text,
+            language = GetMonacoLanguage(file),
+            line = file.SelectedLine
+        }).Replace("</", "<\\/", StringComparison.Ordinal);
+
+        return $$"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body, #container {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .selected-source-line {
+      background: rgba(38, 112, 214, 0.18);
+    }
+  </style>
+  <script>
+    window.MonacoEnvironment = {
+      getWorkerUrl: function (_, label) {
+        const workerMain = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/base/worker/workerMain.js';
+        const source = 'self.MonacoEnvironment={baseUrl:"https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/"};importScripts("' + workerMain + '");';
+        return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+</head>
+<body>
+  <div id="container"></div>
+  <script>
+    const payload = {{payload}};
+
+    function uriFromPath(path) {
+      return monaco.Uri.parse('file:///' + String(path || 'source.txt').replaceAll('\\', '/'));
+    }
+
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      const model = monaco.editor.createModel(payload.text || '', payload.language || 'plaintext', uriFromPath(payload.path));
+      const editor = monaco.editor.create(document.getElementById('container'), {
+        model: model,
+        theme: 'vs',
+        readOnly: true,
+        automaticLayout: true,
+        minimap: { enabled: false },
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        wordWrap: 'off',
+        fontFamily: 'Cascadia Code, Consolas, monospace',
+        fontSize: 13,
+        renderWhitespace: 'selection'
+      });
+
+      const maxLine = Math.max(1, model.getLineCount());
+      const selectedLine = Math.min(Math.max(Number(payload.line || 1), 1), maxLine);
+      editor.setSelection(new monaco.Range(selectedLine, 1, selectedLine, 1));
+      editor.revealLineInCenter(selectedLine);
+      editor.deltaDecorations([], [{
+        range: new monaco.Range(selectedLine, 1, selectedLine, 1),
+        options: { isWholeLine: true, className: 'selected-source-line' }
+      }]);
+    }, function (error) {
+      document.body.textContent = error && error.message ? error.message : String(error);
+      document.body.style.font = '13px Consolas, monospace';
+      document.body.style.padding = '12px';
+      document.body.style.whiteSpace = 'pre-wrap';
+    });
+  </script>
+</body>
+</html>
+""";
+    }
+
+    private static string GetMonacoLanguage(SourceFileDocument file)
+    {
+        string extension = Path.GetExtension(file.RelativePath);
+        return extension.ToLowerInvariant() switch
+        {
+            ".cs" => "csharp",
+            ".razor" => "html",
+            ".cshtml" => "html",
+            ".json" => "json",
+            ".xml" => "xml",
+            ".xaml" => "xml",
+            ".md" => "markdown",
+            ".css" => "css",
+            ".html" => "html",
+            ".js" => "javascript",
+            ".ts" => "typescript",
+            ".csproj" => "xml",
+            ".sln" => "plaintext",
+            ".slnx" => "xml",
+            _ => "plaintext"
+        };
+    }
+}

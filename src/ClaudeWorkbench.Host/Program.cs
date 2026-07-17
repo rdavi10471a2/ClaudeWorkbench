@@ -49,6 +49,7 @@ internal static class Program
         builder.Services.AddScoped<SidecarOperatorConsole>();
         builder.Services.AddScoped<IOperatorConsole>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddScoped<IApprovalQueue>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
+        builder.Services.AddScoped<Source.SourceWorkspace>();
 
         builder.Services.AddRadzenComponents();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();

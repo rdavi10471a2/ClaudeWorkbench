@@ -1,0 +1,234 @@
+@if (Node.Children.Count > 0)
+{
+    <details class="source-tree-folder @Node.Kind" open="@ShouldOpen">
+        <summary>
+            <span class="source-tree-folder-label" title="@Node.Name">
+                <span class="source-tree-twist" aria-hidden="true">&gt;</span>
+                @if (TryGetMaterialIcon(Node, out string? materialIcon))
+                {
+                    <span class="source-tree-icon source-tree-icon-material" aria-hidden="true" title="@GetIconTitle(Node)">
+                        <RadzenIcon Icon="@materialIcon" />
+                    </span>
+                }
+                else
+                {
+                    <span class="source-tree-icon" aria-hidden="true" title="@GetIconTitle(Node)">@GetNodeIcon(Node)</span>
+                }
+                @if (Node.File is not null)
+                {
+                    <button class="source-tree-label source-tree-target @(IsSelected ? "selected" : string.Empty)"
+                            type="button"
+                            title="@Node.File.FullPath"
+                            @onclick="() => OnFileSelected.InvokeAsync(new SourceSelection(Node.File.RelativePath, 1))"
+                            @onclick:stopPropagation="true">@Node.Name</button>
+                }
+                else if (Node.TargetFile is not null)
+                {
+                    <button class="source-tree-label source-tree-target"
+                            type="button"
+                            title="@($"{Node.TargetFile.RelativePath}: line {Node.Line}")"
+                            @onclick="() => OnFileSelected.InvokeAsync(new SourceSelection(Node.TargetFile.RelativePath, Node.Line))"
+                            @onclick:stopPropagation="true">@Node.Name</button>
+                }
+                else
+                {
+                    <span class="source-tree-label">@Node.Name</span>
+                }
+            </span>
+        </summary>
+        <div class="source-tree-children">
+            @foreach (SourceTreeNode child in Node.Children)
+            {
+                <SourceProjectTreeNode Node="@child"
+                                       SelectedRelativePath="@SelectedRelativePath"
+                                       OnFileSelected="@OnFileSelected" />
+            }
+        </div>
+    </details>
+}
+else if (Node.File is not null)
+{
+    <button class="source-tree-file @(IsSelected ? "selected" : string.Empty)"
+            type="button"
+            title="@Node.File.FullPath"
+            @onclick="() => OnFileSelected.InvokeAsync(new SourceSelection(Node.File.RelativePath, 1))">
+        <span class="source-tree-icon" title="@Node.File.Language file">@GetFileIcon(Node.File.Language)</span>
+        <span class="source-tree-label">@Node.Name</span>
+    </button>
+}
+else if (Node.TargetFile is not null)
+{
+    <button class="source-tree-file source-tree-symbol"
+            type="button"
+            title="@($"{Node.TargetFile.RelativePath}: line {Node.Line}")"
+            @onclick="() => OnFileSelected.InvokeAsync(new SourceSelection(Node.TargetFile.RelativePath, Node.Line))">
+        <span class="source-tree-icon" title="@GetIconTitle(Node)">@GetNodeIcon(Node)</span>
+        <span class="source-tree-label">@Node.Name</span>
+    </button>
+}
+else
+{
+    <div class="source-tree-file">
+        <span class="source-tree-icon" title="@GetIconTitle(Node)">@GetNodeIcon(Node)</span>
+        <span class="source-tree-label">@Node.Name</span>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public required SourceTreeNode Node { get; set; }
+
+    [Parameter]
+    public string? SelectedRelativePath { get; set; }
+
+    [Parameter]
+    public EventCallback<SourceSelection> OnFileSelected { get; set; }
+
+    private bool IsSelected =>
+        Node.File is not null
+        && Node.File.RelativePath.Equals(SelectedRelativePath, StringComparison.OrdinalIgnoreCase);
+
+    private bool ShouldOpen => Node.Kind == "project" || ContainsSelectedFile(Node, SelectedRelativePath);
+
+    private static bool ContainsSelectedFile(SourceTreeNode node, string? selectedRelativePath)
+    {
+        if (string.IsNullOrWhiteSpace(selectedRelativePath))
+        {
+            return false;
+        }
+
+        if (node.File is not null)
+        {
+            return node.File.RelativePath.Equals(selectedRelativePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (node.TargetFile is not null)
+        {
+            return node.TargetFile.RelativePath.Equals(selectedRelativePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return node.Children.Any(child => ContainsSelectedFile(child, selectedRelativePath));
+    }
+
+    private static string GetNodeIcon(SourceTreeNode node)
+    {
+        if (node.File is not null)
+        {
+            return GetFileIcon(node.File.Language);
+        }
+
+        return node.Kind switch
+        {
+            "project" => "PR",
+            "namespace" => "NS",
+            "type" => "T",
+            "group" => GetGroupIcon(node.Name),
+            "constructor" => "C",
+            "method" => "M",
+            "property" => "P",
+            "field" => "F",
+            "symbol" => "ab",
+            _ => "?"
+        };
+    }
+
+    private static string GetIconTitle(SourceTreeNode node)
+    {
+        if (node.File is not null)
+        {
+            return $"{node.File.Language} file";
+        }
+
+        return node.Kind switch
+        {
+            "project" => "Project",
+            "folder" => node.Name.Equals("..", StringComparison.Ordinal) ? "Parent folder" : "Folder",
+            "namespace" => "Namespace",
+            "type" => "Type",
+            "group" => GetGroupTitle(node.Name),
+            "constructor" => "Constructor",
+            "method" => "Method",
+            "property" => "Property",
+            "field" => "Field",
+            "symbol" => "Symbol",
+            _ => "Item"
+        };
+    }
+
+    private static string GetGroupTitle(string name)
+    {
+        if (name.Contains("constructors", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Constructors";
+        }
+
+        if (name.Contains("methods", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Methods";
+        }
+
+        if (name.Contains("members", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Members";
+        }
+
+        return "Namespace or group";
+    }
+
+    private static string GetGroupIcon(string name)
+    {
+        if (name.Contains("constructors", StringComparison.OrdinalIgnoreCase))
+        {
+            return "C";
+        }
+
+        if (name.Contains("methods", StringComparison.OrdinalIgnoreCase))
+        {
+            return "M";
+        }
+
+        if (name.Contains("members", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ab";
+        }
+
+        return "NS";
+    }
+
+    private static bool TryGetMaterialIcon(SourceTreeNode node, out string? icon)
+    {
+        if (node.File is not null || node.TargetFile is not null)
+        {
+            icon = null;
+            return false;
+        }
+
+        if (node.Kind.Equals("folder", StringComparison.OrdinalIgnoreCase))
+        {
+            icon = node.Name.Equals("..", StringComparison.Ordinal)
+                ? "drive_folder_upload"
+                : "folder";
+            return true;
+        }
+
+        icon = null;
+        return false;
+    }
+
+    private static string GetFileIcon(string language)
+    {
+        return language switch
+        {
+            "C#" => "C#",
+            "Razor" => "RZ",
+            "MSBuild" => "MS",
+            "JSON" => "{}",
+            "XML" => "<>",
+            "Markdown" => "MD",
+            "CSS" => "#",
+            "JavaScript" => "JS",
+            "TypeScript" => "TS",
+            _ => "TXT"
+        };
+    }
+}

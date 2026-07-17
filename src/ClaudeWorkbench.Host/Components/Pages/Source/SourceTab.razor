@@ -1,0 +1,121 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="source-layout" @ref="sourceLayout">
+    <aside class="source-sidebar" @ref="sourceSidebar" aria-label="Workspace source files">
+        <div class="source-toolbar">
+            <RadzenTextBox Value="@Filter" Change="@OnFilterChanged" Placeholder="Filter source files" />
+            <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@ApplyFilter" />
+            <RadzenButton Icon="refresh"
+                          Text="Rebuild Index"
+                          BusyText="Indexing..."
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Click="@RebuildIndex"
+                          IsBusy="@IsRebuildingIndex" />
+        </div>
+
+        <div class="source-count">@Snapshot.Files.Count file@(Snapshot.Files.Count == 1 ? string.Empty : "s") indexed</div>
+
+        <div class="source-tree-list">
+            @foreach (SourceTreeNode node in Snapshot.Tree)
+            {
+                <SourceProjectTreeNode Node="@node"
+                                       SelectedRelativePath="@SelectedPath"
+                                       OnFileSelected="@SelectFile" />
+            }
+        </div>
+    </aside>
+
+    <div class="source-splitter" @ref="sourceSplitter" title="Drag to resize source panes" aria-hidden="true"></div>
+
+    <section class="source-detail" @ref="sourceDetail" aria-label="Selected source file">
+        @if (!string.IsNullOrWhiteSpace(Snapshot.Message))
+        {
+            <div class="inline-error">@Snapshot.Message</div>
+        }
+
+        @if (Snapshot.SelectedFile is null)
+        {
+            <div class="empty-source">Select a source file.</div>
+        }
+        else
+        {
+            <header class="source-detail-header">
+                <div>
+                    <h2>@Snapshot.SelectedFile.RelativePath</h2>
+                    <span>@Snapshot.SelectedFile.Language - @Snapshot.SelectedFile.Size.ToString("n0") bytes</span>
+                </div>
+            </header>
+
+            <SourceCodeViewer File="@Snapshot.SelectedFile" />
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter]
+    public required SourceWorkspaceSnapshot Snapshot { get; set; }
+
+    [Parameter]
+    public string Filter { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> FilterChanged { get; set; }
+
+    [Parameter]
+    public string? SelectedPath { get; set; }
+
+    [Parameter]
+    public bool IsRebuildingIndex { get; set; }
+
+    [Parameter]
+    public EventCallback ApplyFilter { get; set; }
+
+    [Parameter]
+    public EventCallback RebuildIndex { get; set; }
+
+    [Parameter]
+    public EventCallback<SourceSelection> SelectFile { get; set; }
+
+    private ElementReference sourceLayout;
+    private ElementReference sourceSidebar;
+    private ElementReference sourceDetail;
+    private ElementReference sourceSplitter;
+    private IJSObjectReference? resizeModule;
+
+    private Task OnFilterChanged(string? value)
+    {
+        return FilterChanged.InvokeAsync(value ?? string.Empty);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+        await resizeModule.InvokeVoidAsync(
+            "attachSourceSplitter",
+            sourceLayout,
+            sourceSidebar,
+            sourceDetail,
+            sourceSplitter);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (resizeModule is not null)
+        {
+            try
+            {
+                await resizeModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}

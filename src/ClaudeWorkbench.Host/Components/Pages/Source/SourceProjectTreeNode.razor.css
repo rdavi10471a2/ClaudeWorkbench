@@ -1,0 +1,115 @@
+.source-tree-folder {
+    min-width: 0;
+}
+
+.source-tree-folder summary {
+    cursor: pointer;
+    list-style: none;
+    min-width: 0;
+}
+
+.source-tree-folder summary::-webkit-details-marker {
+    display: none;
+}
+
+.source-tree-folder[open] > summary .source-tree-twist {
+    transform: rotate(90deg);
+}
+
+.source-tree-folder-label,
+.source-tree-file {
+    align-items: center;
+    border-radius: 5px;
+    color: #263546;
+    display: grid;
+    gap: 7px;
+    min-height: 28px;
+    min-width: 0;
+    padding: 4px 7px;
+    text-decoration: none;
+}
+
+.source-tree-folder-label {
+    grid-template-columns: 12px 24px minmax(0, 1fr);
+    font-weight: 650;
+}
+
+.source-tree-folder-label:hover,
+.source-tree-file:hover,
+.source-tree-file.selected,
+.source-tree-target:hover,
+.source-tree-target.selected {
+    background: #eef4f8;
+}
+
+.source-tree-folder.project > summary .source-tree-folder-label {
+    font-weight: 650;
+}
+
+.source-tree-twist {
+    color: #6b7785;
+    display: inline-block;
+    font-size: 10px;
+    transition: transform 120ms ease;
+}
+
+.source-tree-icon {
+    border: 1px solid #d2dbe5;
+    border-radius: 4px;
+    color: #43566b;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    min-width: 28px;
+    text-align: center;
+}
+
+.source-tree-icon-material {
+    display: grid;
+    place-items: center;
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 18px;
+}
+
+.source-tree-icon-material ::deep .rz-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    line-height: 18px;
+}
+
+.source-tree-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.source-tree-target {
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.source-tree-children {
+    border-left: 1px solid #e4ebf1;
+    display: grid;
+    gap: 1px;
+    margin-left: 13px;
+    padding-left: 11px;
+}
+
+.source-tree-file {
+    grid-template-columns: 36px minmax(0, 1fr);
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+}
