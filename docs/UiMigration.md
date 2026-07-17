@@ -42,6 +42,27 @@ text), **Tools/Output** (tool-call feed), **Source** (browse watched tree — vi
 **Review/Approvals** surface (the gate: pending `gate_request`s with Allow/Deny → `ResolveGateAsync`).
 Packages carried: Radzen.Blazor, DiffPlex, Markdig.
 
+## Decompose Home — no 2,246-line code-behind
+
+The Codex `Home.razor.cs` is a 2,246-line monolith orchestrating every tab, all state, the directory
+browser, permissions, and workflow. Do **not** port that shape. Break it into small modules with
+backing models:
+
+- `Home.razor` — thin shell only: command bar + workspace toolbar + `RadzenTabs` host. No logic.
+- `HomeState.cs` — backing model: repo root, busy flags, active tab, run-started-at.
+- `Services/WorkbenchConnectionService.cs` — connection + turn state and a `Changed` event, fed by
+  [[SidecarEventStream]]; the Codex-shaped snapshot the tabs bind to.
+- One small component **per tab**, each with its own code-behind + view-model:
+  `AssistantTab` (prompt + streamed text ← `assistant_text`), `ToolsTab`/`OutputTab`
+  (tool feed ← `tool_call_*`), `ApprovalsTab` (gate list ← `gate_request` / `ResolveGateAsync`),
+  `SourceTab` (watched tree ← engine MCP), `StatusTab` (usage/connection ← `usage`/`turn_*`).
+- Dialogs (StagedReview / PreMergeValidation) and the directory browser stay as their own components
+  with their own models, ported when their tab is.
+
+Hosting: the UI folds into **`ClaudeWorkbench.Host`** (already serves MCP + owns `Services/Sidecar*`),
+so it stays one MCP+UI process — no separate `.Web` project. `.Host`'s csproj gains Radzen.Blazor,
+DiffPlex, Markdig.
+
 ## Staged plan
 
 1. **Project + shell.** New `ClaudeWorkbench.Web` (Blazor Server + MCP + Radzen/DiffPlex/Markdig,

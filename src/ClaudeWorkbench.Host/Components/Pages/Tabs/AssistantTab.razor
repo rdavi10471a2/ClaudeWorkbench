@@ -1,0 +1,77 @@
+@implements IDisposable
+@inject SidecarEventStream Stream
+@inject SidecarClient Sidecar
+
+<div class="assistant">
+    <div class="assistant-transcript">
+        @foreach (SidecarEvent evt in Transcript())
+        {
+            <div class="assistant-line @LineClass(evt)">
+                @Render(evt)
+            </div>
+        }
+    </div>
+    <div class="assistant-input">
+        <textarea @bind="prompt"
+                  @bind:event="oninput"
+                  rows="3"
+                  placeholder="Ask Claude to work on the watched solution..."></textarea>
+        <RadzenButton Text="Send"
+                      Icon="send"
+                      Click="@SendAsync"
+                      Disabled="@(busy || string.IsNullOrWhiteSpace(prompt))" />
+    </div>
+</div>
+
+@code {
+    private string prompt = string.Empty;
+    private bool busy;
+
+    protected override void OnInitialized()
+    {
+        Stream.Changed += OnChanged;
+    }
+
+    private void OnChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    // Assistant text + tool calls, in arrival order — the readable turn narrative.
+    private IEnumerable<SidecarEvent> Transcript()
+    {
+        return Stream.SnapshotEvents()
+            .Where(evt => evt.Type is "assistant_text" or "tool_call_started");
+    }
+
+    private static string LineClass(SidecarEvent evt)
+    {
+        return evt.Type == "tool_call_started" ? "line-tool" : "line-text";
+    }
+
+    private static string Render(SidecarEvent evt)
+    {
+        return evt.Type == "tool_call_started"
+            ? $"→ {evt.Tool}"
+            : evt.Text ?? string.Empty;
+    }
+
+    private async Task SendAsync()
+    {
+        busy = true;
+        try
+        {
+            await Sidecar.PromptAsync(prompt);
+            prompt = string.Empty;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Stream.Changed -= OnChanged;
+    }
+}

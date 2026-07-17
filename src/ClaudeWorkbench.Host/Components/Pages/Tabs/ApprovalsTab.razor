@@ -1,0 +1,57 @@
+@implements IDisposable
+@inject SidecarEventStream Stream
+@inject SidecarClient Sidecar
+
+<div class="approvals">
+    @if (Stream.PendingGates().Count == 0)
+    {
+        <div class="approvals-empty">No pending approvals. Mutating tool calls will pause here for review.</div>
+    }
+    else
+    {
+        @foreach (GateInfo gate in Stream.PendingGates())
+        {
+            <div class="gate-card">
+                <div class="gate-head">
+                    <span class="gate-tool">@gate.Tool</span>
+                    @if (!string.IsNullOrWhiteSpace(gate.FilePath))
+                    {
+                        <span class="gate-file">@gate.FilePath</span>
+                    }
+                </div>
+                <div class="gate-actions">
+                    <RadzenButton Text="Allow"
+                                  ButtonStyle="ButtonStyle.Success"
+                                  Size="ButtonSize.Small"
+                                  Click="@(() => ResolveAsync(gate.GateId, "allow"))" />
+                    <RadzenButton Text="Deny"
+                                  ButtonStyle="ButtonStyle.Danger"
+                                  Size="ButtonSize.Small"
+                                  Click="@(() => ResolveAsync(gate.GateId, "deny"))" />
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Stream.Changed += OnChanged;
+    }
+
+    private void OnChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ResolveAsync(string gateId, string decision)
+    {
+        await Sidecar.ResolveGateAsync(gateId, decision);
+    }
+
+    public void Dispose()
+    {
+        Stream.Changed -= OnChanged;
+    }
+}

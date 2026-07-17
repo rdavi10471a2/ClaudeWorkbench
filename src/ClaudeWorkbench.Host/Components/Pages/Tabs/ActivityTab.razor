@@ -1,0 +1,61 @@
+@implements IDisposable
+@inject SidecarEventStream Stream
+
+<div class="activity">
+    @foreach (SidecarEvent evt in Recent())
+    {
+        <div class="activity-row activity-@evt.Type">
+            <span class="activity-type">@evt.Type</span>
+            <span class="activity-detail">@Detail(evt)</span>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Stream.Changed += OnChanged;
+    }
+
+    private void OnChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    // Newest first.
+    private IEnumerable<SidecarEvent> Recent()
+    {
+        return Stream.SnapshotEvents().Reverse();
+    }
+
+    private static string Detail(SidecarEvent evt)
+    {
+        return evt.Type switch
+        {
+            "assistant_text" => Truncate(evt.Text),
+            "tool_call_started" => evt.Tool ?? string.Empty,
+            "tool_call_finished" => evt.CallId ?? string.Empty,
+            "gate_request" => $"{evt.Tool} {evt.FilePath}",
+            "gate_resolved" => $"{evt.GateId} → {evt.Decision}",
+            "usage" => $"in {evt.InputTokens} / out {evt.OutputTokens}",
+            "turn_finished" => evt.StopReason ?? string.Empty,
+            "error" => evt.Message ?? string.Empty,
+            _ => string.Empty,
+        };
+    }
+
+    private static string Truncate(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        return text.Length <= 120 ? text : text.Substring(0, 117) + "...";
+    }
+
+    public void Dispose()
+    {
+        Stream.Changed -= OnChanged;
+    }
+}

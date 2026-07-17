@@ -3,14 +3,16 @@ using AIMonitor.Data;
 using AIMonitor.Logging;
 using AIMonitor.McpServer;
 using AIMonitor.Workflow;
+using ClaudeWorkbench.Host.Components;
+using ClaudeWorkbench.Host.Services;
 using ModelContextProtocol.Protocol;
+using Radzen;
 
 namespace ClaudeWorkbench.Host;
 
-// In-process HTTP host for the extracted AIMonitor engine's MCP tool surface.
-// Reuses the exact tool classes the stdio console host registers (AIMonitorTools);
-// only the transport differs (Streamable HTTP instead of stdio) so the Claude
-// Agent SDK sidecar can register it via its mcpServers option over a URL.
+// Single-surface process: serves the claude-workbench MCP tool surface over HTTP
+// (for the sidecar) AND the Blazor operator console (for the human), sharing one
+// engine + one logging sink in-process.
 internal static class Program
 {
     public static void Main(string[] args)
@@ -32,16 +34,23 @@ internal static class Program
         builder.Services
             .AddMcpServer(options =>
             {
-                options.ServerInfo = new Implementation
-                {
-                    Name = "claude-workbench",
-                    Version = "0.1.0"
-                };
+                options.ServerInfo = new Implementation { Name = "claude-workbench", Version = "0.1.0" };
             })
             .WithHttpTransport()
             .WithTools<AIMonitorTools>();
 
+        string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
+        builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
+        builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
+        builder.Services.AddSingleton<SidecarEventStream>();
+        builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
+
+        builder.Services.AddRadzenComponents();
+        builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+
         WebApplication app = builder.Build();
+        app.UseStaticFiles();
+        app.UseAntiforgery();
         app.MapMcp("/mcp");
         app.MapGet("/health", (MonitorSettings monitorSettings) => Results.Ok(new
         {
@@ -49,7 +58,7 @@ internal static class Program
             repositoryRoot = monitorSettings.RepositoryRoot,
             watchedSolutionPath = monitorSettings.WatchedSolutionPath
         }));
-
+        app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.Run();
     }
 
