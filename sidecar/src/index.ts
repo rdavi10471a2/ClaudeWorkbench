@@ -83,8 +83,27 @@ let activeTurn: string | null = null;
 // The human accept/reject gate. Read-only discovery tools auto-allow so the
 // operator is interrupted only for changes that can reach watched source or the
 // review queue; mutations pause here until the host resolves the gate.
+// Deny-by-default: only these native tools are ever allowed (all read-only). Any
+// tool not here and not a claude-workbench tool is denied — including PowerShell,
+// Bash, writers, Agent, Workflow, and any future/unknown tool.
+const SAFE_NATIVE_TOOLS = new Set<string>(["Read", "Grep", "Glob", "ToolSearch", "TodoWrite"]);
+const WORKBENCH_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
+
 const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   const turnId = activeTurn ?? "unknown";
+
+  // Non-workbench tools: allow the safe read-only set, deny everything else.
+  if (!toolName.startsWith(WORKBENCH_TOOL_PREFIX)) {
+    if (SAFE_NATIVE_TOOLS.has(toolName)) {
+      return { behavior: "allow", updatedInput: input };
+    }
+    return {
+      behavior: "deny",
+      message: `'${toolName}' is not permitted in the governed workbench. Read the workspace with Read/Grep/Glob and make changes through the claude-workbench tools (submit_file -> stage -> operator review).`,
+    };
+  }
+
+  // claude-workbench read-only tools: allow. Mutations: pause at the operator gate.
   if (!isGatedTool(toolName)) {
     return { behavior: "allow", updatedInput: input };
   }
@@ -128,7 +147,7 @@ async function runTurn(prompt: string, turnId: string, allowNativeReads: boolean
   // go through the claude-workbench MCP gate). The native read tools are optional
   // per turn: when allowNativeReads is false, force ALL access through the MCP
   // surface (get_file / find_indexed_symbols) by disallowing them too.
-  const disallowed = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"];
+  const disallowed = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
   if (!allowNativeReads) {
     disallowed.push("Read", "Grep", "Glob");
   }

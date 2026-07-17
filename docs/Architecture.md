@@ -109,11 +109,16 @@ cannot be side-stepped:
 
 - **CWD = the watched solution's folder**, auto-derived from the host `/health` (tracks whatever
   `WatchedSolutionPath` is configured). The agent reasons in the real workspace context.
-- **Read-only on the watched workspace.** `Read`/`Grep`/`Glob` are allowed; `Write`, `Edit`,
-  `MultiEdit`, `NotebookEdit`, and `Bash` are in `disallowedTools`. The agent therefore cannot mutate
-  watched source with its native tools — every change must go through the `claude-workbench` MCP
-  (`refresh_file`/`submit_file` → `stage_candidate_for_review` → operator review → `record_diff_decision`),
-  which is where the `canUseTool` approval gate lives.
+- **Deny-by-default tool access.** `canUseTool` allows only a small safe set of native read tools
+  (`Read`/`Grep`/`Glob`, plus `ToolSearch`/`TodoWrite`) and the `claude-workbench` MCP tools; **every
+  other tool is denied**, including `PowerShell`, `Bash`, `Write`/`Edit`/`MultiEdit`/`NotebookEdit`,
+  `Agent`, `Workflow`, `WebFetch`, and anything unknown/future. The obvious writers + shells are *also*
+  in `disallowedTools` (hard-removed from context) as a backstop, in case a tool is auto-approved
+  before `canUseTool` runs. Net effect: the watched workspace is read-only to the agent, and every
+  change must go through the `claude-workbench` MCP (`refresh_file`/`submit_file` →
+  `stage_candidate_for_review` → operator review → `record_diff_decision`), where the approval gate lives.
+  (Deny-by-default matters because there is no interactive approval prompt in the headless sidecar —
+  `canUseTool` is the sole decider, so an allow-by-default default would silently permit e.g. PowerShell.)
 - **Optional MCP-only reads.** Per turn (`POST /prompt { readTools: false }`) the native read tools are
   also disallowed, forcing *all* access — reads included — through the MCP surface (`get_file`,
   `find_indexed_symbols`). Off by default (reads via native tools are ergonomic and safe).
