@@ -18,6 +18,7 @@ internal static class Program
     public static void Main(string[] args)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+        builder.WebHost.UseStaticWebAssets();
 
         string repositoryRoot = GetOption(args, "--repo-root") ?? Directory.GetCurrentDirectory();
         string? settingsPath = GetOption(args, "--config");
@@ -49,7 +50,7 @@ internal static class Program
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
         WebApplication app = builder.Build();
-        app.UseStaticFiles();
+        app.MapStaticAssets();
         app.UseAntiforgery();
         app.MapMcp("/mcp");
         app.MapGet("/health", (MonitorSettings monitorSettings) => Results.Ok(new
