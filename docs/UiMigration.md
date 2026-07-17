@@ -63,7 +63,57 @@ Hosting: the UI folds into **`ClaudeWorkbench.Host`** (already serves MCP + owns
 so it stays one MCP+UI process — no separate `.Web` project. `.Host`'s csproj gains Radzen.Blazor,
 DiffPlex, Markdig.
 
-## Staged plan
+## Revised plan (v2 — operator-agreed)
+
+**Priority:** Assistant tab · permission+elicitation model · merge dialog + pre-merge overlay + governed
+workflow · keep the task model.
+**Defer:** Source/Tests tabs, file uploads, Discuss/Work chat modes (a VS-Code-era abstraction),
+archive-conversation dialog (revisit via the sidecar later).
+**Dead:** the File tab.
+
+### Structure rules (operator directive — "structured properly")
+Small, focused interfaces (interface segregation). Everything in its own file: **data structures**,
+**interfaces**, **`.razor`**, **`.razor.cs`** (code-behind — no inline `@code` dumps), **`.razor.css`**.
+
+### Layers
+Abstraction (`Console/`): models + small interfaces. Adapters (`Services/`): one per backend.
+
+| Interface | Exposes | Adapter (today) |
+|---|---|---|
+| `IOperatorConsole` | turn status, transcript (Markdig), send | `SidecarOperatorConsole` (sidecar) |
+| `IApprovalQueue` | approvals + elicitations, resolve/answer | `SidecarApprovalQueue` (sidecar) |
+| `IReviewWorkflow` | staged reviews, diff, pre-merge validation, accept/reject | `EngineReviewWorkflow` (**in-process engine**) |
+| `ITaskBoard` | tasks: create/promote/list/status | `SqliteTaskBoard` (runtime SQLite) |
+
+Review is host↔engine **in-process** (`stage_candidate_for_review` → `launch_staged_diff` →
+`record_diff_decision`); the agent stages, the *operator* decides in the UI.
+
+### Permissions & elicitation (Claude-native, no MCP-schema in UI)
+- **Approval** = `canUseTool` (allow/deny, optional input edit). Neutral `ApprovalRequest`. No
+  session/persistent/MCP-tool-variant cruft in the component.
+- **Elicitation** = generic `Elicitation { Id, Question, Field[] }` now; the agent raises it via a
+  `request_operator_input` engine tool surfaced through the same pause/resume plumbing as the gate.
+  Kept generic; Claude-specific tuning + multi-agent mapping is a later problem.
+
+### Port faithfully (do NOT reinvent)
+- **Merge dialog + overlay**: port `Components/Pages/Home/Tasks/StagedReviewDialog.razor` (DiffPlex,
+  in-app — "exactly as used") + `PreMergeValidationDialog.razor`, rebound to `IReviewWorkflow`.
+- **Task SQLite**: port `AICodingServices/Data/WorkflowTaskBoardDatabase.cs` +
+  `WorkflowTaskBoardRepository.cs` (+ `SystemDataPaths.cs`) into the task store, runtime-rooted DB.
+- **Assistant layout**: port the real composer + resizable splitter (`sourceResize.js`) + chat-history
+  transcript + agent-action modal; omit attachments / mode bar / task-promotion-inline / archive.
+
+### Build order
+1. `Console/` layer: model files + the four small interfaces (each its own file).
+2. `Services/` adapters: refactor `SidecarOperatorConsole`; add `SidecarApprovalQueue`; keep green.
+3. Assistant tab faithful (`.razor` + `.razor.cs` + `.razor.css`) on `IOperatorConsole`/`IApprovalQueue`,
+   incl. the agent-action modal (approvals + generic elicitation form).
+4. `SqliteTaskBoard` (ported) + Tasks tab (ported, rebound to `ITaskBoard`).
+5. `EngineReviewWorkflow` + MergeReviewDialog (ported DiffPlex) + PreMergeValidationOverlay + wire the
+   governed stage→review→decide loop.
+6. Governance tightening: restrict the agent to `mcp__claude-workbench__*`.
+
+## Staged plan (v1 — superseded by v2 above)
 
 1. **Project + shell.** New `ClaudeWorkbench.Web` (Blazor Server + MCP + Radzen/DiffPlex/Markdig,
    references the engine + reuses `Services/Sidecar*`). Copy the UI shell (App/Routes/_Imports/
