@@ -1,0 +1,22 @@
+{
+  "name": "claude-workbench-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drives Claude via the Agent SDK, registers the claude-workbench MCP surface over HTTP, gates mutations at a human operator, and streams neutral events to the Blazor host.",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
