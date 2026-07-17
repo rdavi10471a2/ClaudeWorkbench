@@ -1,8 +1,8 @@
-<SourceTab Snapshot="@snapshot"
-           Filter="@filter"
-           FilterChanged="@OnFilterChanged"
-           SelectedPath="@selectedPath"
-           IsRebuildingIndex="@rebuilding"
-           ApplyFilter="@ApplyFilter"
-           RebuildIndex="@RebuildAsync"
-           SelectFile="@OnSelectFile" />
+<SourceTab Snapshot="@Workspace.Snapshot"
+           Filter="@Workspace.Filter"
+           FilterChanged="@Workspace.SetFilter"
+           SelectedPath="@Workspace.SelectedPath"
+           IsRebuildingIndex="@Workspace.Rebuilding"
+           ApplyFilter="@Workspace.ApplyFilter"
+           RebuildIndex="@Workspace.RebuildAsync"
+           SelectFile="@Workspace.Select" />

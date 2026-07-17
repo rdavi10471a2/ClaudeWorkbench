@@ -20,6 +20,75 @@ public sealed class SourceWorkspace
         this.query = query;
     }
 
+    // --- retained state (singleton) so the Source view survives tab switches,
+    //     component re-creation, and browser refresh within a host session ----
+    private SourceWorkspaceSnapshot current = SourceWorkspaceSnapshot.Empty("Loading source index...");
+    private string filter = string.Empty;
+    private string? selectedPath;
+    private int? selectedLine;
+    private bool rebuilding;
+    private bool loaded;
+
+    public event Action? Changed;
+
+    public SourceWorkspaceSnapshot Snapshot => current;
+
+    public string Filter => filter;
+
+    public string? SelectedPath => selectedPath;
+
+    public bool Rebuilding => rebuilding;
+
+    public void EnsureLoaded()
+    {
+        if (!loaded)
+        {
+            loaded = true;
+            Refresh();
+        }
+    }
+
+    public void SetFilter(string value)
+    {
+        filter = value ?? string.Empty;
+    }
+
+    public void ApplyFilter()
+    {
+        Refresh();
+    }
+
+    public void Select(SourceSelection selection)
+    {
+        selectedPath = selection.RelativePath;
+        selectedLine = selection.Line;
+        Refresh();
+    }
+
+    public async Task RebuildAsync()
+    {
+        rebuilding = true;
+        Changed?.Invoke();
+        try
+        {
+            await new SolutionIndexRebuildService().RebuildAsync(settings);
+        }
+        finally
+        {
+            rebuilding = false;
+            selectedPath = null;
+            selectedLine = null;
+            loaded = true;
+            Refresh();
+        }
+    }
+
+    private void Refresh()
+    {
+        current = BuildSnapshot(selectedPath, selectedLine, filter);
+        Changed?.Invoke();
+    }
+
     public SourceWorkspaceSnapshot BuildSnapshot(string? selectedRelativePath, int? selectedLine, string? filter)
     {
         MonitorStatusResult status = query.GetMonitorStatus();

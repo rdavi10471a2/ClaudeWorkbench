@@ -1,62 +1,28 @@
-using ClaudeWorkbench.Host.Source;
 using Microsoft.AspNetCore.Components;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Source;
 
-// Owns source-browser state (filter, selection, rebuild) and drives the ported
-// presentational SourceTab against the engine-backed SourceWorkspace.
-public partial class SourcePanel
+// Thin view over the singleton SourceWorkspace: renders its retained state and
+// forwards events. State lives in the service, so it survives tab switches,
+// component re-creation, and browser refresh within a host session.
+public partial class SourcePanel : IDisposable
 {
     [Inject]
-    private SourceWorkspace Workspace { get; set; } = default!;
-
-    private SourceWorkspaceSnapshot snapshot = SourceWorkspaceSnapshot.Empty("Loading source index...");
-    private string filter = string.Empty;
-    private string? selectedPath;
-    private int? selectedLine;
-    private bool rebuilding;
+    private ClaudeWorkbench.Host.Source.SourceWorkspace Workspace { get; set; } = default!;
 
     protected override void OnInitialized()
     {
-        Refresh();
+        Workspace.Changed += OnChanged;
+        Workspace.EnsureLoaded();
     }
 
-    private void Refresh()
+    private void OnChanged()
     {
-        snapshot = Workspace.BuildSnapshot(selectedPath, selectedLine, filter);
+        InvokeAsync(StateHasChanged);
     }
 
-    private void OnFilterChanged(string value)
+    public void Dispose()
     {
-        filter = value;
-    }
-
-    private void ApplyFilter()
-    {
-        Refresh();
-    }
-
-    private void OnSelectFile(SourceSelection selection)
-    {
-        selectedPath = selection.RelativePath;
-        selectedLine = selection.Line;
-        Refresh();
-    }
-
-    private async Task RebuildAsync()
-    {
-        rebuilding = true;
-        StateHasChanged();
-        try
-        {
-            await Workspace.RebuildIndexAsync();
-        }
-        finally
-        {
-            rebuilding = false;
-            selectedPath = null;
-            selectedLine = null;
-            Refresh();
-        }
+        Workspace.Changed -= OnChanged;
     }
 }

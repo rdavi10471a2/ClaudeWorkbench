@@ -1,5 +1,6 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import {
   query,
   type CanUseTool,
@@ -16,6 +17,28 @@ const SIDECAR_PORT = Number(process.env.SIDECAR_PORT ?? 6110);
 const WORKBENCH_MCP_URL =
   process.env.WORKBENCH_MCP_URL ?? "http://localhost:6100/mcp";
 const MCP_SERVER_NAME = "claude-workbench";
+const HOST_BASE = WORKBENCH_MCP_URL.replace(/\/mcp\/?$/, "");
+
+// The agent's working directory is the watched solution's folder (read-only there:
+// Read/Grep/Glob allowed, writes disallowed). Auto-derived from the host so it
+// always tracks the configured watched solution; falls back to WORKBENCH_CWD.
+let workspaceCwd: string | undefined = process.env.WORKBENCH_CWD;
+
+async function resolveWorkspaceCwd(): Promise<void> {
+  try {
+    const response = await fetch(`${HOST_BASE}/health`);
+    if (response.ok) {
+      const info = (await response.json()) as { watchedSolutionPath?: string };
+      if (info.watchedSolutionPath) {
+        workspaceCwd = dirname(info.watchedSolutionPath);
+      }
+    }
+  } catch {
+    // keep the env/default cwd if the host is not reachable yet
+  }
+}
+
+void resolveWorkspaceCwd();
 
 // --- minimal content-block shapes we read off SDK messages --------------
 interface TextBlock {
@@ -100,13 +123,27 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   return result;
 };
 
-async function runTurn(prompt: string, turnId: string): Promise<void> {
+async function runTurn(prompt: string, turnId: string, allowNativeReads: boolean): Promise<void> {
+  // Writers + Bash are always blocked (read-only on the watched workspace; edits
+  // go through the claude-workbench MCP gate). The native read tools are optional
+  // per turn: when allowNativeReads is false, force ALL access through the MCP
+  // surface (get_file / find_indexed_symbols) by disallowing them too.
+  const disallowed = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"];
+  if (!allowNativeReads) {
+    disallowed.push("Read", "Grep", "Glob");
+  }
+
   const options: Options = {
     mcpServers: {
       [MCP_SERVER_NAME]: { type: "http", url: WORKBENCH_MCP_URL },
     },
     canUseTool,
     permissionMode: "default",
+    cwd: workspaceCwd,
+    disallowedTools: disallowed,
+    // Only the claude-workbench server; ignore the machine's account/user MCP
+    // connectors (that is where lastminute.com / claude.ai connectors came from).
+    strictMcpConfig: true,
     // No systemPrompt: governance is the gate + on-demand skills, not turn-start
     // policy prose. Do not inject a monitor-style CLAUDE.md here.
   };
@@ -224,8 +261,9 @@ app.post("/prompt", (req, res) => {
     return;
   }
   const turnId = randomUUID();
+  const allowNativeReads = req.body?.readTools !== false;
   activeTurn = turnId;
-  void runTurn(prompt, turnId);
+  void runTurn(prompt, turnId, allowNativeReads);
   res.status(202).json({ turnId });
 });
 
