@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using AIMonitor.Indexing;
+using AIMonitor.Logging;
 using AIMonitor.McpServer;
 using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Console;
@@ -13,11 +15,13 @@ namespace ClaudeWorkbench.Host.Services;
 public sealed class EngineReviewWorkflow : IReviewWorkflow
 {
     private readonly WorkspaceManager workspace;
+    private readonly IMonitorLogger logger;
     private readonly ConcurrentDictionary<string, string[]> diagnosticsCache = new();
 
-    public EngineReviewWorkflow(WorkspaceManager workspace)
+    public EngineReviewWorkflow(WorkspaceManager workspace, IMonitorLogger logger)
     {
         this.workspace = workspace;
+        this.logger = logger;
     }
 
     public IReadOnlyList<ReviewQueueItem> ListPending()
@@ -96,8 +100,19 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
 
         File.Copy(record.StagedFilePath, record.WatchedFilePath, overwrite: true);
 
-        workspace.EditService.RecordDecision(stagedRecordId, "accepted", record.StagedHash);
-        return new ReviewActionResult($"Accepted. {record.RelativePath} written to the watched solution.");
+        // Faithful engine accept: records the decision, runs the post-accept build,
+        // and rebuilds the solution index for the changed file (+ inbound closure).
+        // Runs synchronously so the dialog's busy overlay blocks until the index
+        // is current.
+        new StagedDecisionWorkflow().Record(
+            workspace.Settings,
+            logger,
+            workspace.EditService,
+            stagedRecordId,
+            "accepted",
+            record.StagedHash,
+            "ClaudeWorkbench");
+        return new ReviewActionResult($"Accepted. {record.RelativePath} written and re-indexed.");
     }
 
     public ReviewActionResult Reject(string stagedRecordId)

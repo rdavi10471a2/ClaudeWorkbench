@@ -8,7 +8,7 @@
             <div class="staged-review-busy-card">
                 <div class="staged-review-busy-spinner"></div>
                 <strong>Applying review decision</strong>
-                <span>Writing the accepted file into the watched solution and updating review state.</span>
+                <span>Writing the accepted file, running the build, and rebuilding the solution index. Please wait…</span>
             </div>
         </div>
     }
@@ -17,10 +17,6 @@
         <div>
             <h3>@DialogTitle</h3>
             <p>@DialogSubtitle</p>
-        </div>
-        <div class="staged-review-dialog-actions">
-            <button class="staged-review-secondary-action" type="button" @onclick="RefreshReview">Refresh</button>
-            <button class="staged-review-secondary-action" type="button" @onclick="CloseDialog">Close</button>
         </div>
     </div>
 
