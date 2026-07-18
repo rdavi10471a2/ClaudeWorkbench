@@ -43,8 +43,6 @@
             <button class="@(IsPane("Task") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Task"))">Task</button>
             <button class="@(IsPane("Notes") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Notes"))">User Notes</button>
             <button class="@(IsPane("Agent") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Agent"))">Agent Notes</button>
-            <button class="@(IsPane("Files") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Files"))">Files</button>
-            <button class="@(IsPane("Events") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Events"))">Events</button>
         </div>
 
         <div class="task-pane-body">
@@ -94,73 +92,6 @@
                         {
                             <div class="notes-scroll-shell">
                                 <div class="agent-markdown">@((MarkupString)RenderMarkdown(Task.AgentNotesMarkdown))</div>
-                            </div>
-                        }
-                    </div>
-                </section>
-            }
-            else if (IsPane("Files"))
-            {
-                <section class="detail-section grow-section">
-                    <div class="file-form">
-                        <RadzenTextBox @bind-Value="newFilePath"
-                                       Placeholder="relative/path.cs"
-                                       Style="width: 100%;" />
-                        <RadzenTextBox @bind-Value="newFileIntent"
-                                       Placeholder="intent"
-                                       Style="width: 100%;" />
-                        <RadzenTextBox @bind-Value="newFileRole"
-                                       Placeholder="role"
-                                       Style="width: 100%;" />
-                        <RadzenButton Icon="add"
-                                      Text="Add"
-                                      ButtonStyle="ButtonStyle.Secondary"
-                                      Size="ButtonSize.Small"
-                                      Disabled="@string.IsNullOrWhiteSpace(newFilePath)"
-                                      Click="@AddFile" />
-                    </div>
-
-                    <div class="file-list">
-                        @if (Task.Files.Count == 0)
-                        {
-                            <p class="empty-column">No files attached.</p>
-                        }
-                        else
-                        {
-                            @foreach (TaskBoardFileViewModel file in Task.Files)
-                            {
-                                <div class="file-row">
-                                    <strong>@file.RelativePath</strong>
-                                    <span>@file.Intent</span>
-                                    <em>@file.FileRole</em>
-                                </div>
-                            }
-                        }
-                    </div>
-                </section>
-            }
-            else if (IsPane("Events"))
-            {
-                <section class="detail-section grow-section">
-                    <div class="comment-form">
-                        <RadzenTextBox @bind-Value="newComment"
-                                       Placeholder="Add a comment"
-                                       Style="width: 100%;" />
-                        <RadzenButton Icon="chat"
-                                      Text="Comment"
-                                      ButtonStyle="ButtonStyle.Secondary"
-                                      Size="ButtonSize.Small"
-                                      Disabled="@string.IsNullOrWhiteSpace(newComment)"
-                                      Click="@AddComment" />
-                    </div>
-
-                    <div class="event-list">
-                        @foreach (TaskBoardEventViewModel taskEvent in Task.Events)
-                        {
-                            <div class="event-row">
-                                <strong>@taskEvent.EventTypeName</strong>
-                                <span>@taskEvent.Message</span>
-                                <em>@taskEvent.CreatedLabel</em>
                             </div>
                         }
                     </div>

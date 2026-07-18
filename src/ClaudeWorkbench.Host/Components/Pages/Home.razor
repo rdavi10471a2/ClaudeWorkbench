@@ -64,14 +64,14 @@ else
 
             <RadzenTabs RenderMode="TabRenderMode.Client">
                 <Tabs>
+                    <RadzenTabsItem Text="Tasks">
+                        <TasksTab WorkspaceRoot="@Session.WorkspacePath" />
+                    </RadzenTabsItem>
                     <RadzenTabsItem Text="Workbench">
                         <AssistantTab />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Source">
                         <SourcePanel />
-                    </RadzenTabsItem>
-                    <RadzenTabsItem Text="Tasks">
-                        <TasksTab WorkspaceRoot="@Session.WorkspacePath" />
                     </RadzenTabsItem>
                     <RadzenTabsItem Text="Activity">
                         <ActivityTab />
