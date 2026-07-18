@@ -28,6 +28,8 @@ public sealed class ReviewRecordModel
 
     public string PreMergeValidationStatus { get; init; } = string.Empty;
 
+    public IReadOnlyList<string> PreMergeValidationDiagnostics { get; init; } = [];
+
     public static ReviewRecordModel SessionComplete()
     {
         return new ReviewRecordModel { IsSessionComplete = true };

@@ -17,9 +17,13 @@
     display: flex;
     flex-direction: column;
     height: min(88vh, 900px);
-    max-width: 1200px;
+    max-width: 96vw;
+    min-width: 640px;
+    min-height: 360px;
+    overflow: auto;
     padding: 16px;
-    width: 100%;
+    resize: both;
+    width: min(1200px, 96vw);
 }
 
 .staged-review-dialog {
@@ -177,6 +181,25 @@
     gap: 12px;
     grid-template-columns: 260px minmax(0, 1fr);
     min-height: 0;
+}
+
+.staged-review-dialog-layout.single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.staged-review-diagnostics {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    max-height: 160px;
+    overflow: auto;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: .78rem;
+    color: #7a1e1e;
+}
+
+.staged-review-diagnostics li {
+    margin: 2px 0;
+    overflow-wrap: anywhere;
 }
 
 .staged-review-queue,

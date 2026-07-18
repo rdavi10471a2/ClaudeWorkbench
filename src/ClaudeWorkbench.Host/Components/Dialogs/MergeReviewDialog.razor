@@ -38,37 +38,23 @@
                     <div class="staged-review-warning">
                         <strong>Pre-merge validation reported errors.</strong>
                         <span>Normal accept is disabled for this staged record. Use <em>Accept With Validation Override</em> only if you want to merge despite that failure.</span>
+                        @if (selectedModel.PreMergeValidationDiagnostics.Count > 0)
+                        {
+                            <ul class="staged-review-diagnostics">
+                                @foreach (string diagnostic in selectedModel.PreMergeValidationDiagnostics.Take(25))
+                                {
+                                    <li>@diagnostic</li>
+                                }
+                            </ul>
+                            @if (selectedModel.PreMergeValidationDiagnostics.Count > 25)
+                            {
+                                <span>… and @(selectedModel.PreMergeValidationDiagnostics.Count - 25) more.</span>
+                            }
+                        }
                     </div>
                 }
 
-                <div class="staged-review-dialog-layout">
-                    <aside class="staged-review-queue">
-                        <div class="staged-review-queue-header">
-                            <strong>Pending</strong>
-                            <span>@pendingItems.Count item(s)</span>
-                        </div>
-
-                        @if (pendingItems.Count == 0)
-                        {
-                            <div class="staged-review-empty">No pending staged edits.</div>
-                        }
-                        else
-                        {
-                            <div class="staged-review-queue-list">
-                                @foreach (ReviewQueueItem item in pendingItems)
-                                {
-                                    <button class="staged-review-queue-item @(selectedRecordId == item.StagedRecordId ? "active" : string.Empty)"
-                                            type="button"
-                                            @onclick="@(() => SelectRecord(item.StagedRecordId))">
-                                        <strong>@item.RelativePath</strong>
-                                        <span>@item.CreatedAtUtc</span>
-                                        <small>Launch: @NormalizeLabel(item.LaunchStatus) | Validation: @NormalizeLabel(item.PreMergeValidationStatus)</small>
-                                    </button>
-                                }
-                            </div>
-                        }
-                    </aside>
-
+                <div class="staged-review-dialog-layout single">
                     <section class="staged-review-detail">
                         @if (selectedModel is null)
                         {

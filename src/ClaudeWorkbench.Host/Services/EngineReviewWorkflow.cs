@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AIMonitor.McpServer;
 using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Console;
@@ -12,6 +13,7 @@ namespace ClaudeWorkbench.Host.Services;
 public sealed class EngineReviewWorkflow : IReviewWorkflow
 {
     private readonly WorkspaceManager workspace;
+    private readonly ConcurrentDictionary<string, string[]> diagnosticsCache = new();
 
     public EngineReviewWorkflow(WorkspaceManager workspace)
     {
@@ -128,6 +130,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             workspace.EditService.PrepareReviewFileForLaunch(record.StagedRecordId);
             PreMergeValidationResult validation = new PreMergeValidationService().Validate(workspace.Settings, record);
             workspace.EditService.RecordPreMergeValidation(record.StagedRecordId, validation, forceApproved: false);
+            diagnosticsCache[record.StagedRecordId] = validation.Diagnostics;
         }
 
         StagedEditRecord current = workspace.EditService.GetStagedRecord(record.StagedRecordId);
@@ -135,6 +138,23 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         {
             workspace.EditService.RecordDiffLaunch(record.StagedRecordId, launched: true, "in-app merge review");
         }
+    }
+
+    private string[] DiagnosticsFor(StagedEditRecord record)
+    {
+        if (diagnosticsCache.TryGetValue(record.StagedRecordId, out string[]? cached))
+        {
+            return cached;
+        }
+
+        if (record.PreMergeValidationIsError)
+        {
+            PreMergeValidationResult validation = new PreMergeValidationService().Validate(workspace.Settings, record);
+            diagnosticsCache[record.StagedRecordId] = validation.Diagnostics;
+            return validation.Diagnostics;
+        }
+
+        return [];
     }
 
     private static bool IsPending(StagedEditRecord record)
@@ -156,7 +176,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         };
     }
 
-    private static ReviewRecordModel ToModel(StagedEditRecord record)
+    private ReviewRecordModel ToModel(StagedEditRecord record)
     {
         string proposedText = File.Exists(record.StagedFilePath)
             ? File.ReadAllText(record.StagedFilePath)
@@ -164,6 +184,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
 
         return new ReviewRecordModel
         {
+            PreMergeValidationDiagnostics = DiagnosticsFor(record),
             StagedRecordId = record.StagedRecordId,
             RelativePath = record.RelativePath,
             SessionId = record.SessionId,
