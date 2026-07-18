@@ -40,7 +40,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
             return stream.SnapshotEvents()
                 .Where(evt => evt.Type is "assistant_text" or "tool_call_started")
                 .Select(evt => evt.Type == "tool_call_started"
-                    ? new TranscriptEntry(TranscriptKind.ToolCall, evt.Tool ?? string.Empty)
+                    ? new TranscriptEntry(TranscriptKind.ToolCall, ApprovalFormatter.ShortLabel(evt.Tool ?? string.Empty, evt.Input))
                     : new TranscriptEntry(TranscriptKind.Assistant, evt.Text ?? string.Empty))
                 .ToArray();
         }
@@ -84,7 +84,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         string detail = evt.Type switch
         {
             "assistant_text" => Truncate(evt.Text),
-            "tool_call_started" => evt.Tool ?? string.Empty,
+            "tool_call_started" => ApprovalFormatter.ShortLabel(evt.Tool ?? string.Empty, evt.Input),
             "tool_call_finished" => evt.CallId ?? string.Empty,
             "gate_request" => $"{evt.Tool} {evt.FilePath}".Trim(),
             "gate_resolved" => $"{evt.GateId} -> {evt.Decision}",

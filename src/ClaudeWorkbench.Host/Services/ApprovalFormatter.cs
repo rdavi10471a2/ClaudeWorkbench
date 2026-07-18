@@ -21,6 +21,77 @@ public static class ApprovalFormatter
         "path", "sourceFilePath", "filePath", "file", "targetPath",
     };
 
+    private static readonly string[] SearchFieldOrder = ["pattern", "query", "q"];
+    private static readonly string[] PathFieldOrder = ["file_path", "path", "sourceFilePath", "filePath", "file", "targetPath"];
+    private static readonly string[] SymbolFieldOrder = ["afterSymbol", "name", "symbol", "containingType"];
+
+    // Compact one-line label for a tool call in the transcript/activity feed:
+    // the tool name plus its most informative argument (search term, file name,
+    // or symbol). Falls back to just the tool name.
+    public static string ShortLabel(string tool, System.Text.Json.JsonElement? input)
+    {
+        string? detail = PrimaryDetail(input);
+        return string.IsNullOrEmpty(detail) ? tool : $"{tool}: {detail}";
+    }
+
+    private static string? PrimaryDetail(System.Text.Json.JsonElement? input)
+    {
+        if (input is not System.Text.Json.JsonElement element
+            || element.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (string key in SearchFieldOrder)
+        {
+            if (TryGetNonEmptyString(element, key, out string term))
+            {
+                return Shorten(term);
+            }
+        }
+
+        foreach (string key in PathFieldOrder)
+        {
+            if (TryGetNonEmptyString(element, key, out string filePath))
+            {
+                return Path.GetFileName(filePath.TrimEnd('/', '\\'));
+            }
+        }
+
+        foreach (string key in SymbolFieldOrder)
+        {
+            if (TryGetNonEmptyString(element, key, out string symbol))
+            {
+                return Shorten(symbol);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryGetNonEmptyString(System.Text.Json.JsonElement element, string name, out string value)
+    {
+        value = string.Empty;
+        if (element.TryGetProperty(name, out System.Text.Json.JsonElement property)
+            && property.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            string? text = property.GetString();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                value = text;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string Shorten(string value)
+    {
+        string collapsed = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return collapsed.Length > 48 ? collapsed[..45] + "…" : collapsed;
+    }
+
     public static (string Title, IReadOnlyList<ApprovalDetail> Details, string? PrettyJson) Describe(
         string tool,
         string? target,
