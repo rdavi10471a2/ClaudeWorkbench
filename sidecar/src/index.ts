@@ -25,15 +25,23 @@ const HOST_BASE = WORKBENCH_MCP_URL.replace(/\/mcp\/?$/, "");
 // Read/Grep/Glob allowed, writes disallowed). Auto-derived from the host so it
 // always tracks the configured watched solution; falls back to WORKBENCH_CWD.
 let workspaceCwd: string | undefined = process.env.WORKBENCH_CWD;
+// Operator-uploaded files live here (under the workspace runtime, NOT the watched
+// tree). Granted to the agent as an additional read-only directory so it can Read
+// attachments that sit outside cwd. Resolved from the host /health.
+let uploadsDir: string | undefined;
 
 async function resolveWorkspaceCwd(): Promise<void> {
   try {
     const response = await fetch(`${HOST_BASE}/health`);
     if (response.ok) {
-      const info = (await response.json()) as { watchedSolutionPath?: string };
+      const info = (await response.json()) as {
+        watchedSolutionPath?: string;
+        uploadsPath?: string;
+      };
       if (info.watchedSolutionPath) {
         workspaceCwd = dirname(info.watchedSolutionPath);
       }
+      uploadsDir = info.uploadsPath ?? undefined;
     }
   } catch {
     // keep the env/default cwd if the host is not reachable yet
@@ -289,6 +297,8 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
     canUseTool,
     permissionMode: "default",
     cwd: workspaceCwd,
+    // Operator uploads sit outside cwd; grant read there so the agent can Read them.
+    ...(uploadsDir ? { additionalDirectories: [uploadsDir] } : {}),
     disallowedTools: disallowed,
     strictMcpConfig: policy.strictMcpConfig,
     // SDK isolation mode: load NO filesystem settings (no personal ~/.claude leak,

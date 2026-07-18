@@ -59,6 +59,7 @@ internal static class Program
         builder.Services.AddSingleton<DirectoryBrowserService>();
         builder.Services.AddSingleton<RuntimeProvisioner>();
         builder.Services.AddSingleton<WorkspaceCoordinator>();
+        builder.Services.AddScoped<UploadService>();
         builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
@@ -89,7 +90,10 @@ internal static class Program
             status = "ok",
             repositoryRoot = workspace.RepositoryRoot,
             hasWorkspace = workspace.HasWorkspace,
-            watchedSolutionPath = workspace.WatchedSolutionPath
+            watchedSolutionPath = workspace.WatchedSolutionPath,
+            uploadsPath = workspace.HasWorkspace
+                ? Path.Combine(MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings), "uploads")
+                : null
         }));
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.Run();

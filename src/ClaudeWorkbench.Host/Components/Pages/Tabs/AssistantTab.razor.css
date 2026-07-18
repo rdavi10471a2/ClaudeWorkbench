@@ -63,6 +63,99 @@
     outline: none;
 }
 
+.composer-attach {
+    display: grid;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.attach-drop {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px dashed #b9c8d8;
+    border-radius: 10px;
+    background: #f7fafd;
+    color: #526a82;
+    font-size: .82rem;
+    cursor: pointer;
+    transition: border-color .12s ease, background .12s ease;
+}
+
+.attach-drop:hover {
+    border-color: #5b82f1;
+    background: #f0f5ff;
+}
+
+.attach-drop.busy {
+    opacity: .7;
+    cursor: progress;
+}
+
+.attach-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.attach-error {
+    color: #c0392b;
+    font-size: .76rem;
+}
+
+.attach-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 3px 6px 3px 8px;
+    border: 1px solid #d3e0ec;
+    border-radius: 999px;
+    background: #eef4fb;
+    color: #2b4a68;
+    font-size: .76rem;
+}
+
+.attach-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.attach-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: #6c8199;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.attach-chip-x:hover {
+    background: #d7e3ef;
+    color: #1f3a56;
+}
+
 .chat-composer-actions {
     display: flex;
     align-items: center;

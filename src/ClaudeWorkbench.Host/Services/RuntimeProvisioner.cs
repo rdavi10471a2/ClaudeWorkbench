@@ -17,6 +17,7 @@ public sealed class RuntimeProvisioner
         "logs",
         "planning",
         Path.Combine("planning", "task-memory"),
+        "uploads",
     ];
 
     public void EnsureRuntime(MonitorSettings settings)

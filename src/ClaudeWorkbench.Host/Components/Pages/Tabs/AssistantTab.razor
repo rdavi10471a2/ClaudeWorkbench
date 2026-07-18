@@ -16,6 +16,33 @@
                       @bind="draft"
                       @bind:event="oninput"
                       placeholder="Inspect the current workspace..."></textarea>
+            <div class="composer-attach">
+                <label class="attach-drop @(uploading ? "busy" : null)">
+                    <InputFile class="attach-input" OnChange="OnFilesSelectedAsync" multiple disabled="@uploading" />
+                    <RadzenIcon Icon="attach_file" />
+                    <span>@(uploading ? "Uploading..." : "Attach files — click or drop")</span>
+                </label>
+                @if (uploadError is not null)
+                {
+                    <div class="attach-error">@uploadError</div>
+                }
+                @if (attachments.Count > 0)
+                {
+                    <div class="attach-chips">
+                        @foreach (PendingAttachment attachment in attachments)
+                        {
+                            <span class="attach-chip" title="@attachment.Path">
+                                <RadzenIcon Icon="description" />
+                                <span class="attach-chip-name">@attachment.Name</span>
+                                <button type="button"
+                                        class="attach-chip-x"
+                                        @onclick="() => RemoveAttachment(attachment)"
+                                        aria-label="Remove attachment">&times;</button>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
             <div class="chat-composer-actions">
                 <RadzenButton Icon="@(autoApprove ? "task_alt" : "radio_button_unchecked")"
                               Text="Auto-approve"
@@ -38,7 +65,7 @@
                                   Class="chat-send-button"
                                   ButtonStyle="ButtonStyle.Primary"
                                   Click="@SubmitAsync"
-                                  Disabled="@(string.IsNullOrWhiteSpace(draft))" />
+                                  Disabled="@(string.IsNullOrWhiteSpace(draft) && attachments.Count == 0)" />
                 }
             </div>
         </div>

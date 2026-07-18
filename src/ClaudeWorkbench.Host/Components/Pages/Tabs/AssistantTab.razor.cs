@@ -2,6 +2,7 @@ using System.Text;
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Tabs;
@@ -13,6 +14,9 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
 
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
+
+    [Inject]
+    private UploadService Uploads { get; set; } = default!;
 
     private ElementReference assistantLayout;
     private ElementReference chatComposer;
@@ -26,6 +30,11 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private bool usageOpen;
     private bool wasWorking;
     private UsageSnapshot? usage;
+    private readonly List<PendingAttachment> attachments = new();
+    private bool uploading;
+    private string? uploadError;
+
+    private sealed record PendingAttachment(string Name, string Path);
 
     private bool Working => Session.Status.Working;
 
@@ -108,16 +117,74 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         return new MarkupString(MarkdownRenderer.ToHtml(text));
     }
 
+    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs args)
+    {
+        uploadError = null;
+        uploading = true;
+        StateHasChanged();
+        try
+        {
+            foreach (IBrowserFile file in args.GetMultipleFiles(maximumFileCount: 20))
+            {
+                using (Stream stream = file.OpenReadStream(maxAllowedSize: 50L * 1024 * 1024))
+                {
+                    string saved = await Uploads.SaveAsync(file.Name, stream, CancellationToken.None);
+                    attachments.Add(new PendingAttachment(file.Name, saved));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            uploadError = ex.Message;
+        }
+        finally
+        {
+            uploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RemoveAttachment(PendingAttachment attachment)
+    {
+        attachments.Remove(attachment);
+    }
+
     private async Task SubmitAsync()
     {
-        if (Working || string.IsNullOrWhiteSpace(draft))
+        if (Working || (string.IsNullOrWhiteSpace(draft) && attachments.Count == 0))
         {
             return;
         }
 
-        string prompt = draft;
+        string prompt = ComposePrompt(draft, attachments);
         draft = string.Empty;
+        attachments.Clear();
+        uploadError = null;
         await Session.SendAsync(prompt, autoApprove);
+    }
+
+    private static string ComposePrompt(string draft, IReadOnlyList<PendingAttachment> attachments)
+    {
+        if (attachments.Count == 0)
+        {
+            return draft;
+        }
+
+        StringBuilder builder = new();
+        if (!string.IsNullOrWhiteSpace(draft))
+        {
+            builder.Append(draft).Append("\n\n");
+        }
+
+        builder.Append("[Operator attached ").Append(attachments.Count)
+            .Append(attachments.Count == 1 ? " file" : " files")
+            .Append(" — read each with the Read tool:]\n");
+        foreach (PendingAttachment attachment in attachments)
+        {
+            builder.Append("- ").Append(attachment.Path).Append('\n');
+        }
+
+        return builder.ToString();
     }
 
     private async Task StopAsync()
