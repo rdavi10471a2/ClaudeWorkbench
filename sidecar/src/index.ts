@@ -6,7 +6,9 @@ import {
   type CanUseTool,
   type Options,
   type PermissionResult,
+  type Query,
   type SDKMessage,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { EventBus } from "./bus.js";
 import { OperatorGate, isGatedTool, baseName } from "./gate.js";
@@ -119,8 +121,63 @@ let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOO
 // When on, claude-workbench mutations auto-allow instead of pausing at the operator
 // gate. Watched source is still only written by the operator's merge-review Accept.
 let activeAutoApprove = false;
-// AbortController for the in-flight turn, so /stop can interrupt it.
-let activeAbort: AbortController | null = null;
+// The long-lived streaming query for the current thread + its input stream.
+let activeQuery: Query | null = null;
+let activeInput: InputStream | null = null;
+
+// Async-iterable input backed by a queue we push operator turns into. Ending it
+// completes the query (New Thread). This is what makes it streaming-input mode,
+// which is the only mode that exposes the Query control handle (interrupt /
+// getContextUsage / getUsage).
+class InputStream {
+  private readonly queue: SDKUserMessage[] = [];
+  private waiter: ((r: IteratorResult<SDKUserMessage>) => void) | null = null;
+  private ended = false;
+
+  push(text: string): void {
+    const msg = {
+      type: "user",
+      message: { role: "user", content: text },
+      parent_tool_use_id: null,
+    } as unknown as SDKUserMessage;
+    if (this.waiter) {
+      const w = this.waiter;
+      this.waiter = null;
+      w({ value: msg, done: false });
+    } else {
+      this.queue.push(msg);
+    }
+  }
+
+  end(): void {
+    this.ended = true;
+    if (this.waiter) {
+      const w = this.waiter;
+      this.waiter = null;
+      w({ value: undefined as unknown as SDKUserMessage, done: true });
+    }
+  }
+
+  async *stream(): AsyncGenerator<SDKUserMessage> {
+    while (true) {
+      const next = this.queue.shift();
+      if (next !== undefined) {
+        yield next;
+        continue;
+      }
+      if (this.ended) {
+        return;
+      }
+      const r = await new Promise<IteratorResult<SDKUserMessage>>((res) => {
+        this.waiter = res;
+      });
+      if (r.done) {
+        return;
+      }
+      yield r.value;
+    }
+  }
+}
 
 const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   const turnId = activeTurn ?? "unknown";
@@ -201,93 +258,93 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   return result;
 };
 
-async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Promise<void> {
-  // Re-resolve CWD each turn so it tracks runtime workspace switches, not just startup.
+// Lazily create the long-lived streaming query for the current thread. Options are
+// set ONCE here (per session): cwd, tool surface, resume. A workspace switch or a
+// tool-policy change is applied by starting a new thread. Only the message content
+// and the review-outcome prepend are per-turn (see submitTurn).
+async function ensureSession(policy: ToolPolicy): Promise<void> {
+  if (activeQuery) {
+    return;
+  }
   await resolveWorkspaceCwd();
 
-  // Show the operator's own submission in the transcript (before any prompt prefixing).
-  bus.emit({ type: "user_prompt", turnId, text: prompt });
-
-  // Fold in any review outcomes from accepts since the last turn.
-  if (pendingReviewOutcome) {
-    prompt = `Context — outcome of your previously accepted edit(s):\n${pendingReviewOutcome}\n\n---\n\n${prompt}`;
-    pendingReviewOutcome = "";
-  }
-
-  // Compute this turn's tool surface from the operator's policy.
   const enabled = new Set(policy.enabledTools);
   activeAllowedNative = new Set<string>([
     ...ALWAYS_ALLOWED_NATIVE,
     ...(policy.allowNativeReads ? READ_TOOLS : []),
     ...policy.enabledTools,
   ]);
-  // Hard-remove the writers/shells unless the operator opted them in; also remove
-  // the read tools when native reads are off (force MCP-only access).
   const disallowed = BLOCKABLE_TOOLS.filter((tool) => !enabled.has(tool));
   if (!policy.allowNativeReads) {
     disallowed.push(...READ_TOOLS);
   }
 
-  activeAutoApprove = policy.autoApprove;
-  const abort = new AbortController();
-  activeAbort = abort;
+  const input = new InputStream();
+  activeInput = input;
 
   const options: Options = {
     mcpServers: {
       [MCP_SERVER_NAME]: { type: "http", url: WORKBENCH_MCP_URL },
     },
     canUseTool,
-    abortController: abort,
     permissionMode: "default",
     cwd: workspaceCwd,
     disallowedTools: disallowed,
     strictMcpConfig: policy.strictMcpConfig,
-    // SDK isolation mode: load NO filesystem settings. Without this the SDK
-    // defaults to user+project+local sources, which (a) leaks the operator's
-    // personal ~/.claude/settings.json allow-rules into the governed agent,
-    // potentially pre-authorizing tools we mean to gate, and (b) resolves
-    // project/local settings from cwd = the watched solution, reading/writing
-    // .claude/* inside a read-only tree. Governance here is purely programmatic
-    // (canUseTool + disallowedTools, recomputed each turn from agent-settings.json),
-    // so no file config should apply. [] also disables CLAUDE.md loading, which
-    // matches the "no turn-start policy / no monitor CLAUDE.md injection" rule.
+    // SDK isolation mode: load NO filesystem settings (no personal ~/.claude leak,
+    // no reads/writes of .claude/* in the watched tree, no CLAUDE.md injection).
     settingSources: [],
-    // Continuity: resume the current thread's session so the agent remembers prior
-    // turns. Cleared by /new-thread to start a fresh conversation.
+    // Resume the thread's session (restore after a process restart). Within a live
+    // process the session persists in the query handle itself.
     ...(currentSessionId ? { resume: currentSessionId } : {}),
-    // No systemPrompt: governance is the gate + on-demand skills, not turn-start
-    // policy prose. Do not inject a monitor-style CLAUDE.md here.
   };
 
-  bus.emit({ type: "turn_started", turnId });
-  try {
-    for await (const message of query({ prompt, options }) as AsyncIterable<SDKMessage>) {
-      handleMessage(message, turnId);
+  const q = query({ prompt: input.stream(), options }) as unknown as Query;
+  activeQuery = q;
+
+  // Background read loop: drain the query's output for the life of the thread.
+  void (async () => {
+    try {
+      for await (const message of q as AsyncIterable<SDKMessage>) {
+        handleMessage(message);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (!/abort|interrupt/i.test(detail)) {
+        bus.emit({ type: "error", message: detail });
+      }
+    } finally {
+      activeQuery = null;
+      activeInput = null;
+      activeTurn = null;
     }
-  } catch (error) {
-    if (abort.signal.aborted) {
-      // Operator hit Stop — a clean interruption, not an error.
-      bus.emit({ type: "turn_finished", turnId, stopReason: "interrupted" });
-    } else {
-      bus.emit({
-        type: "error",
-        turnId,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  } finally {
-    activeTurn = null;
-    activeAbort = null;
-    activeAutoApprove = false;
-  }
+  })();
 }
 
-function handleMessage(message: SDKMessage, turnId: string): void {
-  // Every SDK message carries the session id; capture it so the next turn resumes.
+// Push one operator turn into the live session's input stream.
+async function submitTurn(prompt: string, turnId: string, policy: ToolPolicy): Promise<void> {
+  await ensureSession(policy);
+  activeAutoApprove = policy.autoApprove;
+  activeTurn = turnId;
+  bus.emit({ type: "turn_started", turnId });
+  bus.emit({ type: "user_prompt", turnId, text: prompt });
+
+  let text = prompt;
+  if (pendingReviewOutcome) {
+    text = `Context — outcome of your previously accepted edit(s):\n${pendingReviewOutcome}\n\n---\n\n${prompt}`;
+    pendingReviewOutcome = "";
+  }
+  activeInput?.push(text);
+}
+
+function handleMessage(message: SDKMessage): void {
+  // Every SDK message carries the session id; capture it so the thread can resume.
   const sessionId = (message as { session_id?: string }).session_id;
   if (typeof sessionId === "string" && sessionId.length > 0) {
     currentSessionId = sessionId;
   }
+
+  const turnId = activeTurn ?? "";
 
   switch (message.type) {
     case "assistant": {
@@ -349,6 +406,7 @@ function handleMessage(message: SDKMessage, turnId: string): void {
         turnId,
         stopReason: message.subtype,
       });
+      activeTurn = null;
       break;
     }
     default:
@@ -393,13 +451,13 @@ app.post("/prompt", (req, res) => {
   };
   const turnId = randomUUID();
   activeTurn = turnId;
-  void runTurn(prompt, turnId, policy);
+  void submitTurn(prompt, turnId, policy);
   res.status(202).json({ turnId });
 });
 
 app.post("/stop", (_req, res) => {
-  if (activeAbort) {
-    activeAbort.abort();
+  if (activeQuery && activeTurn) {
+    void activeQuery.interrupt();
     res.json({ stopped: true });
     return;
   }
@@ -457,6 +515,9 @@ app.post("/new-thread", (_req, res) => {
     res.status(409).json({ error: "Cannot start a new thread while a turn is active." });
     return;
   }
+  activeInput?.end();
+  activeQuery = null;
+  activeInput = null;
   currentSessionId = null;
   pendingReviewOutcome = "";
   elicitations.clear();
