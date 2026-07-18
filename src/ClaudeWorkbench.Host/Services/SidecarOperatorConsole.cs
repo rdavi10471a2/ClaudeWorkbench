@@ -102,7 +102,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
     private static string FormatTime(long? ts)
     {
         return ts is long milliseconds
-            ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).ToLocalTime().ToString("HH:mm")
+            ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
             : string.Empty;
     }
 
