@@ -70,6 +70,14 @@ public partial class Home : IDisposable
             return;
         }
 
+        // Wait until the agent's turn has finished before opening the review, so
+        // the whole edit session is staged and the dialog can advance through every
+        // file without closing/reopening as each candidate lands mid-turn.
+        if (Session.Status.Working)
+        {
+            return;
+        }
+
         IReadOnlyList<ReviewQueueItem> pending;
         try
         {
