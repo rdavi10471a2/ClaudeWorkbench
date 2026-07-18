@@ -68,54 +68,36 @@ else if (elicitation is not null)
             </div>
             <div class="agent-modal-body action-mode">
                 <section class="agent-modal-main">
-                    <div class="agent-modal-section">
-                        <span class="agent-modal-label">Question</span>
-                        <pre class="agent-modal-rich-box agent-modal-question-box">@elicitation.Question</pre>
-                    </div>
-                    <div class="agent-modal-section">
-                        <span class="agent-modal-label">Answer</span>
-                        <div class="agent-modal-form-grid">
-                            @foreach (ElicitationField field in elicitation.Fields)
+                    @foreach (ElicitationQuestion question in elicitation.Questions)
+                    {
+                        <div class="agent-modal-question">
+                            <span class="agent-modal-field-label">@question.Header</span>
+                            <div class="agent-modal-question-title">@question.Question</div>
+                            @if (question.MultiSelect)
                             {
-                                <label class="agent-modal-form-field">
-                                    <span class="agent-modal-field-label">@field.Label</span>
-                                    @if (!string.IsNullOrWhiteSpace(field.Description))
-                                    {
-                                        <small>@field.Description</small>
-                                    }
-                                    @switch (field.Kind)
-                                    {
-                                        case ElicitationFieldKind.Boolean:
-                                            <div class="agent-modal-boolean-choice" role="group">
-                                                <button type="button"
-                                                        class="agent-modal-choice-button @(IsTrue(field.Name) ? "selected" : string.Empty)"
-                                                        @onclick="@(() => Set(field.Name, "true"))">Yes</button>
-                                                <button type="button"
-                                                        class="agent-modal-choice-button @(!IsTrue(field.Name) ? "selected" : string.Empty)"
-                                                        @onclick="@(() => Set(field.Name, "false"))">No</button>
-                                            </div>
-                                            break;
-                                        case ElicitationFieldKind.Enum:
-                                            <select value="@Get(field.Name)" @onchange="@(args => Set(field.Name, args.Value?.ToString()))">
-                                                @foreach (ElicitationFieldOption option in field.Options)
-                                                {
-                                                    <option value="@option.Value">@option.Label</option>
-                                                }
-                                            </select>
-                                            break;
-                                        case ElicitationFieldKind.Number:
-                                            <input type="text" inputmode="decimal" value="@Get(field.Name)"
-                                                   @onchange="@(args => Set(field.Name, args.Value?.ToString()))" />
-                                            break;
-                                        default:
-                                            <textarea rows="3"
-                                                      @onchange="@(args => Set(field.Name, args.Value?.ToString()))">@Get(field.Name)</textarea>
-                                            break;
-                                    }
-                                </label>
+                                <small class="agent-modal-question-hint">Select all that apply.</small>
                             }
+                            <div class="agent-modal-choice-list">
+                                @foreach (ElicitationOption option in question.Options)
+                                {
+                                    <button type="button"
+                                            class="agent-modal-choice-card @(IsChosen(question.Question, option.Label) ? "selected" : string.Empty)"
+                                            @onclick="@(() => Choose(question.Question, option.Label, question.MultiSelect))">
+                                        <strong>@option.Label</strong>
+                                        @if (!string.IsNullOrWhiteSpace(option.Description))
+                                        {
+                                            <small>@option.Description</small>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                            <input class="agent-modal-other-input"
+                                   type="text"
+                                   placeholder="Other — type your own answer"
+                                   value="@GetOther(question.Question)"
+                                   @onchange="@(args => SetOther(question.Question, args.Value?.ToString()))" />
                         </div>
-                    </div>
+                    }
                 </section>
             </div>
             <div class="agent-modal-footer">

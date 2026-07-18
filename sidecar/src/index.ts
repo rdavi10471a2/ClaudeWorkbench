@@ -85,6 +85,8 @@ let pendingReviewOutcome = "";
 // Current thread's SDK session id, captured from the message stream and passed as
 // `resume` on the next turn so the agent remembers the conversation. Null = fresh thread.
 let currentSessionId: string | null = null;
+// AskUserQuestion elicitations awaiting operator answers (mirrors the gate registry).
+const elicitations = new Map<string, { resolve: (answers: Record<string, unknown>) => void; questions: unknown }>();
 
 // The human accept/reject gate. Read-only discovery tools auto-allow so the
 // operator is interrupted only for changes that can reach watched source or the
@@ -115,6 +117,26 @@ let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOO
 
 const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   const turnId = activeTurn ?? "unknown";
+
+  // AskUserQuestion is the agent asking the operator a clarifying question. Route it
+  // to the elicitation dialog and return the operator's answers as updatedInput
+  // (per the Agent SDK contract: { questions, answers }).
+  if (toolName === "AskUserQuestion") {
+    const elicitationId = randomUUID();
+    const questions = (input as { questions?: unknown }).questions ?? [];
+    const answers = await new Promise<Record<string, unknown>>((resolve) => {
+      elicitations.set(elicitationId, { resolve, questions });
+      bus.emit({ type: "elicitation_request", turnId, elicitationId, questions });
+      const onAbort = () => {
+        if (elicitations.delete(elicitationId)) {
+          resolve({});
+        }
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+    bus.emit({ type: "elicitation_resolved", turnId, elicitationId });
+    return { behavior: "allow", updatedInput: { ...(input as object), questions, answers } };
+  }
 
   // Non-workbench tools: allow the safe read-only set, deny everything else.
   if (!toolName.startsWith(WORKBENCH_TOOL_PREFIX)) {
@@ -363,6 +385,26 @@ app.post("/gates/:id", (req, res) => {
   res.status(ok ? 200 : 404).json({ resolved: ok });
 });
 
+app.get("/elicitations", (_req, res) => {
+  res.json(
+    [...elicitations.entries()].map(([elicitationId, entry]) => ({
+      elicitationId,
+      questions: entry.questions,
+    })),
+  );
+});
+
+app.post("/elicitations/:id", (req, res) => {
+  const entry = elicitations.get(req.params.id);
+  if (!entry) {
+    res.status(404).json({ resolved: false });
+    return;
+  }
+  elicitations.delete(req.params.id);
+  entry.resolve((req.body?.answers as Record<string, unknown>) ?? {});
+  res.json({ resolved: true });
+});
+
 app.post("/review-outcome", (req, res) => {
   const summary = typeof req.body?.summary === "string" ? req.body.summary.trim() : "";
   if (summary.length > 0) {
@@ -382,6 +424,7 @@ app.post("/new-thread", (_req, res) => {
   }
   currentSessionId = null;
   pendingReviewOutcome = "";
+  elicitations.clear();
   bus.clear();
   bus.emit({ type: "thread_reset", turnId: "thread" });
   res.json({ ok: true });

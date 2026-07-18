@@ -8,7 +8,10 @@ public partial class AgentActionModal : IDisposable
     [Inject]
     private IApprovalQueue Approvals { get; set; } = default!;
 
-    private readonly Dictionary<string, string> answers = new(StringComparer.Ordinal);
+    // Per-question state for the current elicitation: chosen option labels (a set so
+    // multi-select works) and the always-available "Other" free-text override.
+    private readonly Dictionary<string, HashSet<string>> selections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> otherText = new(StringComparer.Ordinal);
     private string? boundElicitationId;
 
     private ApprovalRequest? CurrentApproval => Approvals.PendingApprovals.FirstOrDefault();
@@ -28,11 +31,6 @@ public partial class AgentActionModal : IDisposable
 
     protected override void OnParametersSet()
     {
-        SyncElicitationDefaults();
-    }
-
-    private void SyncElicitationDefaults()
-    {
         Elicitation? elicitation = CurrentElicitation;
         if (elicitation is null)
         {
@@ -46,31 +44,56 @@ public partial class AgentActionModal : IDisposable
         }
 
         boundElicitationId = elicitation.Id;
-        answers.Clear();
-        foreach (ElicitationField field in elicitation.Fields)
+        selections.Clear();
+        otherText.Clear();
+    }
+
+    private bool IsChosen(string question, string label)
+    {
+        return selections.TryGetValue(question, out HashSet<string>? chosen) && chosen.Contains(label);
+    }
+
+    private void Choose(string question, string label, bool multiSelect)
+    {
+        if (!selections.TryGetValue(question, out HashSet<string>? chosen))
         {
-            answers[field.Name] = field.Kind switch
-            {
-                ElicitationFieldKind.Boolean => "false",
-                ElicitationFieldKind.Enum => field.Options.FirstOrDefault()?.Value ?? string.Empty,
-                _ => string.Empty,
-            };
+            chosen = new HashSet<string>(StringComparer.Ordinal);
+            selections[question] = chosen;
         }
+
+        if (multiSelect)
+        {
+            if (!chosen.Remove(label))
+            {
+                chosen.Add(label);
+            }
+        }
+        else
+        {
+            chosen.Clear();
+            chosen.Add(label);
+        }
+
+        // Picking an option supersedes any half-typed "Other".
+        otherText.Remove(question);
     }
 
-    private string Get(string field)
+    private string GetOther(string question)
     {
-        return answers.TryGetValue(field, out string? value) ? value : string.Empty;
+        return otherText.TryGetValue(question, out string? value) ? value : string.Empty;
     }
 
-    private void Set(string field, string? value)
+    private void SetOther(string question, string? value)
     {
-        answers[field] = value ?? string.Empty;
-    }
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            otherText.Remove(question);
+            return;
+        }
 
-    private bool IsTrue(string field)
-    {
-        return Get(field).Equals("true", StringComparison.OrdinalIgnoreCase);
+        otherText[question] = value;
+        // Free text supersedes any chosen options.
+        selections.Remove(question);
     }
 
     private async Task ResolveApprovalAsync(bool approve)
@@ -92,7 +115,21 @@ public partial class AgentActionModal : IDisposable
             return;
         }
 
-        await Approvals.AnswerElicitationAsync(elicitation.Id, new Dictionary<string, string>(answers, StringComparer.Ordinal));
+        Dictionary<string, string> answers = new(StringComparer.Ordinal);
+        foreach (ElicitationQuestion question in elicitation.Questions)
+        {
+            string other = GetOther(question.Question);
+            if (!string.IsNullOrWhiteSpace(other))
+            {
+                answers[question.Question] = other.Trim();
+            }
+            else if (selections.TryGetValue(question.Question, out HashSet<string>? chosen) && chosen.Count > 0)
+            {
+                answers[question.Question] = string.Join(", ", chosen);
+            }
+        }
+
+        await Approvals.AnswerElicitationAsync(elicitation.Id, answers);
     }
 
     public void Dispose()

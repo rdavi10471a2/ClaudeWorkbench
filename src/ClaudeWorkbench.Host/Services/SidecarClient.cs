@@ -33,6 +33,14 @@ public sealed class SidecarClient
         return response.IsSuccessStatusCode;
     }
 
+    // Answer the agent's AskUserQuestion: answers maps each question text to the
+    // operator's chosen label (or free text). Returns false if the elicitation is gone.
+    public async Task<bool> AnswerElicitationAsync(string elicitationId, IReadOnlyDictionary<string, string> answers, CancellationToken cancellationToken = default)
+    {
+        HttpResponseMessage response = await http.PostAsJsonAsync($"/elicitations/{elicitationId}", new { answers }, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
     // Start a fresh conversation thread: the sidecar drops the resumed session id
     // and clears its event history so the agent no longer remembers prior turns.
     public async Task<bool> NewThreadAsync(CancellationToken cancellationToken = default)

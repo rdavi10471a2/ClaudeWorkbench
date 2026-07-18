@@ -1,26 +1,16 @@
 namespace ClaudeWorkbench.Host.Console;
 
-// A structured question the agent needs answered before it can continue. Kept
-// generic (agent-agnostic); the adapter decides how a given backend raises it.
-public enum ElicitationFieldKind
-{
-    Text,
-    Boolean,
-    Number,
-    Enum,
-}
+// The agent's AskUserQuestion: 1-4 clarifying questions, each with 2-4 options.
+// The operator picks an option (or types their own via the always-present "Other"
+// free-text). Shapes mirror the Agent SDK's AskUserQuestion input/answers contract.
+public sealed record ElicitationOption(string Label, string? Description);
 
-public sealed record ElicitationFieldOption(string Value, string Label);
-
-public sealed record ElicitationField(
-    string Name,
-    string Label,
-    string? Description,
-    ElicitationFieldKind Kind,
-    bool Required,
-    IReadOnlyList<ElicitationFieldOption> Options);
+public sealed record ElicitationQuestion(
+    string Question,
+    string Header,
+    IReadOnlyList<ElicitationOption> Options,
+    bool MultiSelect);
 
 public sealed record Elicitation(
     string Id,
-    string Question,
-    IReadOnlyList<ElicitationField> Fields);
+    IReadOnlyList<ElicitationQuestion> Questions);

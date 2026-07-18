@@ -14,6 +14,7 @@ public sealed class SidecarEventStream : BackgroundService
     private readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     private readonly LinkedList<SidecarEvent> events = new();
     private readonly Dictionary<string, GateInfo> gates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, JsonElement> elicitations = new(StringComparer.Ordinal);
     private readonly object sync = new();
     private const int MaxEvents = 500;
 
@@ -42,6 +43,28 @@ public sealed class SidecarEventStream : BackgroundService
         lock (sync)
         {
             return gates.Values.ToArray();
+        }
+    }
+
+    public IReadOnlyList<ElicitationInfo> PendingElicitations()
+    {
+        lock (sync)
+        {
+            return elicitations.Select(pair => new ElicitationInfo(pair.Key, pair.Value)).ToArray();
+        }
+    }
+
+    public void RemoveElicitation(string elicitationId)
+    {
+        bool removed;
+        lock (sync)
+        {
+            removed = elicitations.Remove(elicitationId);
+        }
+
+        if (removed)
+        {
+            Changed?.Invoke();
         }
     }
 
@@ -129,6 +152,7 @@ public sealed class SidecarEventStream : BackgroundService
         response.EnsureSuccessStatusCode();
         SetConnected(true);
         await SeedGatesAsync(cancellationToken);
+        await SeedElicitationsAsync(cancellationToken);
 
         using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using StreamReader reader = new(stream);
@@ -162,6 +186,41 @@ public sealed class SidecarEventStream : BackgroundService
         SetConnected(false);
     }
 
+    private async Task SeedElicitationsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            HttpClient client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+            JsonElement[]? live = await client.GetFromJsonAsync<JsonElement[]>(
+                options.BaseUrl + "/elicitations",
+                json,
+                cancellationToken);
+            lock (sync)
+            {
+                elicitations.Clear();
+                if (live is not null)
+                {
+                    foreach (JsonElement entry in live)
+                    {
+                        if (entry.TryGetProperty("elicitationId", out JsonElement id)
+                            && id.ValueKind == JsonValueKind.String
+                            && entry.TryGetProperty("questions", out JsonElement questions))
+                        {
+                            elicitations[id.GetString()!] = questions.Clone();
+                        }
+                    }
+                }
+            }
+
+            Changed?.Invoke();
+        }
+        catch (Exception)
+        {
+            // best-effort; live elicitation_request events still populate the set.
+        }
+    }
+
     private void Apply(SidecarEvent evt)
     {
         lock (sync)
@@ -177,7 +236,14 @@ public sealed class SidecarEventStream : BackgroundService
                 case "thread_reset":
                     events.Clear();
                     gates.Clear();
+                    elicitations.Clear();
                     ActiveTurn = null;
+                    break;
+                case "elicitation_request" when evt.ElicitationId is not null && evt.Questions is JsonElement questions:
+                    elicitations[evt.ElicitationId] = questions;
+                    break;
+                case "elicitation_resolved" when evt.ElicitationId is not null:
+                    elicitations.Remove(evt.ElicitationId);
                     break;
                 case "turn_started":
                     ActiveTurn = evt.TurnId;

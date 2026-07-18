@@ -21,9 +21,13 @@ public sealed record SidecarEvent
     public string? FilePath { get; init; }
     public JsonElement? Input { get; init; }
     public long? Ts { get; init; }
+    public string? ElicitationId { get; init; }
+    public JsonElement? Questions { get; init; }
 }
 
 public sealed record GateInfo(string GateId, string Tool, string? FilePath, JsonElement? Input);
+
+public sealed record ElicitationInfo(string Id, JsonElement Questions);
 
 public sealed class SidecarOptions
 {

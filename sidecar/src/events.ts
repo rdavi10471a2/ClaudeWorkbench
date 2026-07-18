@@ -44,6 +44,14 @@ export type SidecarEvent =
       reason?: string;
     }
   | {
+      // The agent called AskUserQuestion; awaiting the operator's answers.
+      type: "elicitation_request";
+      turnId: string;
+      elicitationId: string;
+      questions: unknown;
+    }
+  | { type: "elicitation_resolved"; turnId: string; elicitationId: string }
+  | {
       type: "usage";
       turnId: string;
       inputTokens?: number;
