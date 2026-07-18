@@ -12,12 +12,18 @@ public sealed partial class SidecarOperatorConsole
         get
         {
             return stream.PendingGates()
-                .Select(gate => new ApprovalRequest(
-                    gate.GateId,
-                    gate.Tool,
-                    gate.FilePath,
-                    gate.Input?.ToString(),
-                    null))
+                .Select(gate =>
+                {
+                    (string title, IReadOnlyList<ApprovalDetail> details, string? prettyJson) =
+                        ApprovalFormatter.Describe(gate.Tool, gate.FilePath, gate.Input?.ToString());
+                    return new ApprovalRequest(
+                        gate.GateId,
+                        gate.Tool,
+                        gate.FilePath,
+                        title,
+                        details,
+                        prettyJson);
+                })
                 .ToArray();
         }
     }

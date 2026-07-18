@@ -45,11 +45,43 @@
     text-transform: uppercase;
 }
 
+.agent-modal-tool-badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border: 1px solid #d7e1ea;
+    border-radius: 999px;
+    background: #eef4fb;
+    color: #3a5573;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: .74rem;
+    font-weight: 700;
+}
+
 .agent-modal-status {
     color: #1f5d38;
     font-size: .82rem;
     font-weight: 800;
     white-space: nowrap;
+}
+
+.agent-modal-raw {
+    border: 1px solid #e4ebf1;
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 6px 10px;
+}
+
+.agent-modal-raw > summary {
+    cursor: pointer;
+    color: #526a82;
+    font-size: .76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.agent-modal-raw[open] > summary {
+    margin-bottom: 8px;
 }
 
 .agent-modal-body {
