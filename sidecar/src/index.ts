@@ -79,6 +79,9 @@ function filePathOf(input: unknown): string | undefined {
 const bus = new EventBus();
 const gate = new OperatorGate();
 let activeTurn: string | null = null;
+// Merge-review outcomes (build + index results) posted by the host after an accept,
+// prepended to the agent's next prompt so it learns whether its edit compiled.
+let pendingReviewOutcome = "";
 
 // The human accept/reject gate. Read-only discovery tools auto-allow so the
 // operator is interrupted only for changes that can reach watched source or the
@@ -163,6 +166,12 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
 async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Promise<void> {
   // Re-resolve CWD each turn so it tracks runtime workspace switches, not just startup.
   await resolveWorkspaceCwd();
+
+  // Fold in any review outcomes from accepts since the last turn.
+  if (pendingReviewOutcome) {
+    prompt = `Context — outcome of your previously accepted edit(s):\n${pendingReviewOutcome}\n\n---\n\n${prompt}`;
+    pendingReviewOutcome = "";
+  }
 
   // Compute this turn's tool surface from the operator's policy.
   const enabled = new Set(policy.enabledTools);
@@ -337,6 +346,18 @@ app.post("/gates/:id", (req, res) => {
   }
   const ok = gate.resolve(req.params.id, decision, req.body?.reason);
   res.status(ok ? 200 : 404).json({ resolved: ok });
+});
+
+app.post("/review-outcome", (req, res) => {
+  const summary = typeof req.body?.summary === "string" ? req.body.summary.trim() : "";
+  if (summary.length > 0) {
+    pendingReviewOutcome = pendingReviewOutcome
+      ? `${pendingReviewOutcome}\n${summary}`
+      : summary;
+    // Surface it in the transcript for the operator too.
+    bus.emit({ type: "assistant_text", turnId: activeTurn ?? "review", text: `[merge review] ${summary}` });
+  }
+  res.json({ ok: true });
 });
 
 app.listen(SIDECAR_PORT, () => {

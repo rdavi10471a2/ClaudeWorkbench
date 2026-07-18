@@ -126,7 +126,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         // Records the decision; on the terminal file runs the build and rebuilds the
         // solution index for every accepted session file. Synchronous so the dialog's
         // busy overlay blocks until the index is current.
-        new StagedDecisionWorkflow().Record(
+        ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
             workspace.Settings,
             logger,
             workspace.EditService,
@@ -137,9 +137,37 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             deferIndexRefresh: !terminal,
             refreshPlan: refreshPlan);
 
-        return new ReviewActionResult(terminal
+        string message = terminal
             ? $"Accepted. {record.RelativePath} written; index rebuilt for the edit session."
-            : $"Accepted. {record.RelativePath} written; index rebuild deferred to the final file.");
+            : $"Accepted. {record.RelativePath} written; index rebuild deferred to the final file.";
+        return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, terminal));
+    }
+
+    // Concise compilation + index outcome echoed back to the agent. Only the
+    // terminal accept ran the build and index rebuild, so only it reports.
+    private static string? BuildOutcomeSummary(ReviewDecisionWithIndexRefreshResult result, bool terminal)
+    {
+        if (!terminal)
+        {
+            return null;
+        }
+
+        List<string> parts = new() { $"Accepted {result.RelativePath} ({result.Classification})." };
+        if (result.TerminalPreMergeValidation is PreMergeValidationResult build)
+        {
+            parts.Add(build.IsError
+                ? $"Build FAILED with {build.DiagnosticCount} error(s): {string.Join(" | ", build.Diagnostics.Take(5))}"
+                : "Build passed.");
+        }
+
+        if (result.IndexRefresh is PostAcceptIndexRefreshResult index)
+        {
+            parts.Add(index.IsError
+                ? $"Index refresh failed: {index.Message}"
+                : $"Index refreshed ({index.DocumentCount} document(s), {index.ProjectCount} project(s)).");
+        }
+
+        return string.Join(" ", parts);
     }
 
     public ReviewActionResult Reject(string stagedRecordId)

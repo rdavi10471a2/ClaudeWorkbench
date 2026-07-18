@@ -20,6 +20,9 @@ public partial class MergeReviewDialog : IAsyncDisposable
     [Inject]
     private DialogService DialogService { get; set; } = default!;
 
+    [Inject]
+    private Services.SidecarClient Sidecar { get; set; } = default!;
+
     [Parameter]
     public string? SessionId { get; set; }
 
@@ -109,6 +112,11 @@ public partial class MergeReviewDialog : IAsyncDisposable
             string recordId = selectedRecordId;
             ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation));
             errorMessage = result.Message;
+            if (!string.IsNullOrWhiteSpace(result.AgentSummary))
+            {
+                await Sidecar.PostReviewOutcomeAsync(result.AgentSummary);
+            }
+
             await LoadNextStateAsync();
         }
         catch (Exception ex)

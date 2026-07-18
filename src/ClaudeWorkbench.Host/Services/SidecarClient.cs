@@ -33,5 +33,12 @@ public sealed class SidecarClient
         return response.IsSuccessStatusCode;
     }
 
+    // Echo a merge-review outcome (build + index result) to the agent: the sidecar
+    // surfaces it in the transcript and prepends it to the agent's next prompt.
+    public async Task PostReviewOutcomeAsync(string summary, CancellationToken cancellationToken = default)
+    {
+        await http.PostAsJsonAsync("/review-outcome", new { summary }, cancellationToken);
+    }
+
     private sealed record PromptResponse(string TurnId);
 }
