@@ -1,18 +1,25 @@
-@if (CurrentApproval is not null)
+@{
+    // Snapshot once per render: these are recomputed properties over live gate
+    // state, so a gate resolving mid-render would otherwise flip them to null
+    // between the guard and the field access -> NRE that tears down the circuit.
+    ApprovalRequest? approval = CurrentApproval;
+    Elicitation? elicitation = approval is null ? CurrentElicitation : null;
+}
+@if (approval is not null)
 {
     <div class="agent-modal-overlay" role="dialog" aria-modal="true" aria-label="Agent action required">
         <section class="agent-modal-card">
             <div class="agent-modal-header">
                 <div>
                     <span class="agent-modal-eyebrow">Agent Action Required</span>
-                    <h3>@CurrentApproval.Title</h3>
-                    <code class="agent-modal-tool-badge">@CurrentApproval.Tool</code>
+                    <h3>@approval.Title</h3>
+                    <code class="agent-modal-tool-badge">@approval.Tool</code>
                 </div>
                 <div class="agent-modal-status">Waiting for you</div>
             </div>
             <div class="agent-modal-body action-mode">
                 <section class="agent-modal-main">
-                    @foreach (ApprovalDetail detail in CurrentApproval.Details)
+                    @foreach (ApprovalDetail detail in approval.Details)
                     {
                         <div class="agent-modal-section">
                             <span class="agent-modal-label">@detail.Label</span>
@@ -26,11 +33,11 @@
                             }
                         </div>
                     }
-                    @if (!string.IsNullOrWhiteSpace(CurrentApproval.InputJson))
+                    @if (!string.IsNullOrWhiteSpace(approval.InputJson))
                     {
                         <details class="agent-modal-raw">
                             <summary>Raw request</summary>
-                            <pre class="agent-modal-payload-box">@CurrentApproval.InputJson</pre>
+                            <pre class="agent-modal-payload-box">@approval.InputJson</pre>
                         </details>
                     }
                 </section>
@@ -48,7 +55,7 @@
         </section>
     </div>
 }
-else if (CurrentElicitation is not null)
+else if (elicitation is not null)
 {
     <div class="agent-modal-overlay" role="dialog" aria-modal="true" aria-label="Input requested">
         <section class="agent-modal-card">
@@ -63,12 +70,12 @@ else if (CurrentElicitation is not null)
                 <section class="agent-modal-main">
                     <div class="agent-modal-section">
                         <span class="agent-modal-label">Question</span>
-                        <pre class="agent-modal-rich-box agent-modal-question-box">@CurrentElicitation.Question</pre>
+                        <pre class="agent-modal-rich-box agent-modal-question-box">@elicitation.Question</pre>
                     </div>
                     <div class="agent-modal-section">
                         <span class="agent-modal-label">Answer</span>
                         <div class="agent-modal-form-grid">
-                            @foreach (ElicitationField field in CurrentElicitation.Fields)
+                            @foreach (ElicitationField field in elicitation.Fields)
                             {
                                 <label class="agent-modal-form-field">
                                     <span class="agent-modal-field-label">@field.Label</span>
