@@ -1,7 +1,10 @@
 using AIMonitor.McpServer;
+using ClaudeWorkbench.Host.Components.Dialogs;
 using ClaudeWorkbench.Host.Console;
+using ClaudeWorkbench.Host.Console.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using Radzen;
 
 namespace ClaudeWorkbench.Host.Components.Pages;
 
@@ -17,10 +20,17 @@ public partial class Home : IDisposable
     private WorkspaceManager Workspace { get; set; } = default!;
 
     [Inject]
+    private IReviewWorkflow Review { get; set; } = default!;
+
+    [Inject]
+    private DialogService Dialogs { get; set; } = default!;
+
+    [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
     private bool settingsOpen;
     private bool workspacePickerOpen;
+    private bool reviewDialogOpen;
     private IJSObjectReference? unloadModule;
 
     protected override void OnInitialized()
@@ -43,7 +53,64 @@ public partial class Home : IDisposable
 
     private void OnChanged()
     {
-        InvokeAsync(StateHasChanged);
+        InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            await MaybeOpenReviewAsync();
+        });
+    }
+
+    // When the agent stages one or more candidates, open the faithful session-flow
+    // merge review (resizable Radzen dialog) for that edit session. The guard keeps
+    // a single dialog open; it reopens for the next session on the following change.
+    private async Task MaybeOpenReviewAsync()
+    {
+        if (reviewDialogOpen)
+        {
+            return;
+        }
+
+        IReadOnlyList<ReviewQueueItem> pending;
+        try
+        {
+            pending = Review.ListPending();
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        reviewDialogOpen = true;
+        try
+        {
+            await Dialogs.OpenAsync<MergeReviewDialog>(
+                "Merge Review",
+                new Dictionary<string, object?>
+                {
+                    [nameof(MergeReviewDialog.SessionId)] = pending[0].SessionId,
+                    [nameof(MergeReviewDialog.AutoCloseWhenComplete)] = true,
+                },
+                new DialogOptions
+                {
+                    Width = "88vw",
+                    Height = "88vh",
+                    CloseDialogOnEsc = false,
+                    CloseDialogOnOverlayClick = false,
+                    Resizable = true,
+                    Draggable = true,
+                    ShowClose = false,
+                });
+        }
+        finally
+        {
+            reviewDialogOpen = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void CloseWorkspacePicker()

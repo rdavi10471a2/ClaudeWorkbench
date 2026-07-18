@@ -4,16 +4,27 @@ using DiffPlex;
 using DiffPlex.DiffBuilder;
 using DiffPlex.DiffBuilder.Model;
 using Microsoft.AspNetCore.Components;
+using Radzen;
 
 namespace ClaudeWorkbench.Host.Components.Dialogs;
 
-public partial class MergeReviewDialog : IDisposable
+// Faithful port of the Codex StagedReviewDialog: hosted in a resizable Radzen
+// dialog, session-flow (advances through each staged file in the edit session,
+// no queue panel), auto-closes when the session is fully resolved. Accept writes
+// the staged bytes to watched source via IReviewWorkflow; the agent never does.
+public partial class MergeReviewDialog : IAsyncDisposable
 {
     [Inject]
     private IReviewWorkflow Review { get; set; } = default!;
 
     [Inject]
-    private IApprovalQueue Approvals { get; set; } = default!;
+    private DialogService DialogService { get; set; } = default!;
+
+    [Parameter]
+    public string? SessionId { get; set; }
+
+    [Parameter]
+    public bool AutoCloseWhenComplete { get; set; } = true;
 
     private IReadOnlyList<ReviewQueueItem> pendingItems = [];
     private ReviewRecordModel? selectedModel;
@@ -21,15 +32,15 @@ public partial class MergeReviewDialog : IDisposable
     private string? selectedRecordId;
     private string? errorMessage;
     private bool actionBusy;
-    private bool dismissed;
-    private int lastPendingCount = -1;
+    private CancellationTokenSource? sessionMonitorCts;
+    private Task? sessionMonitorTask;
 
     private int LineCount => Math.Max(diffModel?.NewText.Lines.Count ?? 0, diffModel?.OldText.Lines.Count ?? 0);
-
-    // Never overlap the permission/elicitation dialog; give it precedence.
-    private bool GateBusy => Approvals.PendingApprovals.Count > 0 || Approvals.PendingElicitations.Count > 0;
-
-    private bool ShouldShow => pendingItems.Count > 0 && !dismissed && !GateBusy;
+    private bool UseSessionFlow => !string.IsNullOrWhiteSpace(SessionId);
+    private string DialogTitle => UseSessionFlow ? "Merge Review" : "Merge Review Queue";
+    private string DialogSubtitle => UseSessionFlow
+        ? "Review this edit session in order. It advances through each staged file; close any time to stop reviewing (unresolved files stay pending)."
+        : "Review staged candidates before they become source truth.";
 
     private bool CanAcceptNormally => selectedModel is not null
         && !selectedModel.IsDecided
@@ -40,30 +51,10 @@ public partial class MergeReviewDialog : IDisposable
         && selectedModel.PreMergeValidationIsError
         && !selectedModel.PreMergeValidationForceApproved;
 
-    protected override void OnInitialized()
+    protected override void OnParametersSet()
     {
-        Approvals.Changed += OnChanged;
         LoadReview(preserveSelection: false);
-    }
-
-    private void OnChanged()
-    {
-        InvokeAsync(() =>
-        {
-            LoadReview(preserveSelection: true);
-            // New staging activity re-opens a dialog the operator had closed.
-            if (pendingItems.Count != lastPendingCount)
-            {
-                if (pendingItems.Count > lastPendingCount)
-                {
-                    dismissed = false;
-                }
-
-                lastPendingCount = pendingItems.Count;
-            }
-
-            StateHasChanged();
-        });
+        EnsureSessionMonitor();
     }
 
     private void RefreshReview()
@@ -73,7 +64,7 @@ public partial class MergeReviewDialog : IDisposable
 
     private void CloseDialog()
     {
-        dismissed = true;
+        DialogService.Close();
     }
 
     private void SelectRecord(string stagedRecordId)
@@ -118,7 +109,7 @@ public partial class MergeReviewDialog : IDisposable
             string recordId = selectedRecordId;
             ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation));
             errorMessage = result.Message;
-            LoadReview(preserveSelection: false);
+            await LoadNextStateAsync();
         }
         catch (Exception ex)
         {
@@ -145,7 +136,7 @@ public partial class MergeReviewDialog : IDisposable
             string recordId = selectedRecordId;
             ReviewActionResult result = await Task.Run(() => Review.Reject(recordId));
             errorMessage = result.Message;
-            LoadReview(preserveSelection: false);
+            await LoadNextStateAsync();
         }
         catch (Exception ex)
         {
@@ -158,12 +149,87 @@ public partial class MergeReviewDialog : IDisposable
         }
     }
 
+    private async Task LoadNextStateAsync()
+    {
+        LoadReview(preserveSelection: false);
+        bool sessionComplete = UseSessionFlow && (selectedModel?.IsSessionComplete ?? false);
+        await InvokeAsync(StateHasChanged);
+        if (sessionComplete && AutoCloseWhenComplete)
+        {
+            DialogService.Close();
+        }
+    }
+
+    private void EnsureSessionMonitor()
+    {
+        if (!UseSessionFlow)
+        {
+            StopSessionMonitor();
+            return;
+        }
+
+        if (sessionMonitorTask is not null)
+        {
+            return;
+        }
+
+        sessionMonitorCts = new CancellationTokenSource();
+        sessionMonitorTask = MonitorSessionAsync(sessionMonitorCts.Token);
+    }
+
+    private void StopSessionMonitor()
+    {
+        CancellationTokenSource? cts = sessionMonitorCts;
+        sessionMonitorCts = null;
+        sessionMonitorTask = null;
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+
+    private async Task MonitorSessionAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using (PeriodicTimer timer = new(TimeSpan.FromSeconds(1)))
+            {
+                while (await timer.WaitForNextTickAsync(cancellationToken))
+                {
+                    await InvokeAsync(() =>
+                    {
+                        if (actionBusy)
+                        {
+                            return;
+                        }
+
+                        LoadReview(preserveSelection: true);
+                        StateHasChanged();
+                        if (UseSessionFlow && AutoCloseWhenComplete && (selectedModel?.IsSessionComplete ?? false))
+                        {
+                            DialogService.Close();
+                        }
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private void LoadReview(bool preserveSelection)
     {
         try
         {
             pendingItems = Review.ListPending();
             errorMessage = null;
+
+            if (UseSessionFlow)
+            {
+                selectedModel = Review.LoadNextForSession(SessionId!);
+                selectedRecordId = selectedModel.IsSessionComplete ? null : selectedModel.StagedRecordId;
+                BuildDiff();
+                return;
+            }
 
             string? recordIdToLoad = preserveSelection
                 ? pendingItems.FirstOrDefault(item => item.StagedRecordId == selectedRecordId)?.StagedRecordId
@@ -255,8 +321,9 @@ public partial class MergeReviewDialog : IDisposable
         };
     }
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
-        Approvals.Changed -= OnChanged;
+        StopSessionMonitor();
+        return ValueTask.CompletedTask;
     }
 }

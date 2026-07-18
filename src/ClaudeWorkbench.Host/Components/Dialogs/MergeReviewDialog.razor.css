@@ -1,31 +1,3 @@
-.merge-modal-overlay {
-    align-items: center;
-    background: rgba(15, 23, 42, 0.45);
-    display: flex;
-    inset: 0;
-    justify-content: center;
-    padding: 24px;
-    position: fixed;
-    z-index: 40;
-}
-
-.merge-modal-card {
-    background: #f4f7fb;
-    border: 1px solid #d7e1ea;
-    border-radius: 12px;
-    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
-    display: flex;
-    flex-direction: column;
-    height: min(88vh, 900px);
-    max-width: 96vw;
-    min-width: 640px;
-    min-height: 360px;
-    overflow: auto;
-    padding: 16px;
-    resize: both;
-    width: min(1200px, 96vw);
-}
-
 .staged-review-dialog {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
@@ -176,17 +148,6 @@
     padding: 10px 12px;
 }
 
-.staged-review-dialog-layout {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: 260px minmax(0, 1fr);
-    min-height: 0;
-}
-
-.staged-review-dialog-layout.single {
-    grid-template-columns: minmax(0, 1fr);
-}
-
 .staged-review-diagnostics {
     margin: 4px 0 0;
     padding-left: 18px;
@@ -200,6 +161,17 @@
 .staged-review-diagnostics li {
     margin: 2px 0;
     overflow-wrap: anywhere;
+}
+
+.staged-review-dialog-layout {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 260px minmax(0, 1fr);
+    min-height: 0;
+}
+
+.staged-review-dialog-layout.single-record {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .staged-review-queue,
@@ -271,6 +243,17 @@
 .staged-review-empty {
     color: #607893;
     padding: 16px;
+}
+
+.staged-review-complete {
+    align-items: center;
+    color: #24415f;
+    display: grid;
+    flex: 1 1 auto;
+    gap: 10px;
+    justify-items: center;
+    padding: 32px 20px;
+    text-align: center;
 }
 
 .staged-review-diff-shell {
@@ -395,11 +378,5 @@
 
     .staged-review-meta {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 720px) {
-    .staged-review-meta {
-        grid-template-columns: 1fr;
     }
 }

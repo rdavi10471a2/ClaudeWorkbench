@@ -1,134 +1,164 @@
 @using ClaudeWorkbench.Host.Console.Models
 @using DiffPlex.DiffBuilder.Model
 
-@if (ShouldShow)
-{
-    <div class="merge-modal-overlay" role="dialog" aria-modal="true" aria-label="Merge review">
-        <section class="merge-modal-card">
-            <div class="staged-review-dialog">
-                @if (actionBusy)
-                {
-                    <div class="staged-review-busy-overlay" role="status" aria-live="polite" aria-busy="true">
-                        <div class="staged-review-busy-card">
-                            <div class="staged-review-busy-spinner"></div>
-                            <strong>Applying review decision</strong>
-                            <span>Writing the accepted file into the watched solution and updating review state.</span>
-                        </div>
-                    </div>
-                }
-
-                <div class="staged-review-dialog-header">
-                    <div>
-                        <h3>Merge Review Queue</h3>
-                        <p>Review staged candidates before they become source truth. Accept writes the staged file into the watched solution; Reject stops the edit session.</p>
-                    </div>
-                    <div class="staged-review-dialog-actions">
-                        <button class="staged-review-secondary-action" type="button" @onclick="RefreshReview">Refresh</button>
-                        <button class="staged-review-secondary-action" type="button" @onclick="CloseDialog">Close</button>
-                    </div>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(errorMessage))
-                {
-                    <div class="staged-review-error">@errorMessage</div>
-                }
-
-                @if (selectedModel is not null && selectedModel.PreMergeValidationIsError && !selectedModel.PreMergeValidationForceApproved)
-                {
-                    <div class="staged-review-warning">
-                        <strong>Pre-merge validation reported errors.</strong>
-                        <span>Normal accept is disabled for this staged record. Use <em>Accept With Validation Override</em> only if you want to merge despite that failure.</span>
-                        @if (selectedModel.PreMergeValidationDiagnostics.Count > 0)
-                        {
-                            <ul class="staged-review-diagnostics">
-                                @foreach (string diagnostic in selectedModel.PreMergeValidationDiagnostics.Take(25))
-                                {
-                                    <li>@diagnostic</li>
-                                }
-                            </ul>
-                            @if (selectedModel.PreMergeValidationDiagnostics.Count > 25)
-                            {
-                                <span>… and @(selectedModel.PreMergeValidationDiagnostics.Count - 25) more.</span>
-                            }
-                        }
-                    </div>
-                }
-
-                <div class="staged-review-dialog-layout single">
-                    <section class="staged-review-detail">
-                        @if (selectedModel is null)
-                        {
-                            <div class="staged-review-empty">Select a staged candidate to inspect it.</div>
-                        }
-                        else
-                        {
-                            <div class="staged-review-meta">
-                                <div>
-                                    <span class="eyebrow">Record</span>
-                                    <strong>@selectedModel.RelativePath</strong>
-                                </div>
-                                <div>
-                                    <span class="eyebrow">Status</span>
-                                    <strong>@selectedModel.DecisionStatus</strong>
-                                </div>
-                                <div>
-                                    <span class="eyebrow">Session</span>
-                                    <strong>@(string.IsNullOrWhiteSpace(selectedModel.SessionId) ? "single-file" : selectedModel.SessionId)</strong>
-                                </div>
-                                <div>
-                                    <span class="eyebrow">Pending queue</span>
-                                    <strong>@pendingItems.Count item(s)</strong>
-                                </div>
-                            </div>
-
-                            <section class="staged-review-diff-shell" aria-label="Side by side staged review">
-                                <div class="staged-review-diff-header">
-                                    <strong>Proposed Candidate</strong>
-                                </div>
-                                <div class="staged-review-diff-header">
-                                    <strong>Current Source</strong>
-                                </div>
-
-                                @for (int index = 0; index < LineCount; index++)
-                                {
-                                    DiffPiece? proposedLine = GetProposedLine(index);
-                                    DiffPiece? currentLine = GetCurrentLine(index);
-
-                                    <div class="staged-review-diff-line proposed @GetLineClass(proposedLine)">
-                                        <span class="staged-review-line-number">@GetLineNumber(proposedLine)</span>
-                                        <code>@GetLineText(proposedLine)</code>
-                                    </div>
-                                    <div class="staged-review-diff-line current @GetLineClass(currentLine)">
-                                        <span class="staged-review-line-number">@GetLineNumber(currentLine)</span>
-                                        <code>@GetLineText(currentLine)</code>
-                                    </div>
-                                }
-                            </section>
-
-                            <div class="staged-review-detail-actions">
-                                <button class="staged-review-primary-action"
-                                        type="button"
-                                        disabled="@(!CanAcceptNormally || actionBusy)"
-                                        @onclick="AcceptSelectedAsync">
-                                    Accept Proposed
-                                </button>
-                                <button class="staged-review-warning-action"
-                                        type="button"
-                                        disabled="@(!CanForceAccept || actionBusy)"
-                                        @onclick="AcceptSelectedWithOverrideAsync">
-                                    Accept With Validation Override
-                                </button>
-                                <button class="staged-review-danger-action"
-                                        type="button"
-                                        disabled="@(selectedModel.IsDecided || actionBusy)"
-                                        @onclick="RejectSelectedAsync">
-                                    Reject
-                                </button>
-                            </div>
-                        }
-                    </section>
-                </div>
+<div class="staged-review-dialog">
+    @if (actionBusy)
+    {
+        <div class="staged-review-busy-overlay" role="status" aria-live="polite" aria-busy="true">
+            <div class="staged-review-busy-card">
+                <div class="staged-review-busy-spinner"></div>
+                <strong>Applying review decision</strong>
+                <span>Writing the accepted file into the watched solution and updating review state.</span>
             </div>
+        </div>
+    }
+
+    <div class="staged-review-dialog-header">
+        <div>
+            <h3>@DialogTitle</h3>
+            <p>@DialogSubtitle</p>
+        </div>
+        <div class="staged-review-dialog-actions">
+            <button class="staged-review-secondary-action" type="button" @onclick="RefreshReview">Refresh</button>
+            <button class="staged-review-secondary-action" type="button" @onclick="CloseDialog">Close</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="staged-review-error">@errorMessage</div>
+    }
+
+    @if (selectedModel is not null && selectedModel.PreMergeValidationIsError && !selectedModel.PreMergeValidationForceApproved)
+    {
+        <div class="staged-review-warning">
+            <strong>Pre-merge validation reported errors.</strong>
+            <span>Normal accept is disabled for this staged record. Use <em>Accept With Validation Override</em> only if you want to merge despite that failure.</span>
+            @if (selectedModel.PreMergeValidationDiagnostics.Count > 0)
+            {
+                <ul class="staged-review-diagnostics">
+                    @foreach (string diagnostic in selectedModel.PreMergeValidationDiagnostics.Take(25))
+                    {
+                        <li>@diagnostic</li>
+                    }
+                </ul>
+                @if (selectedModel.PreMergeValidationDiagnostics.Count > 25)
+                {
+                    <span>… and @(selectedModel.PreMergeValidationDiagnostics.Count - 25) more.</span>
+                }
+            }
+        </div>
+    }
+
+    <div class="staged-review-dialog-layout @(UseSessionFlow ? "single-record" : string.Empty)">
+        @if (!UseSessionFlow)
+        {
+            <aside class="staged-review-queue">
+                <div class="staged-review-queue-header">
+                    <strong>Pending</strong>
+                    <span>@pendingItems.Count item(s)</span>
+                </div>
+
+                @if (pendingItems.Count == 0)
+                {
+                    <div class="staged-review-empty">No pending staged edits.</div>
+                }
+                else
+                {
+                    <div class="staged-review-queue-list">
+                        @foreach (ReviewQueueItem item in pendingItems)
+                        {
+                            <button class="staged-review-queue-item @(selectedRecordId == item.StagedRecordId ? "active" : string.Empty)"
+                                    type="button"
+                                    @onclick="@(() => SelectRecord(item.StagedRecordId))">
+                                <strong>@item.RelativePath</strong>
+                                <span>@item.CreatedAtUtc</span>
+                                <small>Launch: @NormalizeLabel(item.LaunchStatus) | Validation: @NormalizeLabel(item.PreMergeValidationStatus)</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </aside>
+        }
+
+        <section class="staged-review-detail @(UseSessionFlow ? "staged-review-detail-full" : string.Empty)">
+            @if (selectedModel is null)
+            {
+                <div class="staged-review-empty">No staged candidate to review.</div>
+            }
+            else if (selectedModel.IsSessionComplete)
+            {
+                <div class="staged-review-complete">
+                    <strong>Review complete.</strong>
+                    <span>All staged files for this edit session have been resolved.</span>
+                </div>
+            }
+            else
+            {
+                <div class="staged-review-meta">
+                    <div>
+                        <span class="eyebrow">Record</span>
+                        <strong>@selectedModel.RelativePath</strong>
+                    </div>
+                    <div>
+                        <span class="eyebrow">Status</span>
+                        <strong>@selectedModel.DecisionStatus</strong>
+                    </div>
+                    <div>
+                        <span class="eyebrow">Session</span>
+                        <strong>@(string.IsNullOrWhiteSpace(selectedModel.SessionId) ? "single-file" : selectedModel.SessionId)</strong>
+                    </div>
+                    <div>
+                        <span class="eyebrow">Pending queue</span>
+                        <strong>@pendingItems.Count item(s)</strong>
+                    </div>
+                </div>
+
+                <section class="staged-review-diff-shell" aria-label="Side by side staged review">
+                    <div class="staged-review-diff-header">
+                        <strong>Proposed Candidate</strong>
+                    </div>
+                    <div class="staged-review-diff-header">
+                        <strong>Current Source</strong>
+                    </div>
+
+                    @for (int index = 0; index < LineCount; index++)
+                    {
+                        DiffPiece? proposedLine = GetProposedLine(index);
+                        DiffPiece? currentLine = GetCurrentLine(index);
+
+                        <div class="staged-review-diff-line proposed @GetLineClass(proposedLine)">
+                            <span class="staged-review-line-number">@GetLineNumber(proposedLine)</span>
+                            <code>@GetLineText(proposedLine)</code>
+                        </div>
+                        <div class="staged-review-diff-line current @GetLineClass(currentLine)">
+                            <span class="staged-review-line-number">@GetLineNumber(currentLine)</span>
+                            <code>@GetLineText(currentLine)</code>
+                        </div>
+                    }
+                </section>
+
+                <div class="staged-review-detail-actions">
+                    <button class="staged-review-primary-action"
+                            type="button"
+                            disabled="@(!CanAcceptNormally || actionBusy)"
+                            @onclick="AcceptSelectedAsync">
+                        Accept Proposed
+                    </button>
+                    <button class="staged-review-warning-action"
+                            type="button"
+                            disabled="@(!CanForceAccept || actionBusy)"
+                            @onclick="AcceptSelectedWithOverrideAsync">
+                        Accept With Validation Override
+                    </button>
+                    <button class="staged-review-danger-action"
+                            type="button"
+                            disabled="@(selectedModel.IsDecided || actionBusy)"
+                            @onclick="RejectSelectedAsync">
+                        Reject
+                    </button>
+                </div>
+            }
         </section>
     </div>
-}
+</div>

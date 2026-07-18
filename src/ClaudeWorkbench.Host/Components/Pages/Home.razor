@@ -80,8 +80,6 @@ else
 
     <AgentSettingsDialog Visible="@settingsOpen" OnClose="@(() => settingsOpen = false)" />
 
-    <MergeReviewDialog />
-
     @if (workspacePickerOpen)
     {
         <WorkspacePicker Embedded="false" OnClose="@CloseWorkspacePicker" />
