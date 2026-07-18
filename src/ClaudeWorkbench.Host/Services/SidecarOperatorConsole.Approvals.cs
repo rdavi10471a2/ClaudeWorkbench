@@ -32,7 +32,13 @@ public sealed partial class SidecarOperatorConsole
 
     public async Task ResolveApprovalAsync(string approvalId, bool approve, string? reason = null)
     {
-        await client.ResolveGateAsync(approvalId, approve ? "allow" : "deny", reason);
+        bool resolved = await client.ResolveGateAsync(approvalId, approve ? "allow" : "deny", reason);
+        if (!resolved)
+        {
+            // The gate is gone on the sidecar (stale). Drop it so the UI clears
+            // instead of leaving a dead dialog the operator keeps clicking.
+            stream.RemoveGate(approvalId);
+        }
     }
 
     public Task AnswerElicitationAsync(string elicitationId, IReadOnlyDictionary<string, string> values)

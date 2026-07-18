@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 
@@ -44,6 +45,55 @@ public sealed class SidecarEventStream : BackgroundService
         }
     }
 
+    // Drop a gate the sidecar no longer knows about (e.g. a resolve returned 404
+    // because the gate's promise is gone). Lets the UI self-heal a stale gate.
+    public void RemoveGate(string gateId)
+    {
+        bool removed;
+        lock (sync)
+        {
+            removed = gates.Remove(gateId);
+        }
+
+        if (removed)
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    // Authoritative pending-gate snapshot from the live registry. Called on every
+    // (re)connect so stale gates from a prior connection or a sidecar restart are
+    // dropped and only live gates remain.
+    private async Task SeedGatesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            HttpClient client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+            GateInfo[]? live = await client.GetFromJsonAsync<GateInfo[]>(
+                options.BaseUrl + "/gates",
+                json,
+                cancellationToken);
+            lock (sync)
+            {
+                gates.Clear();
+                if (live is not null)
+                {
+                    foreach (GateInfo gate in live)
+                    {
+                        gates[gate.GateId] = gate;
+                    }
+                }
+            }
+
+            Changed?.Invoke();
+        }
+        catch (Exception)
+        {
+            // Best-effort; live gate_request events will still populate the set.
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -78,6 +128,7 @@ public sealed class SidecarEventStream : BackgroundService
             cancellationToken);
         response.EnsureSuccessStatusCode();
         SetConnected(true);
+        await SeedGatesAsync(cancellationToken);
 
         using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using StreamReader reader = new(stream);

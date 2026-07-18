@@ -25,9 +25,12 @@ public sealed class SidecarClient
         return payload?.TurnId;
     }
 
-    public async Task ResolveGateAsync(string gateId, string decision, string? reason = null, CancellationToken cancellationToken = default)
+    // Returns false when the sidecar no longer has the gate (404) so the caller
+    // can drop the stale gate from the UI instead of silently no-op'ing.
+    public async Task<bool> ResolveGateAsync(string gateId, string decision, string? reason = null, CancellationToken cancellationToken = default)
     {
-        await http.PostAsJsonAsync($"/gates/{gateId}", new { decision, reason }, cancellationToken);
+        HttpResponseMessage response = await http.PostAsJsonAsync($"/gates/{gateId}", new { decision, reason }, cancellationToken);
+        return response.IsSuccessStatusCode;
     }
 
     private sealed record PromptResponse(string TurnId);

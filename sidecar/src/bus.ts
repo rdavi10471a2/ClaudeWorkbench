@@ -15,6 +15,12 @@ export class EventBus {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
     for (const event of this.history) {
+      // Do NOT replay gate lifecycle from history: a late-joining/reconnecting UI
+      // must take its pending gates from the live registry (GET /gates), not from
+      // stale history, or it shows gates whose promises are already gone.
+      if (event.type === "gate_request" || event.type === "gate_resolved") {
+        continue;
+      }
       this.write(res, event);
     }
     this.clients.add(res);
