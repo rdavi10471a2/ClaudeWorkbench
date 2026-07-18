@@ -4,7 +4,7 @@ A Blazor operator console for **governed, watched-source AI edits**, driven by *
 
 The agent proposes changes to a watched solution; every change is composed against a local *Working* candidate, staged, and held at a human **accept/reject** gate before it ever touches real source. The engine that enforces this — indexing, edit sessions, staging, review gates, and an MCP tool surface — is extracted from **AIMonitor** and runs UI-agnostic here, with **no WinForms**.
 
-> Status: **engine extracted and green**; the Blazor host + Claude sidecar are the next phase. See [Roadmap](#roadmap).
+> Status: **working end-to-end.** Engine extracted + green; Blazor host + Claude sidecar live; the full governed loop (stage → in-app review/merge → operator accept writes source → post-accept build + reindex), **session continuity** (resume + New Thread), and the agent's **AskUserQuestion → operator questions dialog** are all built and operator-verified on the subscription. See [Roadmap](#roadmap).
 
 ---
 
@@ -73,6 +73,30 @@ sidecar/                 Node/TS Claude Agent SDK driver: canUseTool operator ga
 
 Project/namespace names are kept as `AIMonitor.*` from the extraction so the port stayed mechanical and the ported tests prove fidelity. Rebranding, if ever wanted, is an isolated later pass.
 
+## Requirements
+
+ClaudeWorkbench is a **two-process** app — a .NET Blazor host **plus a Node sidecar that runs the Claude Agent SDK** — so any machine that runs it needs *all* of:
+
+| Requirement | Why | Notes |
+|---|---|---|
+| **.NET 10 SDK/runtime** | Blazor host + extracted engine + in-proc MCP server | `net10.0` |
+| **Node.js** (LTS; tested on v24) | The sidecar runs the **Claude Agent SDK, which is Node-only** — there is no .NET Agent SDK | Runtime is small (~50–90 MB) and can be **bundled as a single-file executable (Node SEA)** — no system-wide install needed |
+| **`claude` CLI** | The Agent SDK **spawns the `claude` binary** | **Bundled with the SDK** — the `@anthropic-ai/claude-agent-sdk-win32-x64` package ships/extracts the CLI; **no separate install**. This is most of the ~300 MB `sidecar/node_modules`. |
+| **A Claude login** | Auth | A **subscription login** (cached in `~/.claude`) runs it for yourself with **no API key**; an `ANTHROPIC_API_KEY` is only needed to ship to *other* users |
+| Ports **6100** (host) + **6110** (sidecar) | The two processes talk over localhost HTTP/SSE | configurable |
+
+> **Deployment footprint:** the agent driver is the Node-based Agent SDK, which bundles the `claude` CLI. So a target needs the **.NET runtime + a Node runtime (small, bundleable) + the sidecar folder (`dist` + `node_modules` ≈ 300 MB, self-contained CLI included) + a Claude login**. There's no pure-.NET/no-Node build, but Node itself is light and can be shipped as a single binary. WinMerge is **not** required (review/merge is in-app).
+
+### Sidecar setup
+
+```powershell
+cd sidecar
+npm install      # restores @anthropic-ai/claude-agent-sdk + express
+npx tsc          # builds dist/  (host launches it via `node dist/index.js`)
+```
+
+Ship `sidecar/dist` + `node_modules` (or run `npm ci` on the target).
+
 ## Build & test
 
 ```powershell
@@ -99,8 +123,11 @@ The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test s
 - [x] Extract the AIMonitor engine, layer by layer, no WinForms/proxy/bridge, tests green
 - [x] In-proc ASP.NET MCP endpoint on the engine's tool classes (`ClaudeWorkbench.Host`, Streamable HTTP on `:6100`, server name `claude-workbench`, full 60-tool surface smoke-verified)
 - [x] `claude-sidecar` (Agent SDK): drives Claude, registers the `claude-workbench` MCP over HTTP, `canUseTool` operator gate (read-only auto-allow, mutations pause), neutral SSE event stream — end-to-end verified on the subscription (read-only turn)
-- [ ] Blazor host: workspace dashboard, staging/review queue, live log, operator gate UI
-- [ ] Bring in AIMonitor's `docs/claude-skills/` cards as-is (the doctrine is already in skill form; the tool surface is identical, so reuse — don't rewrite the policy)
+- [x] Blazor host: workspace picker + runtime provisioning, Workbench/Source/Activity tabs, live transcript, operator gate dialog, in-app **merge review** (DiffPlex, terminal-only build/reindex)
+- [x] Session continuity (`resume`) + New Thread; agent turn survives a host rebuild mid-turn
+- [x] `AskUserQuestion` → operator **questions dialog** (tabs, choice cards, always-on "Other" free-text) via `canUseTool`
+- [ ] **File upload** (next): pivot the sidecar to streaming input mode + content blocks; per-workspace `uploads` folder provisioned + granted via `additionalDirectories`; composer attach UI
+- [ ] Bring in AIMonitor's `docs/claude-skills/` cards as-is (guidance is MCP-served today via `get_staging_guide`)
 
 ## Provenance
 
