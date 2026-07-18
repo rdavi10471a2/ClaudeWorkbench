@@ -198,7 +198,10 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         if (string.IsNullOrWhiteSpace(record.PreMergeValidationStatus))
         {
             workspace.EditService.PrepareReviewFileForLaunch(record.StagedRecordId);
-            PreMergeValidationResult validation = new PreMergeValidationService().Validate(workspace.Settings, record);
+            // GATE 1 is a fast staged-overlay readiness check (no dotnet build). The
+            // authoritative full build runs once at accept (GATE 2, in
+            // StagedDecisionWorkflow) — running a build here too double-built every file.
+            PreMergeValidationResult validation = new PreMergeValidationService().ValidateStagedOverlay(record, [record]);
             workspace.EditService.RecordPreMergeValidation(record.StagedRecordId, validation, forceApproved: false);
             diagnosticsCache[record.StagedRecordId] = validation.Diagnostics;
         }

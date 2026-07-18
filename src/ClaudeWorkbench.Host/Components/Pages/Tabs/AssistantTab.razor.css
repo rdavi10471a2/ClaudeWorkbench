@@ -237,10 +237,23 @@
 }
 
 .tool-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
     margin: 0 0 8px;
     color: #176ca8;
     font-family: Consolas, "Courier New", monospace;
     font-size: 13px;
+}
+
+.entry-time {
+    flex: 0 0 auto;
+    color: #8aa0b6;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: none;
+    font-variant-numeric: tabular-nums;
 }
 
 .message {
@@ -263,6 +276,24 @@
     font-size: 12px;
     font-weight: 800;
     text-transform: uppercase;
+}
+
+.message.user .message-header {
+    background: #f4f7ff;
+    border-bottom-color: #dbe4ff;
+}
+
+.message.user .message-meta {
+    color: #2457e6;
+}
+
+.message.assistant .message-header {
+    background: #f2faf8;
+    border-bottom-color: #cfeae4;
+}
+
+.message.assistant .message-meta {
+    color: #0f766e;
 }
 
 .message-body {

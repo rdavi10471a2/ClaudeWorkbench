@@ -167,6 +167,9 @@ async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Prom
   // Re-resolve CWD each turn so it tracks runtime workspace switches, not just startup.
   await resolveWorkspaceCwd();
 
+  // Show the operator's own submission in the transcript (before any prompt prefixing).
+  bus.emit({ type: "user_prompt", turnId, text: prompt });
+
   // Fold in any review outcomes from accepts since the last turn.
   if (pendingReviewOutcome) {
     prompt = `Context — outcome of your previously accepted edit(s):\n${pendingReviewOutcome}\n\n---\n\n${prompt}`;

@@ -68,15 +68,38 @@
                     {
                         @foreach (TranscriptEntry entry in Session.Transcript)
                         {
-                            @if (entry.Kind == TranscriptKind.ToolCall)
+                            @if (entry.Kind == TranscriptKind.User)
                             {
-                                <div class="tool-line">&#8594; @entry.Text</div>
+                                <div class="message user">
+                                    <div class="message-header">
+                                        <span class="message-meta">You</span>
+                                        @if (!string.IsNullOrEmpty(entry.Time))
+                                        {
+                                            <span class="entry-time">@entry.Time</span>
+                                        }
+                                    </div>
+                                    <div class="message-body">@entry.Text</div>
+                                </div>
+                            }
+                            else if (entry.Kind == TranscriptKind.ToolCall)
+                            {
+                                <div class="tool-line">
+                                    <span>&#8594; @entry.Text</span>
+                                    @if (!string.IsNullOrEmpty(entry.Time))
+                                    {
+                                        <span class="entry-time">@entry.Time</span>
+                                    }
+                                </div>
                             }
                             else
                             {
                                 <div class="message assistant">
                                     <div class="message-header">
                                         <span class="message-meta">Assistant</span>
+                                        @if (!string.IsNullOrEmpty(entry.Time))
+                                        {
+                                            <span class="entry-time">@entry.Time</span>
+                                        }
                                     </div>
                                     <div class="message-body">@RenderMarkdown(entry.Text)</div>
                                 </div>

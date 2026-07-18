@@ -38,10 +38,13 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         get
         {
             return stream.SnapshotEvents()
-                .Where(evt => evt.Type is "assistant_text" or "tool_call_started")
-                .Select(evt => evt.Type == "tool_call_started"
-                    ? new TranscriptEntry(TranscriptKind.ToolCall, ApprovalFormatter.ShortLabel(evt.Tool ?? string.Empty, evt.Input))
-                    : new TranscriptEntry(TranscriptKind.Assistant, evt.Text ?? string.Empty))
+                .Where(evt => evt.Type is "assistant_text" or "tool_call_started" or "user_prompt")
+                .Select(evt => evt.Type switch
+                {
+                    "tool_call_started" => new TranscriptEntry(TranscriptKind.ToolCall, ApprovalFormatter.ShortLabel(evt.Tool ?? string.Empty, evt.Input), FormatTime(evt.Ts)),
+                    "user_prompt" => new TranscriptEntry(TranscriptKind.User, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
+                    _ => new TranscriptEntry(TranscriptKind.Assistant, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
+                })
                 .ToArray();
         }
     }
@@ -94,6 +97,13 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
             _ => string.Empty,
         };
         return new ActivityEntry(evt.Type, detail);
+    }
+
+    private static string FormatTime(long? ts)
+    {
+        return ts is long milliseconds
+            ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).ToLocalTime().ToString("HH:mm")
+            : string.Empty;
     }
 
     private static string Truncate(string? text)

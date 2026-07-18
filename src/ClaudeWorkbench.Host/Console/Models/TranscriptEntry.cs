@@ -2,8 +2,9 @@ namespace ClaudeWorkbench.Host.Console;
 
 public enum TranscriptKind
 {
+    User,
     Assistant,
     ToolCall,
 }
 
-public sealed record TranscriptEntry(TranscriptKind Kind, string Text);
+public sealed record TranscriptEntry(TranscriptKind Kind, string Text, string Time);

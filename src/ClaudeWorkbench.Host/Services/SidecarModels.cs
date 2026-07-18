@@ -20,6 +20,7 @@ public sealed record SidecarEvent
     public int? OutputTokens { get; init; }
     public string? FilePath { get; init; }
     public JsonElement? Input { get; init; }
+    public long? Ts { get; init; }
 }
 
 public sealed record GateInfo(string GateId, string Tool, string? FilePath, JsonElement? Input);
