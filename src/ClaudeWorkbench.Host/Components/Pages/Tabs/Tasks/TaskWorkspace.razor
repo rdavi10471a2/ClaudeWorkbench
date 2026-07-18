@@ -1,0 +1,171 @@
+@using ClaudeWorkbench.Host.Tasks
+
+<section class="task-workspace">
+    @if (Task is null)
+    {
+        <div class="empty-detail">
+            <h3>No Task Selected</h3>
+            <p>Create or select a task to inspect details.</p>
+        </div>
+    }
+    else
+    {
+        <div class="task-workspace-header">
+            <div>
+                <span class="eyebrow">@Task.TaskLabel - @Task.StateName</span>
+                <h3>@Task.Name</h3>
+                <p>Updated @Task.UpdatedLabel</p>
+            </div>
+            <div class="task-header-actions">
+                @if (Task.IsArchived)
+                {
+                    <span class="archived-chip">Archived</span>
+                }
+                <RadzenButton Icon="dock_to_left"
+                              Text="@(IsNavigatorVisible ? "Hide List" : "Show List")"
+                              ButtonStyle="ButtonStyle.Light"
+                              Size="ButtonSize.Small"
+                              Click="@ToggleNavigator" />
+                <RadzenButton Icon="refresh"
+                              Text="Refresh"
+                              ButtonStyle="ButtonStyle.Light"
+                              Size="ButtonSize.Small"
+                              Click="@RefreshWorkspace" />
+                <RadzenButton Icon="save"
+                              Text="Save Task"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Size="ButtonSize.Small"
+                              Click="@SaveDetails" />
+            </div>
+        </div>
+
+        <div class="task-pane-tabs">
+            <button class="@(IsPane("Task") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Task"))">Task</button>
+            <button class="@(IsPane("Notes") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Notes"))">User Notes</button>
+            <button class="@(IsPane("Agent") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Agent"))">Agent Notes</button>
+            <button class="@(IsPane("Files") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Files"))">Files</button>
+            <button class="@(IsPane("Events") ? "active" : string.Empty)" type="button" @onclick="@(() => SelectPane("Events"))">Events</button>
+        </div>
+
+        <div class="task-pane-body">
+            @if (IsPane("Task"))
+            {
+                <section class="detail-section grow-section">
+                    <div class="task-fields">
+                        <label>
+                            <span>Board location</span>
+                            <RadzenDropDown @bind-Value="selectedStateCode"
+                                            Data="@StateOptions"
+                                            TextProperty="StateName"
+                                            ValueProperty="StateCode"
+                                            Style="width: 100%;" />
+                        </label>
+                        <label class="description-label">
+                            <span>Title</span>
+                            <textarea class="task-title"
+                                      @bind="taskName"></textarea>
+                        </label>
+                        <label class="description-label">
+                            <span>Description</span>
+                            <textarea class="task-description"
+                                      @bind="taskDescription"></textarea>
+                        </label>
+                    </div>
+                </section>
+            }
+            else if (IsPane("Notes"))
+            {
+                <section class="detail-section grow-section notes-pane-section">
+                    <div class="notes-scroll-shell">
+                        <textarea class="task-notes"
+                                  @bind="notesMarkdown"></textarea>
+                    </div>
+                </section>
+            }
+            else if (IsPane("Agent"))
+            {
+                <section class="detail-section grow-section notes-pane-section">
+                    <div class="readonly-notes">
+                        @if (string.IsNullOrWhiteSpace(Task.AgentNotesMarkdown))
+                        {
+                            <p class="empty-column">No agent notes have been recorded for this task.</p>
+                        }
+                        else
+                        {
+                            <div class="notes-scroll-shell">
+                                <div class="agent-markdown">@((MarkupString)RenderMarkdown(Task.AgentNotesMarkdown))</div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+            else if (IsPane("Files"))
+            {
+                <section class="detail-section grow-section">
+                    <div class="file-form">
+                        <RadzenTextBox @bind-Value="newFilePath"
+                                       Placeholder="relative/path.cs"
+                                       Style="width: 100%;" />
+                        <RadzenTextBox @bind-Value="newFileIntent"
+                                       Placeholder="intent"
+                                       Style="width: 100%;" />
+                        <RadzenTextBox @bind-Value="newFileRole"
+                                       Placeholder="role"
+                                       Style="width: 100%;" />
+                        <RadzenButton Icon="add"
+                                      Text="Add"
+                                      ButtonStyle="ButtonStyle.Secondary"
+                                      Size="ButtonSize.Small"
+                                      Disabled="@string.IsNullOrWhiteSpace(newFilePath)"
+                                      Click="@AddFile" />
+                    </div>
+
+                    <div class="file-list">
+                        @if (Task.Files.Count == 0)
+                        {
+                            <p class="empty-column">No files attached.</p>
+                        }
+                        else
+                        {
+                            @foreach (TaskBoardFileViewModel file in Task.Files)
+                            {
+                                <div class="file-row">
+                                    <strong>@file.RelativePath</strong>
+                                    <span>@file.Intent</span>
+                                    <em>@file.FileRole</em>
+                                </div>
+                            }
+                        }
+                    </div>
+                </section>
+            }
+            else if (IsPane("Events"))
+            {
+                <section class="detail-section grow-section">
+                    <div class="comment-form">
+                        <RadzenTextBox @bind-Value="newComment"
+                                       Placeholder="Add a comment"
+                                       Style="width: 100%;" />
+                        <RadzenButton Icon="chat"
+                                      Text="Comment"
+                                      ButtonStyle="ButtonStyle.Secondary"
+                                      Size="ButtonSize.Small"
+                                      Disabled="@string.IsNullOrWhiteSpace(newComment)"
+                                      Click="@AddComment" />
+                    </div>
+
+                    <div class="event-list">
+                        @foreach (TaskBoardEventViewModel taskEvent in Task.Events)
+                        {
+                            <div class="event-row">
+                                <strong>@taskEvent.EventTypeName</strong>
+                                <span>@taskEvent.Message</span>
+                                <em>@taskEvent.CreatedLabel</em>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+    }
+</section>

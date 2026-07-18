@@ -1,0 +1,53 @@
+@using Markdig
+@inject DialogService DialogService
+
+<div class="archived-discussion-dialog">
+    <div class="archived-discussion-dialog-header">
+        <h3>@Title</h3>
+        <div>
+            <span>@CreatedLabel</span>
+            @if (!string.IsNullOrWhiteSpace(ThreadId))
+            {
+                <span> | Thread: @ThreadId</span>
+            }
+        </div>
+    </div>
+    <div class="archived-discussion-dialog-body">
+        <div class="archived-discussion-markdown">@((MarkupString)RenderMarkdown(Content))</div>
+    </div>
+    <div class="archived-discussion-dialog-actions">
+        <RadzenButton Icon="close"
+                      Text="Close"
+                      ButtonStyle="ButtonStyle.Secondary"
+                      Click="@(() => DialogService.Close())" />
+    </div>
+</div>
+
+@code {
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .DisableHtml()
+        .Build();
+
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string CreatedLabel { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? ThreadId { get; set; }
+
+    [Parameter]
+    public string Content { get; set; } = string.Empty;
+
+    private static string RenderMarkdown(string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return string.Empty;
+        }
+
+        return Markdown.ToHtml(markdown, MarkdownPipeline);
+    }
+}

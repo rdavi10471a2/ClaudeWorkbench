@@ -1,0 +1,96 @@
+.task-navigator {
+    border: 1px solid #d5e2ef;
+    border-radius: 6px;
+    background: #fff;
+    flex: 1 1 auto;
+    min-width: 300px;
+    overflow: auto;
+    position: relative;
+    width: 100%;
+}
+
+.task-create {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid #d5e2ef;
+    background: #f8fbfe;
+}
+
+.task-groups {
+    padding: 0.5rem;
+}
+
+.task-group {
+    margin-bottom: 0.5rem;
+}
+
+.task-group header {
+    align-items: center;
+    color: #334e6d;
+    display: flex;
+    font-weight: 700;
+    justify-content: space-between;
+    padding: 0.35rem 0.5rem;
+    text-transform: uppercase;
+}
+
+.task-group header strong {
+    color: #607893;
+}
+
+.archive-group {
+    border-top: 1px dashed #b9c8d8;
+    margin-top: 0.8rem;
+    padding-top: 0.3rem;
+}
+
+.empty-task-group {
+    color: #6b7e95;
+    margin: 0;
+    padding: 0.35rem 0.55rem 0.55rem;
+}
+
+.task-row {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 5px;
+    color: #0c2035;
+    cursor: pointer;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: auto 1fr auto;
+    min-height: 34px;
+    padding: 0.35rem 0.45rem;
+    text-align: left;
+    width: 100%;
+}
+
+.task-row:hover,
+.task-row.selected-task {
+    background: #eaf2fa;
+}
+
+.task-state-chip {
+    align-items: center;
+    border: 1px solid #c9d9e8;
+    border-radius: 4px;
+    color: #315a82;
+    display: inline-flex;
+    font-size: 0.72rem;
+    font-weight: 700;
+    justify-content: center;
+    min-width: 28px;
+    padding: 0.05rem 0.25rem;
+}
+
+.task-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-row small {
+    color: #607893;
+}

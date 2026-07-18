@@ -1,0 +1,51 @@
+@using ClaudeWorkbench.Host.Tasks
+
+<aside class="task-navigator">
+    <div class="task-create">
+        <RadzenTextBox @bind-Value="newTaskName"
+                       Placeholder="New task title"
+                       Style="width: 100%;" />
+        <RadzenButton Icon="add"
+                      Text="Create Task"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Disabled="@string.IsNullOrWhiteSpace(newTaskName)"
+                      Click="@CreateTask" />
+    </div>
+
+    <div class="task-groups">
+        @foreach (TaskBoardColumnViewModel column in Columns)
+        {
+            <section class="task-group @(column.IsArchive ? "archive-group" : string.Empty)">
+                <header>
+                    <span>@column.StateName</span>
+                    <strong>@column.Tasks.Count</strong>
+                </header>
+
+                @if (column.Tasks.Count == 0)
+                {
+                    <p class="empty-task-group">No tasks</p>
+                }
+                else
+                {
+                    @foreach (TaskBoardTaskViewModel task in column.Tasks)
+                    {
+                        <button class="task-row @(IsSelected(task.Id) ? "selected-task" : string.Empty)"
+                                type="button"
+                                title="Right-click for task actions"
+                                @onclick="() => SelectTask(task.Id)"
+                                @oncontextmenu="args => OpenContextMenu(args, task)"
+                                @oncontextmenu:preventDefault="true">
+                            <span class="task-state-chip">@task.TaskLabel</span>
+                            <span class="task-name">@task.Name</span>
+                            @if (task.FileCount > 0)
+                            {
+                                <small>@task.FileCount file@(task.FileCount == 1 ? string.Empty : "s")</small>
+                            }
+                        </button>
+                    }
+                }
+            </section>
+        }
+    </div>
+</aside>

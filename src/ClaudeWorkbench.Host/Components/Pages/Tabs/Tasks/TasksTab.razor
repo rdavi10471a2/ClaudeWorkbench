@@ -1,0 +1,112 @@
+@using ClaudeWorkbench.Host.Tasks
+
+@inject IJSRuntime JS
+@inject IWorkflowTaskBoardViewService TaskBoardViewService
+
+<section class="tasks-tab">
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="task-error">@errorMessage</div>
+    }
+
+    @if (ActiveTask is not null)
+    {
+        <section class="current-task-banner @(HasSelectedTaskMismatch ? "current-task-banner-warning" : string.Empty)">
+            <div class="current-task-banner-copy">
+                <span>Host Current Task</span>
+                <strong>@ActiveTask.TaskLabel @ActiveTask.Name</strong>
+                @if (HasSelectedTaskMismatch)
+                {
+                    <small>
+                        You are viewing @model.SelectedTask?.TaskLabel @model.SelectedTask?.Name, but Work mode will use the Active task above until you move another task to Active.
+                    </small>
+                }
+                else
+                {
+                    <small>This is the task Work mode will attach through `get_current_task`.</small>
+                }
+            </div>
+            @if (HasSelectedTaskMismatch)
+            {
+                <RadzenButton Icon="target"
+                              Text="Jump To Current Task"
+                              ButtonStyle="ButtonStyle.Warning"
+                              Size="ButtonSize.Small"
+                              Click="@SelectActiveTask" />
+            }
+        </section>
+    }
+
+    <section class="archived-discussions-panel">
+        <div class="archived-discussions-header">
+            <div>
+                <span>Archived Discussions</span>
+                <strong>@model.ArchivedDiscussions.Count saved</strong>
+            </div>
+        </div>
+
+        @if (model.ArchivedDiscussions.Count == 0)
+        {
+            <div class="archived-discussions-empty">No archived discussions have been saved yet.</div>
+        }
+        else
+        {
+            <div class="archived-discussions-list">
+                @foreach (TaskBoardArchivedDiscussionViewModel discussion in model.ArchivedDiscussions)
+                {
+                    <article class="archived-discussion-row">
+                        <div class="archived-discussion-main">
+                            <strong>@discussion.Name</strong>
+                            <span>@discussion.CreatedLabel | @discussion.Trigger | @discussion.TurnMode</span>
+                            @if (!string.IsNullOrWhiteSpace(discussion.ThreadId))
+                            {
+                                <small>Thread: @discussion.ThreadId</small>
+                            }
+                        </div>
+                        <div class="archived-discussion-actions">
+                            <RadzenButton Icon="content_copy"
+                                          Text="Copy"
+                                          ButtonStyle="ButtonStyle.Light"
+                                          Size="ButtonSize.Small"
+                                          Click="@(() => CopyArchivedDiscussion(discussion.Id))" />
+                            <RadzenButton Icon="open_in_new"
+                                          Text="Open"
+                                          ButtonStyle="ButtonStyle.Secondary"
+                                          Size="ButtonSize.Small"
+                                          Click="@(() => OpenArchivedDiscussion(discussion))" />
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <div class="task-layout @(isNavigatorVisible ? string.Empty : "task-layout-navigator-hidden")" @ref="taskLayout">
+        @if (isNavigatorVisible)
+        {
+            <div class="task-navigator-shell" @ref="taskNavigatorPane">
+                <TaskNavigator Columns="@model.Columns"
+                               SelectedTaskId="@selectedTaskId"
+                               OnSelectTask="@SelectTask"
+                               OnCreateTask="@CreateTask"
+                               OnMoveTask="@MoveTask"
+                               OnArchiveTask="@ArchiveTask"
+                               OnRestoreTask="@RestoreTask" />
+            </div>
+
+            <div class="task-splitter" @ref="taskSplitter" title="Drag to resize task list" aria-hidden="true"></div>
+        }
+
+        <div class="task-workspace-shell" @ref="taskWorkspacePane">
+            <TaskWorkspace Task="@model.SelectedTask"
+                           StateOptions="@BoardStateOptions"
+                           IsNavigatorVisible="@isNavigatorVisible"
+                           OnSaveDetails="@SaveTaskDetails"
+                           OnSaveNotes="@SaveNotes"
+                           OnAddFile="@AddFile"
+                           OnAddComment="@AddComment"
+                           OnToggleNavigator="@ToggleNavigator"
+                           OnRefresh="@RefreshAsync" />
+        </div>
+    </div>
+</section>
