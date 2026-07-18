@@ -14,6 +14,8 @@ public partial class AgentActionModal : IDisposable
     private readonly Dictionary<string, string> otherText = new(StringComparer.Ordinal);
     private string? boundElicitationId;
 
+    private int ActiveQuestion { get; set; }
+
     private ApprovalRequest? CurrentApproval => Approvals.PendingApprovals.FirstOrDefault();
 
     private Elicitation? CurrentElicitation =>
@@ -46,6 +48,13 @@ public partial class AgentActionModal : IDisposable
         boundElicitationId = elicitation.Id;
         selections.Clear();
         otherText.Clear();
+        ActiveQuestion = 0;
+    }
+
+    private bool IsAnswered(ElicitationQuestion question)
+    {
+        return (selections.TryGetValue(question.Question, out HashSet<string>? chosen) && chosen.Count > 0)
+            || !string.IsNullOrWhiteSpace(GetOther(question.Question));
     }
 
     private bool IsChosen(string question, string label)
@@ -76,6 +85,13 @@ public partial class AgentActionModal : IDisposable
 
         // Picking an option supersedes any half-typed "Other".
         otherText.Remove(question);
+    }
+
+    // Focusing the Other box deselects that question's chosen card(s) immediately,
+    // so the operator's free-text is clearly the active answer.
+    private void BeginOther(string question)
+    {
+        selections.Remove(question);
     }
 
     private string GetOther(string question)

@@ -68,10 +68,25 @@ else if (elicitation is not null)
             </div>
             <div class="agent-modal-body action-mode">
                 <section class="agent-modal-main">
-                    @foreach (ElicitationQuestion question in elicitation.Questions)
+                    @if (elicitation.Questions.Count > 1)
                     {
+                        <div class="agent-modal-qtabs" role="tablist">
+                            @for (int index = 0; index < elicitation.Questions.Count; index++)
+                            {
+                                int tabIndex = index;
+                                <button type="button"
+                                        class="agent-modal-qtab @(ActiveQuestion == tabIndex ? "active" : string.Empty) @(IsAnswered(elicitation.Questions[tabIndex]) ? "answered" : string.Empty)"
+                                        @onclick="@(() => ActiveQuestion = tabIndex)">
+                                    @elicitation.Questions[tabIndex].Header
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    @if (elicitation.Questions.Count > 0)
+                    {
+                        ElicitationQuestion question = elicitation.Questions[Math.Clamp(ActiveQuestion, 0, elicitation.Questions.Count - 1)];
                         <div class="agent-modal-question">
-                            <span class="agent-modal-field-label">@question.Header</span>
                             <div class="agent-modal-question-title">@question.Question</div>
                             @if (question.MultiSelect)
                             {
@@ -95,7 +110,8 @@ else if (elicitation is not null)
                                    type="text"
                                    placeholder="Other — type your own answer"
                                    value="@GetOther(question.Question)"
-                                   @onchange="@(args => SetOther(question.Question, args.Value?.ToString()))" />
+                                   @onfocus="@(() => BeginOther(question.Question))"
+                                   @oninput="@(args => SetOther(question.Question, args.Value?.ToString()))" />
                         </div>
                     }
                 </section>
