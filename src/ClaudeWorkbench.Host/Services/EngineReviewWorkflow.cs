@@ -100,10 +100,32 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
 
         File.Copy(record.StagedFilePath, record.WatchedFilePath, overwrite: true);
 
-        // Faithful engine accept: records the decision, runs the post-accept build,
-        // and rebuilds the solution index for the changed file (+ inbound closure).
-        // Runs synchronously so the dialog's busy overlay blocks until the index
-        // is current.
+        // Only the LAST file in the edit session rebuilds the index (and runs the
+        // terminal build). Earlier files defer, so the operator advances through the
+        // session quickly and pays the reindex once, at the end.
+        bool terminal = true;
+        PostAcceptIndexRefreshPlan? refreshPlan = null;
+        if (!string.IsNullOrWhiteSpace(record.SessionId))
+        {
+            IReadOnlyList<StagedEditRecord> sessionRecords = workspace.EditService.ListStagedRecords(record.SessionId);
+            terminal = !sessionRecords.Any(other =>
+                !string.Equals(other.StagedRecordId, stagedRecordId, StringComparison.Ordinal) && IsPending(other));
+            if (terminal)
+            {
+                string[] changedPaths = sessionRecords
+                    .Where(other => !string.Equals(other.StagedRecordId, stagedRecordId, StringComparison.Ordinal)
+                        && (other.Classification is "accepted" or "accepted-normalized"))
+                    .Select(other => other.WatchedFilePath)
+                    .Append(record.WatchedFilePath)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                refreshPlan = new PostAcceptIndexRefreshPlan { ChangedFilePaths = changedPaths };
+            }
+        }
+
+        // Records the decision; on the terminal file runs the build and rebuilds the
+        // solution index for every accepted session file. Synchronous so the dialog's
+        // busy overlay blocks until the index is current.
         new StagedDecisionWorkflow().Record(
             workspace.Settings,
             logger,
@@ -111,8 +133,13 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             stagedRecordId,
             "accepted",
             record.StagedHash,
-            "ClaudeWorkbench");
-        return new ReviewActionResult($"Accepted. {record.RelativePath} written and re-indexed.");
+            "ClaudeWorkbench",
+            deferIndexRefresh: !terminal,
+            refreshPlan: refreshPlan);
+
+        return new ReviewActionResult(terminal
+            ? $"Accepted. {record.RelativePath} written; index rebuilt for the edit session."
+            : $"Accepted. {record.RelativePath} written; index rebuild deferred to the final file.");
     }
 
     public ReviewActionResult Reject(string stagedRecordId)
