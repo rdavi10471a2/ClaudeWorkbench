@@ -174,6 +174,11 @@ public sealed class SidecarEventStream : BackgroundService
 
             switch (evt.Type)
             {
+                case "thread_reset":
+                    events.Clear();
+                    gates.Clear();
+                    ActiveTurn = null;
+                    break;
                 case "turn_started":
                     ActiveTurn = evt.TurnId;
                     break;

@@ -33,6 +33,14 @@ public sealed class SidecarClient
         return response.IsSuccessStatusCode;
     }
 
+    // Start a fresh conversation thread: the sidecar drops the resumed session id
+    // and clears its event history so the agent no longer remembers prior turns.
+    public async Task<bool> NewThreadAsync(CancellationToken cancellationToken = default)
+    {
+        HttpResponseMessage response = await http.PostAsJsonAsync("/new-thread", new { }, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
     // Echo a merge-review outcome (build + index result) to the agent: the sidecar
     // surfaces it in the transcript and prepends it to the agent's next prompt.
     public async Task PostReviewOutcomeAsync(string summary, CancellationToken cancellationToken = default)

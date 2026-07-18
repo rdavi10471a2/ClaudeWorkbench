@@ -29,6 +29,10 @@ export class EventBus {
     res.on("close", () => this.clients.delete(res));
   }
 
+  clear(): void {
+    this.history.length = 0;
+  }
+
   emit(event: SidecarEvent): void {
     const stamped: StampedEvent = { ...event, ts: Date.now() } as StampedEvent;
     this.history.push(stamped);

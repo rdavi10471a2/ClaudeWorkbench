@@ -9,6 +9,7 @@ export type GateDecision = "allow" | "deny";
 
 export type SidecarEvent =
   | { type: "turn_started"; turnId: string }
+  | { type: "thread_reset"; turnId: string }
   | { type: "user_prompt"; turnId: string; text: string }
   | { type: "assistant_text"; turnId: string; text: string }
   | {

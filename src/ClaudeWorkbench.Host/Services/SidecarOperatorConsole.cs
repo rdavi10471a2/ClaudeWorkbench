@@ -72,6 +72,11 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         await client.PromptAsync(prompt, toolPolicy);
     }
 
+    public async Task NewThreadAsync()
+    {
+        await client.NewThreadAsync();
+    }
+
     public void Dispose()
     {
         stream.Changed -= Relay;

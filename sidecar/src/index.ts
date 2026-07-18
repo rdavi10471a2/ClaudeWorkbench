@@ -82,6 +82,9 @@ let activeTurn: string | null = null;
 // Merge-review outcomes (build + index results) posted by the host after an accept,
 // prepended to the agent's next prompt so it learns whether its edit compiled.
 let pendingReviewOutcome = "";
+// Current thread's SDK session id, captured from the message stream and passed as
+// `resume` on the next turn so the agent remembers the conversation. Null = fresh thread.
+let currentSessionId: string | null = null;
 
 // The human accept/reject gate. Read-only discovery tools auto-allow so the
 // operator is interrupted only for changes that can reach watched source or the
@@ -209,6 +212,9 @@ async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Prom
     // so no file config should apply. [] also disables CLAUDE.md loading, which
     // matches the "no turn-start policy / no monitor CLAUDE.md injection" rule.
     settingSources: [],
+    // Continuity: resume the current thread's session so the agent remembers prior
+    // turns. Cleared by /new-thread to start a fresh conversation.
+    ...(currentSessionId ? { resume: currentSessionId } : {}),
     // No systemPrompt: governance is the gate + on-demand skills, not turn-start
     // policy prose. Do not inject a monitor-style CLAUDE.md here.
   };
@@ -230,6 +236,12 @@ async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Prom
 }
 
 function handleMessage(message: SDKMessage, turnId: string): void {
+  // Every SDK message carries the session id; capture it so the next turn resumes.
+  const sessionId = (message as { session_id?: string }).session_id;
+  if (typeof sessionId === "string" && sessionId.length > 0) {
+    currentSessionId = sessionId;
+  }
+
   switch (message.type) {
     case "assistant": {
       const content = message.message.content as ContentBlock[];
@@ -360,6 +372,18 @@ app.post("/review-outcome", (req, res) => {
     // Surface it in the transcript for the operator too.
     bus.emit({ type: "assistant_text", turnId: activeTurn ?? "review", text: `[merge review] ${summary}` });
   }
+  res.json({ ok: true });
+});
+
+app.post("/new-thread", (_req, res) => {
+  if (activeTurn) {
+    res.status(409).json({ error: "Cannot start a new thread while a turn is active." });
+    return;
+  }
+  currentSessionId = null;
+  pendingReviewOutcome = "";
+  bus.clear();
+  bus.emit({ type: "thread_reset", turnId: "thread" });
   res.json({ ok: true });
 });
 

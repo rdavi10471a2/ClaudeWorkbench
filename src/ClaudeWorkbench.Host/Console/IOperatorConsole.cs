@@ -15,4 +15,7 @@ public interface IOperatorConsole
     IReadOnlyList<ActivityEntry> Activity { get; }
 
     Task SendAsync(string prompt);
+
+    // Start a fresh conversation thread (drops resumed context, clears the transcript).
+    Task NewThreadAsync();
 }

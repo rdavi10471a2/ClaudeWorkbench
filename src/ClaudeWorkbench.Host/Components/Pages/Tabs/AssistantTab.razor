@@ -41,6 +41,12 @@
             <div class="transcript-header">
                 <span>Chat History</span>
                 <div class="transcript-actions">
+                    <RadzenButton Icon="add_comment"
+                                  Text="New Thread"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Size="ButtonSize.Small"
+                                  Click="@NewThreadAsync"
+                                  Disabled="@(Session.Status.Working)" />
                     <RadzenButton Icon="content_copy"
                                   Text="Copy"
                                   ButtonStyle="ButtonStyle.Light"

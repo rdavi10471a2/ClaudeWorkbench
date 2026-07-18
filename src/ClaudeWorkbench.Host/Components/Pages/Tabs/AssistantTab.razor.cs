@@ -67,6 +67,16 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         await Session.SendAsync(prompt);
     }
 
+    private async Task NewThreadAsync()
+    {
+        if (Working)
+        {
+            return;
+        }
+
+        await Session.NewThreadAsync();
+    }
+
     private async Task CopyAsync()
     {
         if (resizeModule is null || !HasTranscript)
