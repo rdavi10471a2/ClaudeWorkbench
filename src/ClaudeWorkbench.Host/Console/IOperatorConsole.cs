@@ -14,7 +14,12 @@ public interface IOperatorConsole
 
     IReadOnlyList<ActivityEntry> Activity { get; }
 
-    Task SendAsync(string prompt);
+    // autoApprove: for this turn, claude-workbench mutations skip the per-call operator
+    // gate (the merge-review Accept still gates the write to watched source).
+    Task SendAsync(string prompt, bool autoApprove);
+
+    // Interrupt the in-flight turn.
+    Task StopAsync();
 
     // Start a fresh conversation thread (drops resumed context, clears the transcript).
     Task NewThreadAsync();

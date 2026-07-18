@@ -17,18 +17,29 @@
                       @bind:event="oninput"
                       placeholder="Inspect the current workspace..."></textarea>
             <div class="chat-composer-actions">
-                <RadzenButton Icon="policy"
-                              Text="System Evaluation"
+                <RadzenButton Icon="@(autoApprove ? "task_alt" : "radio_button_unchecked")"
+                              Text="Auto-approve"
                               Class="chat-prompt-button"
-                              ButtonStyle="ButtonStyle.Light"
-                              Click="@LoadSystemEvaluationPrompt"
-                              Disabled="@Working" />
-                <RadzenButton Icon="send"
-                              Text="Submit Turn"
-                              Class="chat-send-button"
-                              ButtonStyle="ButtonStyle.Primary"
-                              Click="@SubmitAsync"
-                              Disabled="@(Working || string.IsNullOrWhiteSpace(draft))" />
+                              ButtonStyle="@(autoApprove ? ButtonStyle.Success : ButtonStyle.Light)"
+                              Click="@(() => autoApprove = !autoApprove)"
+                              Title="Auto-approve claude-workbench edits for THIS thread only. The merge review still gates every write to watched source; New Thread turns it back off." />
+                @if (Working)
+                {
+                    <RadzenButton Icon="stop"
+                                  Text="Stop"
+                                  Class="chat-send-button"
+                                  ButtonStyle="ButtonStyle.Danger"
+                                  Click="@StopAsync" />
+                }
+                else
+                {
+                    <RadzenButton Icon="send"
+                                  Text="Submit Turn"
+                                  Class="chat-send-button"
+                                  ButtonStyle="ButtonStyle.Primary"
+                                  Click="@SubmitAsync"
+                                  Disabled="@(string.IsNullOrWhiteSpace(draft))" />
+                }
             </div>
         </div>
 

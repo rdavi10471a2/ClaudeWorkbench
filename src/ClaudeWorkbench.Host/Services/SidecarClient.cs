@@ -41,6 +41,12 @@ public sealed class SidecarClient
         return response.IsSuccessStatusCode;
     }
 
+    // Interrupt the in-flight turn (aborts the SDK query on the sidecar).
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        await http.PostAsJsonAsync("/stop", new { }, cancellationToken);
+    }
+
     // Start a fresh conversation thread: the sidecar drops the resumed session id
     // and clears its event history so the agent no longer remembers prior turns.
     public async Task<bool> NewThreadAsync(CancellationToken cancellationToken = default)

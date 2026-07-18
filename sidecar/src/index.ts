@@ -104,16 +104,23 @@ interface ToolPolicy {
   allowNativeReads: boolean;
   strictMcpConfig: boolean;
   enabledTools: string[];
+  autoApprove: boolean;
 }
 
 const DEFAULT_TOOL_POLICY: ToolPolicy = {
   allowNativeReads: true,
   strictMcpConfig: true,
   enabledTools: [],
+  autoApprove: false,
 };
 
 // Recomputed at the start of each turn from that turn's policy; canUseTool reads it.
 let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOOLS]);
+// When on, claude-workbench mutations auto-allow instead of pausing at the operator
+// gate. Watched source is still only written by the operator's merge-review Accept.
+let activeAutoApprove = false;
+// AbortController for the in-flight turn, so /stop can interrupt it.
+let activeAbort: AbortController | null = null;
 
 const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   const turnId = activeTurn ?? "unknown";
@@ -149,8 +156,14 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
     };
   }
 
-  // claude-workbench read-only tools: allow. Mutations: pause at the operator gate.
+  // claude-workbench read-only tools: allow. Mutations: pause at the operator gate,
+  // unless auto-approve is on for this thread (candidate mutations proceed without a
+  // per-call prompt; the merge-review Accept still gates the write to watched source).
   if (!isGatedTool(toolName)) {
+    return { behavior: "allow", updatedInput: input };
+  }
+
+  if (activeAutoApprove) {
     return { behavior: "allow", updatedInput: input };
   }
 
@@ -215,11 +228,16 @@ async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Prom
     disallowed.push(...READ_TOOLS);
   }
 
+  activeAutoApprove = policy.autoApprove;
+  const abort = new AbortController();
+  activeAbort = abort;
+
   const options: Options = {
     mcpServers: {
       [MCP_SERVER_NAME]: { type: "http", url: WORKBENCH_MCP_URL },
     },
     canUseTool,
+    abortController: abort,
     permissionMode: "default",
     cwd: workspaceCwd,
     disallowedTools: disallowed,
@@ -247,13 +265,20 @@ async function runTurn(prompt: string, turnId: string, policy: ToolPolicy): Prom
       handleMessage(message, turnId);
     }
   } catch (error) {
-    bus.emit({
-      type: "error",
-      turnId,
-      message: error instanceof Error ? error.message : String(error),
-    });
+    if (abort.signal.aborted) {
+      // Operator hit Stop — a clean interruption, not an error.
+      bus.emit({ type: "turn_finished", turnId, stopReason: "interrupted" });
+    } else {
+      bus.emit({
+        type: "error",
+        turnId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   } finally {
     activeTurn = null;
+    activeAbort = null;
+    activeAutoApprove = false;
   }
 }
 
@@ -364,11 +389,21 @@ app.post("/prompt", (req, res) => {
     allowNativeReads: raw.allowNativeReads !== false,
     strictMcpConfig: raw.strictMcpConfig !== false,
     enabledTools: Array.isArray(raw.enabledTools) ? raw.enabledTools.map(String) : [],
+    autoApprove: raw.autoApprove === true,
   };
   const turnId = randomUUID();
   activeTurn = turnId;
   void runTurn(prompt, turnId, policy);
   res.status(202).json({ turnId });
+});
+
+app.post("/stop", (_req, res) => {
+  if (activeAbort) {
+    activeAbort.abort();
+    res.json({ stopped: true });
+    return;
+  }
+  res.json({ stopped: false });
 });
 
 app.get("/gates", (_req, res) => {

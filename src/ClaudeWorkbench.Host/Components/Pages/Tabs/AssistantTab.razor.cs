@@ -22,18 +22,11 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private ElementReference chatInput;
     private IJSObjectReference? resizeModule;
     private string draft = string.Empty;
+    private bool autoApprove;
 
     private bool Working => Session.Status.Working;
 
     private bool HasTranscript => Session.Transcript.Count > 0;
-
-    private const string SystemEvaluationPrompt =
-        "Before doing any work, discover the live claude-workbench MCP tool surface and treat it as "
-        + "authoritative. Then explain, concisely, how you operate under this governed workflow: "
-        + "discovery (find_indexed_symbols/find_indexed_references/get_source_map) -> "
-        + "start_monitor_session(filesPlanned) -> refresh_file/new_file -> governed edit -> "
-        + "stage_candidate_for_review -> operator review -> record_diff_decision -> post-accept refresh. "
-        + "Do not mutate anything. Report any mismatch between what you expected and the live tools.";
 
     protected override void OnInitialized()
     {
@@ -50,11 +43,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         return new MarkupString(MarkdownRenderer.ToHtml(text));
     }
 
-    private void LoadSystemEvaluationPrompt()
-    {
-        draft = SystemEvaluationPrompt;
-    }
-
     private async Task SubmitAsync()
     {
         if (Working || string.IsNullOrWhiteSpace(draft))
@@ -64,7 +52,12 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
 
         string prompt = draft;
         draft = string.Empty;
-        await Session.SendAsync(prompt);
+        await Session.SendAsync(prompt, autoApprove);
+    }
+
+    private async Task StopAsync()
+    {
+        await Session.StopAsync();
     }
 
     private async Task NewThreadAsync()
@@ -74,6 +67,8 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             return;
         }
 
+        // Auto-approve is per-thread; a fresh thread starts back at the gate.
+        autoApprove = false;
         await Session.NewThreadAsync();
     }
 

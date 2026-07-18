@@ -60,7 +60,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         }
     }
 
-    public async Task SendAsync(string prompt)
+    public async Task SendAsync(string prompt, bool autoApprove)
     {
         AgentToolPolicy policy = agentSettings.Current;
         object toolPolicy = new
@@ -68,8 +68,14 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
             allowNativeReads = policy.AllowNativeReads,
             strictMcpConfig = policy.StrictMcpConfig,
             enabledTools = policy.EnabledOptionalTools.ToArray(),
+            autoApprove,
         };
         await client.PromptAsync(prompt, toolPolicy);
+    }
+
+    public async Task StopAsync()
+    {
+        await client.StopAsync();
     }
 
     public async Task NewThreadAsync()
