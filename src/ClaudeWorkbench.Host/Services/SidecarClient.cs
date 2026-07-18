@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using ClaudeWorkbench.Host.Console;
 
 namespace ClaudeWorkbench.Host.Services;
 
@@ -60,6 +62,94 @@ public sealed class SidecarClient
     public async Task PostReviewOutcomeAsync(string summary, CancellationToken cancellationToken = default)
     {
         await http.PostAsJsonAsync("/review-outcome", new { summary }, cancellationToken);
+    }
+
+    // Live usage off the sidecar's Query handle (/usage). Lenient parse — the SDK
+    // methods behind it are experimental, so any missing field just stays null.
+    public async Task<UsageSnapshot> GetUsageAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            JsonElement root = await http.GetFromJsonAsync<JsonElement>("/usage", cancellationToken);
+            JsonElement context = root.TryGetProperty("context", out JsonElement c) ? c : default;
+            JsonElement subscription = root.TryGetProperty("subscription", out JsonElement s) ? s : default;
+            bool haveContext = context.ValueKind == JsonValueKind.Object;
+            bool haveSubscription = subscription.ValueKind == JsonValueKind.Object;
+            if (!haveContext && !haveSubscription)
+            {
+                return UsageSnapshot.Empty;
+            }
+
+            double? weekly = null;
+            string? weeklyResets = null;
+            double? fiveHour = null;
+            string? fiveHourResets = null;
+            double? monthly = null;
+            if (haveSubscription && subscription.TryGetProperty("rate_limits", out JsonElement limits)
+                && limits.ValueKind == JsonValueKind.Object)
+            {
+                if (limits.TryGetProperty("seven_day", out JsonElement wk) && wk.ValueKind == JsonValueKind.Object)
+                {
+                    weekly = ReadNumber(wk, "utilization");
+                    weeklyResets = ReadString(wk, "resets_at");
+                }
+
+                if (limits.TryGetProperty("five_hour", out JsonElement fh) && fh.ValueKind == JsonValueKind.Object)
+                {
+                    fiveHour = ReadNumber(fh, "utilization");
+                    fiveHourResets = ReadString(fh, "resets_at");
+                }
+
+                if (limits.TryGetProperty("extra_usage", out JsonElement eu) && eu.ValueKind == JsonValueKind.Object)
+                {
+                    monthly = ReadNumber(eu, "utilization");
+                }
+            }
+
+            return new UsageSnapshot(
+                true,
+                ReadNumber(context, "percentage"),
+                ReadLong(context, "totalTokens"),
+                ReadLong(context, "maxTokens"),
+                ReadLong(context, "autoCompactThreshold"),
+                ReadString(subscription, "subscription_type"),
+                weekly,
+                weeklyResets,
+                fiveHour,
+                fiveHourResets,
+                monthly);
+        }
+        catch (Exception)
+        {
+            return UsageSnapshot.Empty;
+        }
+    }
+
+    private static double? ReadNumber(JsonElement element, string name)
+    {
+        return element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(name, out JsonElement value)
+            && value.ValueKind == JsonValueKind.Number
+            ? value.GetDouble()
+            : null;
+    }
+
+    private static long? ReadLong(JsonElement element, string name)
+    {
+        return element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(name, out JsonElement value)
+            && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt64()
+            : null;
+    }
+
+    private static string? ReadString(JsonElement element, string name)
+    {
+        return element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(name, out JsonElement value)
+            && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
     }
 
     private sealed record PromptResponse(string TurnId);

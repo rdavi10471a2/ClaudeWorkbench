@@ -52,6 +52,58 @@
             <div class="transcript-header">
                 <span>Chat History</span>
                 <div class="transcript-actions">
+                    <div class="usage-anchor">
+                        <RadzenButton Icon="monitoring"
+                                      Text="Usage"
+                                      ButtonStyle="ButtonStyle.Light"
+                                      Size="ButtonSize.Small"
+                                      Click="@ToggleUsageAsync" />
+                        @if (usageOpen)
+                        {
+                            <div class="usage-dropdown">
+                                @if (usage is null || !usage.Available)
+                                {
+                                    <div class="usage-empty">Usage appears once a turn has run in this thread.</div>
+                                }
+                                else
+                                {
+                                    <div class="usage-block">
+                                        <div class="usage-row"><span>Context</span><strong>@Pct(usage.ContextPercent) used</strong></div>
+                                        <div class="usage-bar"><div class="usage-bar-fill" style="width:@BarWidth(usage.ContextPercent)"></div></div>
+                                        @if (usage.FreeUntilCompactPercent is double free)
+                                        {
+                                            <div class="usage-note">@Pct(free) free until auto-compact</div>
+                                        }
+                                        @if (usage.ContextUsedTokens is long used && usage.ContextMaxTokens is long max)
+                                        {
+                                            <div class="usage-note">@used.ToString("N0") / @max.ToString("N0") tokens</div>
+                                        }
+                                    </div>
+                                    <div class="usage-block">
+                                        <div class="usage-row"><span>Weekly</span><strong>@Pct(usage.WeeklyPercent)</strong></div>
+                                        @if (usage.WeeklyResetsAt is not null)
+                                        {
+                                            <div class="usage-note">resets @Reset(usage.WeeklyResetsAt)</div>
+                                        }
+                                        <div class="usage-row"><span>5-hour</span><strong>@Pct(usage.FiveHourPercent)</strong></div>
+                                        @if (usage.FiveHourResetsAt is not null)
+                                        {
+                                            <div class="usage-note">resets @Reset(usage.FiveHourResetsAt)</div>
+                                        }
+                                        @if (usage.MonthlyPercent is not null)
+                                        {
+                                            <div class="usage-row"><span>Monthly overage</span><strong>@Pct(usage.MonthlyPercent)</strong></div>
+                                        }
+                                        @if (usage.PlanType is not null)
+                                        {
+                                            <div class="usage-note">plan: @usage.PlanType</div>
+                                        }
+                                    </div>
+                                }
+                                <button class="usage-refresh" type="button" @onclick="RefreshUsageAsync">Refresh</button>
+                            </div>
+                        }
+                    </div>
                     <RadzenButton Icon="add_comment"
                                   Text="New Thread"
                                   ButtonStyle="ButtonStyle.Light"

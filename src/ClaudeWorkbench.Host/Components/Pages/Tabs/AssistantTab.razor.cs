@@ -23,6 +23,9 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private IJSObjectReference? resizeModule;
     private string draft = string.Empty;
     private bool autoApprove;
+    private bool usageOpen;
+    private bool wasWorking;
+    private UsageSnapshot? usage;
 
     private bool Working => Session.Status.Working;
 
@@ -35,7 +38,69 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
 
     private void OnChanged()
     {
-        InvokeAsync(StateHasChanged);
+        InvokeAsync(async () =>
+        {
+            bool working = Session.Status.Working;
+            // Refresh usage when a turn just finished (if the panel is open).
+            if (wasWorking && !working && usageOpen)
+            {
+                usage = await Session.GetUsageAsync();
+            }
+
+            wasWorking = working;
+            StateHasChanged();
+        });
+    }
+
+    private async Task ToggleUsageAsync()
+    {
+        usageOpen = !usageOpen;
+        if (usageOpen)
+        {
+            await RefreshUsageAsync();
+        }
+    }
+
+    private async Task RefreshUsageAsync()
+    {
+        usage = await Session.GetUsageAsync();
+        StateHasChanged();
+    }
+
+    private static string Pct(double? value)
+    {
+        return value is double d ? $"{d:0}%" : "—";
+    }
+
+    private static string BarWidth(double? value)
+    {
+        return value is double d ? $"{Math.Clamp(d, 0, 100):0}%" : "0%";
+    }
+
+    private static string Reset(string iso)
+    {
+        if (DateTimeOffset.TryParse(iso, out DateTimeOffset when))
+        {
+            TimeSpan delta = when - DateTimeOffset.UtcNow;
+            if (delta <= TimeSpan.Zero)
+            {
+                return "soon";
+            }
+
+            if (delta.TotalDays >= 1)
+            {
+                return $"in {(int)delta.TotalDays}d {delta.Hours}h";
+            }
+
+            if (delta.TotalHours >= 1)
+            {
+                return $"in {(int)delta.TotalHours}h {delta.Minutes}m";
+            }
+
+            return $"in {delta.Minutes}m";
+        }
+
+        return iso;
     }
 
     private static MarkupString RenderMarkdown(string text)

@@ -428,6 +428,36 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Live token/context + subscription usage, read straight off the Query handle.
+// Both methods are experimental in the SDK (guarded); null until a thread exists.
+app.get("/usage", async (_req, res) => {
+  const q = activeQuery as unknown as {
+    getContextUsage?: () => Promise<unknown>;
+    usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>;
+  } | null;
+  if (!q) {
+    res.json({ context: null, subscription: null });
+    return;
+  }
+  let context: unknown = null;
+  let subscription: unknown = null;
+  try {
+    if (typeof q.getContextUsage === "function") {
+      context = await q.getContextUsage();
+    }
+  } catch {
+    context = null;
+  }
+  try {
+    if (typeof q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET === "function") {
+      subscription = await q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET();
+    }
+  } catch {
+    subscription = null;
+  }
+  res.json({ context, subscription });
+});
+
 app.get("/events", (_req, res) => {
   bus.addClient(res);
 });

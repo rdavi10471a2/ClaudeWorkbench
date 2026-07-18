@@ -21,6 +21,9 @@ public interface IOperatorConsole
     // Interrupt the in-flight turn.
     Task StopAsync();
 
+    // Live token/context + subscription usage off the agent's Query handle.
+    Task<UsageSnapshot> GetUsageAsync();
+
     // Start a fresh conversation thread (drops resumed context, clears the transcript).
     Task NewThreadAsync();
 }

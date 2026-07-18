@@ -78,6 +78,11 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         await client.StopAsync();
     }
 
+    public Task<UsageSnapshot> GetUsageAsync()
+    {
+        return client.GetUsageAsync();
+    }
+
     public async Task NewThreadAsync()
     {
         await client.NewThreadAsync();
