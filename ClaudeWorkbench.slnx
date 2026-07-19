@@ -9,6 +9,7 @@
   <Project Path="src/AIMonitor.Runtime/AIMonitor.Runtime.csproj" />
   <Project Path="src/AIMonitor.Workflow/AIMonitor.Workflow.csproj" />
   <Project Path="src/ClaudeWorkbench.Host/ClaudeWorkbench.Host.csproj" />
+  <Project Path="src/ClaudeWorkbench.Launcher/ClaudeWorkbench.Launcher.csproj" />
   <Project Path="tests/integration/AIMonitor.Integration.Tests/AIMonitor.Integration.Tests.csproj" />
   <Project Path="tests/smoke/AIMonitor.LanguageCorpusSmokeTests/AIMonitor.LanguageCorpusSmokeTests.csproj" />
   <Project Path="tests/smoke/AIMonitor.SmokeTests/AIMonitor.SmokeTests.csproj" />
