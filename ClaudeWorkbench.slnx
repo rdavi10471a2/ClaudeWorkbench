@@ -20,4 +20,5 @@
   <Project Path="tests/unit/AIMonitor.MSBuild.Tests/AIMonitor.MSBuild.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Runtime.Tests/AIMonitor.Runtime.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Workflow.Tests/AIMonitor.Workflow.Tests.csproj" />
+  <Project Path="tests/unit/ClaudeWorkbench.Host.Tests/ClaudeWorkbench.Host.Tests.csproj" />
 </Solution>
