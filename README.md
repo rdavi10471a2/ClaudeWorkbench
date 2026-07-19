@@ -8,6 +8,15 @@ The agent proposes changes to a watched solution; every change is composed again
 
 ---
 
+## Documentation
+
+Full docs live in **[`docs/`](docs/)** — start at **[docs/README.md](docs/README.md)** for a
+guided reading path and a system diagram. Highlights:
+[Architecture](docs/architecture/Architecture.md) ·
+[Components](docs/components/) (one page per module, with Mermaid diagrams) ·
+[User Guide](docs/guide/) ·
+[Decisions](docs/decisions/).
+
 ## Why this exists
 
 Two proven pieces, recombined, with the backend swapped to Claude:
@@ -41,10 +50,10 @@ Blazor host (ClaudeWorkbench)  ── spawns ──►  claude-sidecar (Node, Cl
 ```
 
 Details, including exactly how the sidecar registers the MCP surface and the logging model, are in
-**[docs/Architecture.md](docs/Architecture.md)**. Short version:
+**[docs/architecture/Architecture.md](docs/architecture/Architecture.md)** (or the guided **[docs/](docs/)** index). Short version:
 
 - **MCP binding** — the sidecar is the MCP client; the Agent SDK connects to the engine's MCP server via its `mcpServers` option (recommended: the Blazor host serves MCP in-proc over HTTP; the sidecar registers a URL). Tools appear to the agent as `mcp__claude-workbench__*` (the HTTP host advertises `serverInfo.name` `claude-workbench` on port `6100`, distinct from the real `ai-monitor`). No proxy or bridge in the path.
-- **Auth** — **subscription verified for personal use** (see [docs/Architecture.md](docs/Architecture.md#auth--subscription-verified-for-personal-use)). A full turn ran headless with no `ANTHROPIC_API_KEY`: the SDK inherits the local `claude` CLI's cached subscription login. `ANTHROPIC_API_KEY` (API billing) is only needed to ship to other people, not to run this yourself.
+- **Auth** — **subscription verified for personal use** (see [the guide](docs/guide/settings-and-usage.md#auth)). A full turn ran headless with no `ANTHROPIC_API_KEY`: the SDK inherits the local `claude` CLI's cached subscription login. `ANTHROPIC_API_KEY` (API billing) is only needed to ship to other people, not to run this yourself.
 - **Logging** — the engine logs to a JSON-lines file (and raises in-proc events for a live view); MCP-call telemetry is re-emitted from the sidecar's `tool_use`/`tool_result` events and hooks, not sniffed off a pipe.
 - **Single-start + role card** — the host **launches and supervises the sidecar** as a child process (`SidecarProcessHost`; skips if a sidecar is already on the port, kills it on shutdown; override via `Sidecar:AutoStart` / `Sidecar:NodeExecutable` / `Sidecar:Directory`). The agent is oriented by an injected **governed role card** (SDK `systemPrompt`, `preset: claude_code` + append) so it knows the read-only + staging contract from turn one instead of discovering it by hitting a deny. There is **no `CLAUDE.md`** (isolation via `settingSources: []`); all guidance is injected programmatically.
 - **Agent workspace (CWD & tools)** — the agent's working directory is the **watched solution's folder** (auto-derived from the host's config, so it tracks whatever `WatchedSolutionPath` points at). Tool access is **deny-by-default**: the only native tools allowed are the read-only `Read`/`Grep`/`Glob` (+ `ToolSearch`/`TodoWrite`); the `claude-workbench` MCP tools are allowed (mutations paused at the operator gate); **everything else is denied** — `PowerShell`, `Bash`, `Write`/`Edit`, `Agent`, `Workflow`, `WebFetch`, and any future/unknown tool. So the watched workspace is read-only to the agent and every change must go through the governed MCP (`submit_file` → stage → operator review). Native read tools are optional **per turn** (`POST /prompt { readTools: false }`) to force *all* access — reads included — through the MCP surface. `strictMcpConfig: true` exposes only `claude-workbench`; the machine's account/user MCP connectors (e.g. claude.ai connectors) do **not** leak in.
@@ -68,7 +77,11 @@ tests/
   integration/           end-to-end over the CLI + engine
   smoke/                 console smoke runners (built, run via CLI/manually — not dotnet test)
 samples/watched-solutions/   fixtures the ClaudeSmokes/integration tests operate on
-docs/                    Architecture.md and design notes
+docs/                    developer + user docs — start at docs/README.md
+  architecture/            C4 architecture, the governed loop, the two gates
+  components/              one page per module (C4 component level, Mermaid)
+  guide/                   user help (getting-started, merge-review, git-panel, …)
+  decisions/               ADRs (why the gate is code, two-process, argv git, …)
 sidecar/                 Node/TS Claude Agent SDK driver: canUseTool operator gate,
                          neutral event contract, SSE stream to the host (events/gate/bus/index)
 ```
