@@ -93,29 +93,9 @@ public sealed partial class AIMonitorTools
         return builder.ToString();
     }
 
-    private string ComposeStagingGuide()
-    {
-        StringBuilder builder = new();
-        builder.AppendLine("# Staging Guide (ClaudeWorkbench)");
-        builder.AppendLine();
-        builder.AppendLine("Use this sequence for watched-project edits. You never write watched source directly; you build and stage a candidate, and the operator reviews and accepts it in the in-app Merge Review dialog.");
-        builder.AppendLine();
-        builder.AppendLine("1. Check `get_self_check`, `get_workflow_status`, and `get_monitor_status` when starting a session.");
-        builder.AppendLine("2. Call `start_monitor_session(filesPlanned: [...])` before editing. Include every watched file the session intends to mutate, even for one-file edits, and include `owningProjectPath` when the index cannot prove a single owner.");
-        builder.AppendLine("3. Pass that same `sessionId` to `refresh_file`, `new_file`, every mutation tool, and `stage_candidate_for_review`.");
-        builder.AppendLine("4. For existing files, call `refresh_file`. For future watched files, call `new_file`.");
-        builder.AppendLine("5. Edit only the monitor-owned Working candidate with `submit_file`, text/span tools, or Roslyn typed edit tools.");
-        builder.AppendLine("6. Stage every planned file with `stage_candidate_for_review(path, sessionId)`, then STOP.");
-        builder.AppendLine("7. The operator reviews the staged diff in the ClaudeWorkbench Merge Review dialog and accepts or rejects each file. Do NOT call `record_diff_decision` — review, the accept-time write to watched source, and the decision record are host/operator actions in this environment.");
-        builder.AppendLine("8. After the operator accepts, that file has been written to the watched solution. Call `refresh_file` before editing the same file again.");
-        builder.AppendLine();
-        builder.AppendLine("Notes:");
-        builder.AppendLine();
-        builder.AppendLine("- `blocked`, `dirty-unexpected`, `superseded`, missing Working files, and stale hashes require recovery before follow-up edits.");
-        builder.AppendLine("- Pre-merge (GATE 1) validation and the full build/index (GATE 2) validation are run by the host around the operator's accept, not by you.");
-        builder.AppendLine("- The operator's Accept in the Merge Review dialog is the only path candidates reach watched source. Never try to copy a candidate into watched source yourself.");
-        return builder.ToString();
-    }
+    // The staging procedure lives in AgentGuidance so the sidecar's injected card and this
+    // MCP tool cannot drift apart. Do not inline the text here again.
+    private static string ComposeStagingGuide() => AgentGuidance.StagingGuide;
 
     private AIMonitorGuardrailCheck[] BuildSelfCheckGuardrails()
     {

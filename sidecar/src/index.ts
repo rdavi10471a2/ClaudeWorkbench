@@ -56,6 +56,73 @@ async function resolveWorkspaceCwd(): Promise<void> {
 // its read-only + staging-workflow contract from turn one (instead of discovering
 // it by hitting a deny). This is the programmatic skill-card seam: no CLAUDE.md is
 // loaded (settingSources: []), so authored guidance is injected here.
+let stagingGuide: string | undefined;
+let stagingGuideWarned = false;
+
+// The staging procedure is authored ONCE, in C# (AgentGuidance.StagingGuide), and served at
+// GET /guidance/staging. It used to be restated as literal steps in the card below, which
+// drifted: edf83c8 reworded the C# guide and left this copy describing a review path that no
+// longer existed, for weeks.
+//
+// The host starts this process, so it is normally already listening; 60s of retries covers a
+// cold start on a big solution. On failure we warn and fall back to POINTING at the tool
+// rather than re-inlining the steps — a stale copy is the exact bug being removed here.
+async function resolveStagingGuide(timeoutMs = 60_000): Promise<void> {
+  if (stagingGuide) {
+    return;
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${HOST_BASE}/guidance/staging`);
+      if (response.ok) {
+        const text = (await response.text()).trim();
+        if (text) {
+          stagingGuide = text;
+          // Both channels on purpose: host.log is where a post-mortem looks (and the failure
+          // path already writes there via console.warn), the event bus is where the operator
+          // looks live. The bus replays history to late-connecting clients, so the host still
+          // sees this even though it subscribes to /events after startup.
+          console.log(
+            `[sidecar] staging guide loaded from ${HOST_BASE} (${text.split("\n").length} lines).`,
+          );
+          // Say so in the operator's transcript, not just the log. Whether the agent's card
+          // carries the real procedure or the fallback pointer changes how it behaves, so it
+          // must be observable without reading host.log.
+          bus.emit({
+            type: "assistant_text",
+            turnId: "startup",
+            text: `[governance] Staging guide loaded from the host (${text.split("\n").length} lines). The agent's card carries the host-authored procedure.`,
+          });
+          return;
+        }
+      }
+    } catch {
+      // host not listening yet
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  if (!stagingGuideWarned) {
+    stagingGuideWarned = true;
+    console.warn(
+      `[sidecar] staging guide not available from ${HOST_BASE} after ${timeoutMs / 1000}s; ` +
+        "the card will tell the agent to call get_staging_guide itself.",
+    );
+    // Surface the degraded card to the operator too — a warning only in host.log is a
+    // warning nobody reads.
+    bus.emit({
+      type: "assistant_text",
+      turnId: "startup",
+      text:
+        `[governance] WARNING: the staging guide could not be loaded from the host after ${timeoutMs / 1000}s. ` +
+        "The agent's card falls back to telling it to call get_staging_guide itself, so the workflow still holds — but check the host is healthy.",
+    });
+  }
+}
+
 function buildGovernanceCard(): string {
   const project = watchedSolutionPath ?? workspaceCwd ?? "(resolving)";
   return [
@@ -66,12 +133,12 @@ function buildGovernanceCard(): string {
     "- You have NO Write, Edit, MultiEdit, NotebookEdit, or shell (Bash/PowerShell) tools, and you never will. Never claim you can write files to disk, and do not ask for those tools.",
     "- Inspect the workspace with Read, Grep, Glob and the claude-workbench MCP tools. Verify workspace facts with a tool before stating them — never answer from memory or infer from the tool list.",
     "- EVERY change to watched source goes through the AIMonitor staging workflow. The operator's Accept in the Merge Review dialog is the ONLY path that writes watched source; you cannot bypass it.",
-    "- When asked to change code, call get_staging_guide, then:",
-    "  1. start_monitor_session with filesPlanned listing every file you intend to change.",
-    "  2. refresh_file (existing file) or new_file (future file) for each planned file.",
-    "  3. Edit the monitor-owned Working candidate with the typed tools (submit_symbol, add_method, add_property, replace_span_in_file, replace_text_in_file, submit_file). For C# symbol edits, call get_source_map (selector mode) first.",
-    "  4. stage_candidate_for_review for each file.",
-    "  5. STOP and tell the operator it is staged for review. Do NOT call record_diff_decision — the operator drives the merge in the UI.",
+    // The procedure itself comes from the host (AgentGuidance.StagingGuide) so there is one
+    // copy of it in the product. Everything else in this card is a fact about the SDK
+    // environment the sidecar controls, which the host cannot know.
+    stagingGuide
+      ? `- When asked to change code, follow this workflow exactly:\n\n${stagingGuide}`
+      : "- When asked to change code, call get_staging_guide FIRST and follow it exactly. Do NOT call record_diff_decision — the operator drives the merge in the UI.",
     "- The task board is OPTIONAL context, not a per-turn step. Work is free-flowing by default: do NOT tie a turn to a task automatically. ONLY when the operator's request clearly concerns a board task should you call get_current_task for that task's context and record progress with update_agent_notes. For ad-hoc requests, do not load or write task notes, and never fold an unrelated request into the Active task.",
     "- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.",
   ].join("\n");
@@ -116,6 +183,11 @@ function filePathOf(input: unknown): string | undefined {
 
 // --- wiring -------------------------------------------------------------
 const bus = new EventBus();
+
+// Start fetching the host-authored staging procedure now so the first turn does not pay the
+// wait. Deliberately AFTER `bus` exists: resolveStagingGuide reports success/failure onto it,
+// and kicking it off earlier would hit the temporal dead zone.
+void resolveStagingGuide();
 const gate = new OperatorGate();
 let activeTurn: string | null = null;
 // Merge-review outcomes (build + index results) posted by the host after an accept,
@@ -310,6 +382,8 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
     return;
   }
   await resolveWorkspaceCwd();
+  // Must complete before buildGovernanceCard(): the card embeds the host-authored procedure.
+  await resolveStagingGuide();
 
   const enabled = new Set(policy.enabledTools);
   activeAllowedNative = new Set<string>([
