@@ -62,11 +62,17 @@ C:\ClaudeWorkBenchLive\
     host\       ClaudeWorkbench.Host.exe (the Blazor app) + config\
     sidecar\    dist\index.js + production node_modules
     launcher\   ClaudeWorkbench.Launcher.exe
+    samples\    CalculatorSample — a small watched solution to try
     runtime\    created on first Start: one folder per workspace
     ClaudeWorkbench Launcher.lnk
 ```
 
 plus a **Desktop shortcut**. Double-click either one; there is nothing else to configure.
+
+On a **first run with no state**, the Launcher seeds the bundled sample as a workspace, so there
+is a row to Start immediately instead of having to go find a solution. Remove it and it stays
+removed (`SampleSeeded` is persisted). The sample lives in `samples\`, deliberately **not** in
+`runtime\` — that folder is disposable per-workspace state and is meant to be safe to delete.
 
 ### Updating an install
 
@@ -144,7 +150,7 @@ committed sample config uses relative paths and works in any checkout.
 
 | Needs | Why |
 |---|---|
-| **.NET 10 runtime** | The publish is framework-dependent. For a machine with no .NET, add `--self-contained -r win-x64` to the `dotnet publish` calls in the script (roughly +150 MB). |
+| **.NET 10 SDK** | Two separate reasons. The publish is framework-dependent, so it needs the *runtime* to start — but indexing also calls `MSBuildLocator.RegisterDefaults()`, which needs **MSBuild and the Roslyn toolset that ship with the SDK**. Publishing `--self-contained` removes the runtime requirement but **not** this one: without the SDK the app starts and then fails to index a solution. |
 | **Node.js** on PATH | The sidecar runs the Claude Agent SDK, which is Node-only. |
 | **A Claude login** | A subscription login cached in `~\.claude` runs it with no API key; `ANTHROPIC_API_KEY` is only needed to ship to other people. See [Settings & Usage](settings-and-usage.md#auth). |
 | **Free ports from 6100 / 6110** | Each instance takes a host+sidecar pair; the Launcher picks free ones per instance. |
@@ -162,8 +168,8 @@ and indexes; they rebuild on first Start.
 
 What does **not** travel in the folder:
 
-- **The .NET 10 runtime** and **Node.js** — install both on the target, or republish
-  `-SelfContained` for .NET (see the table above).
+- **The .NET 10 SDK** and **Node.js** — install both on the target. Publishing self-contained
+  removes the *runtime* requirement but not the SDK one (indexing needs MSBuild).
 - **The Claude login** (`~\.claude`) — sign in on the target.
 
 The **workspace list travels** — `launcher.json` sits at the install root. Watched solutions

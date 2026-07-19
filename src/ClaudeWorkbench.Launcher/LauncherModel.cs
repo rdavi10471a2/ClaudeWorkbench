@@ -48,6 +48,9 @@ public sealed class LauncherState
     // copied out of the workbench can still resolve them.
     public string WorkbenchRootHint { get; set; } = string.Empty;
 
+    // Set once the bundled sample has been offered, so removing it makes it stay removed.
+    public bool SampleSeeded { get; set; }
+
     public BrowserKind Browser { get; set; } = BrowserKind.Chrome;
 
     public string CustomBrowserPath { get; set; } = string.Empty;
@@ -377,12 +380,54 @@ public sealed class LauncherState
         }
     }
 
+    // First run on a published install: offer the bundled sample so there is something to Start
+    // without hunting for a solution first. Done once — SampleSeeded is persisted, so removing
+    // the row makes it stay removed.
+    private void SeedSampleWorkspace()
+    {
+        if (SampleSeeded || Workspaces.Count > 0 || WorkbenchRoot is null)
+        {
+            return;
+        }
+
+        SampleSeeded = true;
+        string samples = Path.Combine(WorkbenchRoot, "samples");
+        if (!Directory.Exists(samples))
+        {
+            return;
+        }
+
+        try
+        {
+            string? solution = Directory
+                .EnumerateFiles(samples, "*.sln*", SearchOption.AllDirectories)
+                .FirstOrDefault(path => path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase));
+            if (solution is null)
+            {
+                return;
+            }
+
+            Workspaces.Add(new WorkspaceEntry
+            {
+                Name = Path.GetFileNameWithoutExtension(solution),
+                SolutionPath = solution,
+            });
+            Save();
+        }
+        catch
+        {
+            // A missing or unreadable samples folder just means no seeded workspace.
+        }
+    }
+
     private LauncherState ToPortable() => new()
     {
         HostExePath = Portable(HostExePath),
         SidecarDirectory = Portable(SidecarDirectory),
         InstancesRoot = Portable(InstancesRoot),
         WorkbenchRootHint = WorkbenchRoot ?? WorkbenchRootHint,
+        SampleSeeded = SampleSeeded,
         Browser = Browser,
         CustomBrowserPath = Portable(CustomBrowserPath),
         Workspaces = Workspaces.Select(w => new WorkspaceEntry
@@ -410,6 +455,8 @@ public sealed class LauncherState
         {
             SidecarDirectory = GuessSidecarDir() ?? SidecarDirectory;
         }
+
+        SeedSampleWorkspace();
 
         // An earlier build stored <workbench>\runtime-launcher as an explicit root. Drop it so
         // it reverts to the default and tracks the workbench again.

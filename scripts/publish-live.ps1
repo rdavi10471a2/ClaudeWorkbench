@@ -153,6 +153,21 @@ if (-not (Test-Path (Join-Path $sidecarOut 'dist\index.js'))) {
     throw "Sidecar publish incomplete: $sidecarOut\dist\index.js is missing."
 }
 
+# --- 3b. Sample workspace -------------------------------------------------------------
+# A small watched solution so a fresh install has something to open on first run. It goes in
+# samples\, NOT runtime\ - runtime\ is disposable per-workspace state and gets cleared.
+$sampleSource = Join-Path $repoRoot 'samples\watched-solutions\CalculatorSample'
+$sampleOut = Join-Path $Destination 'samples\CalculatorSample'
+if (Test-Path $sampleSource) {
+    Write-Host '  copying CalculatorSample workspace...'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $sampleOut) | Out-Null
+    if (Test-Path $sampleOut) { Remove-Item $sampleOut -Recurse -Force }
+    Copy-Item $sampleSource $sampleOut -Recurse -Force
+    # Never ship the sample's own build output.
+    Get-ChildItem $sampleOut -Directory -Recurse -Include 'bin', 'obj' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # --- 4. Shortcuts ---------------------------------------------------------------------
 Write-Host ''
 Write-Host '[4/4] Creating shortcut...' -ForegroundColor Cyan
@@ -191,6 +206,6 @@ Write-Host "  launcher  $launcherOut"
 Write-Host "  runtime   $(Join-Path $Destination 'runtime')  (per-workspace state, created on first Start)"
 Write-Host ''
 Write-Host 'This publish is framework-dependent. A target machine also needs:' -ForegroundColor Yellow
-Write-Host '  - .NET 10 runtime   (or republish with --self-contained -r win-x64)'
+Write-Host '  - .NET 10 SDK       (the runtime to start; MSBuild/Roslyn from the SDK to index)'
 Write-Host '  - Node.js on PATH   (the claude CLI itself ships inside the sidecar)'
 Write-Host '  - a Claude login in ~\.claude'

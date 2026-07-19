@@ -129,6 +129,7 @@ C:\ClaudeWorkBenchLive\
   host\       ClaudeWorkbench.Host.exe + config\
   sidecar\    dist\index.js + production node_modules
   launcher\   ClaudeWorkbench.Launcher.exe
+  samples\    CalculatorSample — seeded as a workspace on first run, so there's something to Start
   runtime\    one folder per workspace, created on first Start
 ```
 
@@ -142,8 +143,8 @@ to the workbench root and stale ones are re-guessed. Re-running the script updat
 **without touching `runtime\`**, so workspaces and indexes survive — just close the Launcher
 first. Switches: `-Destination`, `-Configuration`, `-Clean`, `-NoShortcut`.
 
-Targets need the **.NET 10 runtime**, **Node.js** on PATH, and a **Claude login**; the `claude`
-CLI ships inside the Agent SDK package. Full detail, including the path-resolution rules and the
+Targets need the **.NET 10 SDK** (the runtime to start, plus MSBuild/Roslyn to index a solution),
+**Node.js** on PATH, and a **Claude login**; the `claude` CLI ships inside the Agent SDK package. Full detail, including the path-resolution rules and the
 build-machine requirements: **[docs/guide/deploying.md](docs/guide/deploying.md)**.
 
 ## Build & test
