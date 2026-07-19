@@ -27,7 +27,7 @@ else
                 <span class="wb-dot @(Session.Status.Connected ? "up" : "down")"></span>
                 @(Session.Status.Connected ? "Claude available" : "Claude unavailable")
             </span>
-            <a class="wb-about-link" href="/about" target="_blank" rel="noopener" title="What is best in life?">About</a>
+            <button type="button" class="wb-about-link" @onclick="@(() => aboutOpen = true)" title="What is best in life?">About</button>
             <RadzenButton Icon="settings"
                           Text="Settings"
                           ButtonStyle="ButtonStyle.Light"
@@ -86,6 +86,17 @@ else
     </main>
 
     <AgentSettingsDialog Visible="@settingsOpen" OnClose="@(() => settingsOpen = false)" />
+
+    @if (aboutOpen)
+    {
+        <div class="wb-about-backdrop" @onclick="@(() => aboutOpen = false)">
+            <div class="wb-about-frame" @onclick:stopPropagation="true">
+                <button type="button" class="wb-about-close" @onclick="@(() => aboutOpen = false)" aria-label="Close">&times;</button>
+                <img class="wb-about-img" src="images/about-poster.png"
+                     alt="What is best in life? — ClaudeWorkbench, governed barbarian" />
+            </div>
+        </div>
+    }
 
     @if (workspacePickerOpen)
     {

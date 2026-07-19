@@ -52,10 +52,13 @@
 }
 
 .wb-about-link {
+    font-family: inherit;
     font-size: 0.82rem;
     font-weight: 600;
     color: #516274;
-    text-decoration: none;
+    border: none;
+    background: transparent;
+    cursor: pointer;
     padding: 6px 10px;
     border-radius: 6px;
     letter-spacing: 0.02em;
@@ -65,6 +68,60 @@
 .wb-about-link:hover {
     color: #db4b2b;
     background: rgba(219, 75, 43, 0.08);
+}
+
+/* About poster popup */
+.wb-about-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background: rgba(8, 7, 6, 0.82);
+}
+
+.wb-about-frame {
+    position: relative;
+    display: flex;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.wb-about-img {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: calc(100vh - 56px);
+    border-radius: 6px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.8);
+}
+
+.wb-about-close {
+    position: absolute;
+    top: -14px;
+    right: -14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(203, 162, 75, 0.5);
+    background: #1a1612;
+    color: #ece5d6;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+
+.wb-about-close:hover {
+    color: #ffffff;
+    border-color: #db4b2b;
+    background: #241c15;
 }
 
 .command-bar h1 {
