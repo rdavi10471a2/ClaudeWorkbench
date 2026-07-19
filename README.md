@@ -67,13 +67,14 @@ src/
   AIMonitor.MSBuild/     MSBuild/Roslyn project + document loading
   AIMonitor.Data/        SQLite solution index store
   AIMonitor.Workflow/    edit sessions, staging, review gates
-  AIMonitor.Runtime/     runtime state / orchestration
   AIMonitor.Indexing/    Roslyn semantic extraction → index
   AIMonitor.McpServer/   MCP tool surface (governed discovery + mutation + review) — stdio console host
-  AIMonitor.Cli/         engine-side console runner (not in the runtime path; runs the non-unit suites)
+  AIMonitor.Cli/         engine-side console runner — TEST-ONLY, and it calls the engine
+                         DIRECTLY, not through MCP (see docs/components/AIMonitor.Cli.md)
   ClaudeWorkbench.Host/  in-proc ASP.NET host: same tool surface over Streamable HTTP (:6100) + /health
   ClaudeWorkbench.Launcher/  WinForms control panel: one process per workspace, Job Object lifetime
 scripts/                 publish-live.ps1 — Release build of host+sidecar+launcher into one folder
+                         (also runs automatically after any Release build of the solution)
 tests/
   unit/                  xUnit per-layer tests
   integration/           end-to-end over the CLI + engine
@@ -158,16 +159,22 @@ The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test s
 
 | Layer | Tests |
 |---|---|
-| Core · Logging · Runtime | 7 · 3 · 2 |
+| Core · Logging | 6 · 3 |
 | MSBuild · Indexing | 6 · 6 |
-| Workflow (incl. ClaudeSmokes over `samples/`) | 42 |
+| Workflow (incl. ClaudeSmokes over `samples/`) | 46 |
 | Data | 27 pass · 1 skipped |
-| Integration | 67 pass · 2 skipped |
+| ClaudeWorkbench.Host | 15 |
+| Integration | 66 pass · 1 skipped |
+| **Total** | **175 pass · 2 skipped · 0 failed** |
 
 - **One `[Fact(Skip)]`** (Data): the `razor-generated:*` reference-row assertion is environment-dependent — those rows only index when the host Roslyn matches the SDK's Razor source generator. The `razor:*` code-behind path stays covered. (Document-don't-pin.)
-- **Skipped in Integration**: a by-design skip carried over from AIMonitor, plus
-  `Mcp_tool_manifest_and_staging_guide_are_current_agent_guidance` — it pins agent-guidance
-  *wording* rather than behavior, so it goes stale on every legitimate reword.
+- **Skipped in Integration**: one by-design skip carried over from AIMonitor.
+- **No `AIMonitor.Runtime` row.** That project held the external diff-tool launcher; retiring
+  WinMerge emptied it, so the project and its two tests were deleted — they covered only the
+  removed machinery. The CLI tests that also drove it were *converted* to assert
+  `PreMergeValidationService` directly rather than dropped, since the validation half survives.
+- **Integration runs ~8m30s** on an otherwise idle machine (real MSBuild/Roslyn loads and real
+  `dotnet build` per gate test). It degrades sharply under contention — budget accordingly.
 - **Smoke runners** (`ToolSmokeTests`, `LanguageCorpusSmokeTests`, `SmokeTests`) are console `Main` programs — they build but are executed via the CLI/manually, not `dotnet test`.
 
 ## Roadmap

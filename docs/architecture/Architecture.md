@@ -56,7 +56,7 @@ flowchart TB
         direction TB
         ui["Blazor operator console<br/>Tasks (disabled) · Workbench · Source · Git · Activity"]
         mcp[claude-workbench MCP server<br/>Streamable HTTP /mcp · ~71 tools]
-        engine[AIMonitor.* engine<br/>Core · Logging · MSBuild · Data · Indexing · Workflow · Runtime · McpServer]
+        engine[AIMonitor.* engine<br/>Core · Logging · MSBuild · Data · Indexing · Workflow · McpServer]
         rev[EngineReviewWorkflow<br/>the ONLY watched-source writer]
         git[GitService<br/>argv git CLI, no shell]
     end
@@ -251,7 +251,6 @@ flowchart TD
     Data[AIMonitor.Data<br/>SQLite index store + queries]
     Indexing[AIMonitor.Indexing<br/>rebuild/refresh orchestration]
     Workflow[AIMonitor.Workflow<br/>edit sessions · staging · gates]
-    Runtime[AIMonitor.Runtime<br/>GATE-1 launch · legacy WinMerge]
     Mcp[AIMonitor.McpServer<br/>the governed MCP tool surface]
     Cli[AIMonitor.Cli<br/>engine-side console runner]
     Host[ClaudeWorkbench.Host<br/>Blazor + MCP HTTP + sidecar]
@@ -262,7 +261,6 @@ flowchart TD
     Core --> Workflow
     Data --> Workflow
     Indexing --> Workflow
-    Workflow --> Runtime
     Workflow --> Mcp
     Indexing --> Mcp
     Data --> Mcp

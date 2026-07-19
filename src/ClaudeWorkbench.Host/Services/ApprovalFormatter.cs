@@ -188,7 +188,6 @@ public static class ApprovalFormatter
             "remove_using" => "Remove a using directive",
             "set_type_partial" => "Make a type partial",
             "stage_candidate_for_review" => "Stage this file for your review",
-            "launch_staged_diff" => "Open the staged diff for review",
             "record_diff_decision" => "Record a review decision",
             "start_monitor_session" => "Start a governed edit session",
             _ => Humanize(tool),

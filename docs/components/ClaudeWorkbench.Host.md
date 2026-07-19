@@ -2,7 +2,7 @@
 
 > The single .NET process that fuses the AIMonitor engine, the claude-workbench MCP tool surface, the Blazor operator console, and a supervised Node sidecar into one governed workbench — and is the only code that ever writes watched source.
 
-**Project:** `src/ClaudeWorkbench.Host/ClaudeWorkbench.Host.csproj` (`Microsoft.NET.Sdk.Web`, `net10.0`) · **Depends on:** every engine project — `AIMonitor.Core`, `AIMonitor.Logging`, `AIMonitor.Data`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `AIMonitor.Indexing`, `AIMonitor.Runtime`, `AIMonitor.McpServer` (plus `ModelContextProtocol.AspNetCore`, `Radzen.Blazor`, `DiffPlex`, `Markdig`, `Microsoft.Data.Sqlite`) · **Serves:** MCP over Streamable HTTP at `/mcp`, the Blazor UI, and a `/health` probe; launches and supervises the sidecar.
+**Project:** `src/ClaudeWorkbench.Host/ClaudeWorkbench.Host.csproj` (`Microsoft.NET.Sdk.Web`, `net10.0`) · **Depends on:** every engine project — `AIMonitor.Core`, `AIMonitor.Logging`, `AIMonitor.Data`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `AIMonitor.Indexing`, `AIMonitor.McpServer` (plus `ModelContextProtocol.AspNetCore`, `Radzen.Blazor`, `DiffPlex`, `Markdig`, `Microsoft.Data.Sqlite`) · **Serves:** MCP over Streamable HTTP at `/mcp`, the Blazor UI, and a `/health` probe; launches and supervises the sidecar.
 
 ## Purpose
 

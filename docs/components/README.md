@@ -14,7 +14,6 @@ reading, tests — and is written from the actual source.
 | [AIMonitor.Data](AIMonitor.Data.md) | persistence | SQLite solution-index store, schema, queries |
 | [AIMonitor.Indexing](AIMonitor.Indexing.md) | orchestration | Rebuild/refresh; post-accept refresh (scoped vs full) |
 | [AIMonitor.Workflow](AIMonitor.Workflow.md) | **safety core** | Edit sessions, staging, the two gates, hash integrity |
-| [AIMonitor.Runtime](AIMonitor.Runtime.md) | launch | GATE-1 launch; legacy WinMerge launcher (MCP/CLI only) |
 | [AIMonitor.McpServer](AIMonitor.McpServer.md) | surface | The governed MCP tool surface (~60 tools) |
 | [AIMonitor.Cli](AIMonitor.Cli.md) | tooling | Engine-side console runner (not in the app runtime path) |
 

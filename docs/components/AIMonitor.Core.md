@@ -2,7 +2,7 @@
 
 > The foundational settings, path-resolution, and stable-identifier layer for the AIMonitor engine — resolves where the watched solution and runtime live before any other subsystem runs.
 
-**Project:** `src/AIMonitor.Core/AIMonitor.Core.csproj` · **Depends on:** none (leaf — no `ProjectReference`, targets `net10.0` with implicit usings + nullable enabled) · **Depended on by:** `AIMonitor.Cli`, `AIMonitor.Data`, `AIMonitor.Indexing`, `AIMonitor.Logging`, `AIMonitor.McpServer`, `AIMonitor.MSBuild`, `AIMonitor.Runtime`, `AIMonitor.Workflow`, `ClaudeWorkbench.Host` (and the integration/smoke/unit test projects)
+**Project:** `src/AIMonitor.Core/AIMonitor.Core.csproj` · **Depends on:** none (leaf — no `ProjectReference`, targets `net10.0` with implicit usings + nullable enabled) · **Depended on by:** `AIMonitor.Cli`, `AIMonitor.Data`, `AIMonitor.Indexing`, `AIMonitor.Logging`, `AIMonitor.McpServer`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `ClaudeWorkbench.Host` (and the integration/smoke/unit test projects)
 
 ## Purpose
 AIMonitor.Core answers one question for every other module: *"Given a repository root, where is the watched solution, where is the runtime workspace, and what stable name identifies this configuration?"* It loads and saves the `Monitor` section of `config/appsettings.json`, normalizes every configured path to a rooted absolute path, and derives deterministic per-solution workspace folders and content-addressable identifiers. It holds no engine logic, no I/O beyond settings/probe files, and no UI — it is deliberately a thin, pure foundation.
@@ -45,7 +45,7 @@ flowchart TD
     settings --> paths
     wsinfo -->|File.Exists probe| disk
     paths -->|RuntimeRoot/watched-solutions/<name>-<hash>| disk
-    settings -.->|feeds engine, Data, Indexing, Runtime, Host| downstream["Other AIMonitor.* modules"]
+    settings -.->|feeds engine, Data, Indexing, Host| downstream["Other AIMonitor.* modules"]
     ident -.->|deterministic keys| downstream
 ```
 
@@ -93,7 +93,7 @@ sequenceDiagram
 
 ## Owns / Does Not Own
 - **Owns:** the shape and resolution rules of `MonitorSettings`; parsing/serialization of the `Monitor` settings section; the default `"runtime"` runtime-root convention; derivation of per-solution workspace folder names; filesystem-safe path-segment sanitization; deterministic identifier hashing (`StableIdentifier`, workspace-path fingerprints).
-- **Does not own:** indexing, edit sessions, staging, review gates, or any MCP tool logic (those live in `AIMonitor.Indexing`, `AIMonitor.Runtime`, `AIMonitor.Workflow`, `AIMonitor.McpServer`); logging (`AIMonitor.Logging`); the actual runtime directory *contents* — it only computes the paths, it does not create the workspace tree; the Blazor Host or Node sidecar wiring.
+- **Does not own:** indexing, edit sessions, staging, review gates, or any MCP tool logic (those live in `AIMonitor.Indexing`, `AIMonitor.Workflow`, `AIMonitor.McpServer`); logging (`AIMonitor.Logging`); the actual runtime directory *contents* — it only computes the paths, it does not create the workspace tree; the Blazor Host or Node sidecar wiring.
 
 ## Gotchas & invariants
 - **RuntimeRoot resolves relative to the repository root when not absolute.** In `Load`, `RuntimeRoot` is resolved via `ResolvePath(runtimeRoot, resolvedRepositoryRoot)`, and `MonitorSettings.Create` defaults it to `Path.Combine(resolvedRepositoryRoot, "runtime")`. A rooted `RuntimeRoot` is honored as-is; a relative one is anchored to the repo root, not the current working directory.

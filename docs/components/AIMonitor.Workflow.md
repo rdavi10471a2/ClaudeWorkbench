@@ -2,7 +2,7 @@
 
 > The governed-edit engine: it owns the monitor's Working mirror, stages candidate edits as immutable hashed records, and enforces the two review gates that stand between an AI-authored change and the watched source.
 
-**Project:** `src/AIMonitor.Workflow/AIMonitor.Workflow.csproj` · **Depends on:** `AIMonitor.Core`, `Microsoft.CodeAnalysis.CSharp.Workspaces` (Roslyn 5.3.0) · **Depended on by:** `AIMonitor.McpServer`, `AIMonitor.Runtime`, `AIMonitor.Indexing`, `ClaudeWorkbench.Host`, `AIMonitor.Cli`
+**Project:** `src/AIMonitor.Workflow/AIMonitor.Workflow.csproj` · **Depends on:** `AIMonitor.Core`, `Microsoft.CodeAnalysis.CSharp.Workspaces` (Roslyn 5.3.0) · **Depended on by:** `AIMonitor.McpServer`, `AIMonitor.Indexing`, `ClaudeWorkbench.Host`, `AIMonitor.Cli`
 
 ## Purpose
 
@@ -16,7 +16,7 @@ It is responsible for:
 - **Two review gates** — pre-merge full-solution build validation (`PreMergeValidationService`) and the accept-time invariant checks + decision classification (`WorkflowEditService.RecordDecision` → `ReviewDecisionClassifier`).
 - **Hash integrity** — every state transition is gated on SHA-256 hashes so that what an operator accepts is provably identical to what they reviewed (`FileHash`).
 
-The safety invariants of the whole product live in this module; the layers above it (`AIMonitor.Runtime`, `AIMonitor.Indexing`, `ClaudeWorkbench.Host`, the MCP server) orchestrate it but do not re-implement its guarantees.
+The safety invariants of the whole product live in this module; the layers above it (`AIMonitor.Indexing`, `ClaudeWorkbench.Host`, the MCP server) orchestrate it but do not re-implement its guarantees.
 
 ## Key types
 
@@ -141,7 +141,7 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 
 **Does Not Own:**
 - Actually merging the accepted staged file into the watched source (the runtime/host review workflow applies the merge; this module classifies the result).
-- Launching the review UI or diff tool (`AIMonitor.Runtime.StagedDiffLaunchWorkflow`, `ClaudeWorkbench.Host` — it only records `RecordDiffLaunch`).
+- Presenting the review UI (`ClaudeWorkbench.Host`'s in-app Merge Review — this module only records `RecordDiffLaunch`). There is no external diff tool; that path was retired.
 - Solution indexing and the post-accept index rebuild (`AIMonitor.Indexing`; this module only flips the `IndexStale` flag).
 - MCP tool contracts / CLI parsing (`AIMonitor.McpServer`, `AIMonitor.Cli`).
 - `MonitorSettings`, workspace root layout, and the safe-path helpers it consumes from `AIMonitor.Core`.

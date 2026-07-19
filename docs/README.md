@@ -75,7 +75,6 @@ Operating the app instead of hacking on it? Jump to the **[user guide](guide/)**
 | [AIMonitor.Data](components/AIMonitor.Data.md) | SQLite solution-index store + queries |
 | [AIMonitor.Indexing](components/AIMonitor.Indexing.md) | Rebuild/refresh orchestration; post-accept refresh |
 | [AIMonitor.Workflow](components/AIMonitor.Workflow.md) | **Edit sessions, staging, the two gates, hash integrity** |
-| [AIMonitor.Runtime](components/AIMonitor.Runtime.md) | GATE-1 launch; legacy WinMerge launcher — retired from the app (MCP/CLI only; review is in-app) |
 | [AIMonitor.McpServer](components/AIMonitor.McpServer.md) | The governed MCP tool surface (~60 tools) |
 | [AIMonitor.Cli](components/AIMonitor.Cli.md) | Engine-side console runner (not in the app runtime path) |
 | [ClaudeWorkbench.Host](components/ClaudeWorkbench.Host.md) | **The Blazor host: UI + MCP HTTP + sidecar + the sole source writer** |
