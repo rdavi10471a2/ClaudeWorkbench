@@ -69,7 +69,6 @@ public sealed class McpServerSmokeTests
             "add_constructor",
             "add_nested_type",
             "remove_symbol",
-            "launch_staged_diff",
             "record_diff_decision",
             "compare_file",
             "list_monitor_runs",
@@ -145,44 +144,6 @@ public sealed class McpServerSmokeTests
         Assert.Contains("adapter.mcp.tool.called", logText, StringComparison.Ordinal);
         Assert.Contains("get_monitor_status", logText, StringComparison.Ordinal);
         Assert.Contains("find_indexed_symbols", logText, StringComparison.Ordinal);
-    }
-
-    // Skipped: this pins agent-guidance PROSE (the manifest + staging-guide wording), so it
-    // breaks every time that guidance is legitimately reworded — it went red at edf83c8, which
-    // deliberately rewrote the guide for the in-app merge flow. The assertions below have been
-    // corrected to the current text, so re-enabling is a one-line change if the wording is ever
-    // worth pinning again. The behaviour it gestures at is covered by the workflow/gate tests.
-    [Fact(Skip = "Pins guidance wording, not behaviour; goes stale on every legitimate reword.")]
-    public async Task Mcp_tool_manifest_and_staging_guide_are_current_agent_guidance()
-    {
-        McpFixture fixture = CreateFixture();
-        await using McpClient client = await CreateClientAsync(fixture);
-
-        CallToolResult manifest = await client.CallToolAsync("get_tool_manifest");
-        Assert.False(manifest.IsError == true, ExtractToolText(manifest));
-        string manifestText = ExtractToolText(manifest);
-        Assert.Contains("# AIMonitor MCP Tool Manifest", manifestText, StringComparison.Ordinal);
-        Assert.Contains("`get_source_map`", manifestText, StringComparison.Ordinal);
-        Assert.Contains("`stage_candidate_for_review`", manifestText, StringComparison.Ordinal);
-        Assert.Contains("`record_diff_decision`", manifestText, StringComparison.Ordinal);
-        Assert.Contains("pre-merge validation", manifestText, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("WinMerge", manifestText, StringComparison.OrdinalIgnoreCase);
-
-        CallToolResult guide = await client.CallToolAsync("get_staging_guide");
-        Assert.False(guide.IsError == true, ExtractToolText(guide));
-        string guideText = ExtractToolText(guide);
-        Assert.Contains("start_monitor_session", guideText, StringComparison.Ordinal);
-        Assert.Contains("filesPlanned", guideText, StringComparison.Ordinal);
-        Assert.Contains("refresh_file", guideText, StringComparison.Ordinal);
-        Assert.Contains("stage_candidate_for_review", guideText, StringComparison.Ordinal);
-        Assert.Contains("launch_staged_diff", guideText, StringComparison.Ordinal);
-        // Both gates are run by the HOST around the operator's accept, not by the agent — the
-        // guide describes that placement rather than a per-launch "pre-merge validation" step.
-        Assert.Contains("run by the host around the operator's accept", guideText, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("WinMerge", guideText, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("record_diff_decision", guideText, StringComparison.Ordinal);
-        // Review and the accept-time write are in-app (DiffPlex), not an external diff tool.
-        Assert.Contains("Merge Review", guideText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -937,63 +898,13 @@ public sealed class McpServerSmokeTests
     }
 
     [Fact]
-    public async Task Mcp_planned_launch_staged_diff_runs_full_overlay_build_before_merge()
+    public async Task Mcp_planned_review_decide_interleaved_does_not_deadlock()
     {
-        // Fidelity fix (option A): once a planned session's batch is fully staged, launch must
-        // run the FULL overlay build before any WinMerge merge -- it is no longer a hash-only
-        // deferral. A syntactically broken candidate must therefore be caught at launch, not
-        // deferred to the terminal accept after the file is already on the watched tree.
+        // Interleaving review -> decide -> review -> decide across planned files must not throw
+        // just because an earlier planned file was already decided and no longer carries an
+        // active staged record. Only files NOT yet decided still require one.
         McpFixture fixture = CreateFixture();
-        await using McpClient client = await CreateClientAsync(fixture);
-        string sessionId = await StartPlannedSessionAsync(client, fixture, "full overlay build at launch", fixture.ProgramFilePath);
-
-        CallToolResult refresh = await client.CallToolAsync(
-            "refresh_file",
-            new Dictionary<string, object?>
-            {
-                ["sourceFilePath"] = fixture.ProgramFilePath
-            });
-        Assert.False(refresh.IsError == true);
-        string workingFilePath = ExtractJsonString(ExtractToolText(refresh), "workingFilePath");
-        await File.WriteAllTextAsync(workingFilePath, "namespace Example { internal static class Program { public static string Value => ");
-
-        CallToolResult stage = await client.CallToolAsync(
-            "stage_candidate_for_review",
-            new Dictionary<string, object?>
-            {
-                ["path"] = fixture.ProgramFilePath,
-                ["sessionId"] = sessionId
-            });
-        Assert.False(stage.IsError == true);
-        string stagedRecordId = ExtractJsonString(ExtractToolText(stage), "stagedRecordId");
-
-        CallToolResult launch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = stagedRecordId,
-                ["diffToolPath"] = GetFakeDiffToolPath()
-            });
-
-        Assert.False(launch.IsError == true, ExtractToolText(launch));
-        string launchJson = ExtractToolText(launch);
-        // The full overlay build ran at launch and failed on the broken candidate, so the
-        // merge is blocked (no interactive override dialog is available in the test host).
-        Assert.Contains("\"launched\":false", launchJson, StringComparison.Ordinal);
-        Assert.Contains("\"preMergeValidation\"", launchJson, StringComparison.Ordinal);
-        Assert.Contains("\"status\":\"failed\"", launchJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"status\":\"staged-file-ready\"", launchJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("Build/index validation is deferred until accept", launchJson, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Mcp_planned_launch_decide_launch_interleaved_does_not_deadlock()
-    {
-        // Launch-deadlock fix: interleaving launch -> decide -> launch across planned files
-        // must not throw just because an earlier planned file was already decided and no longer
-        // carries an active staged record. Only files NOT yet decided still require one.
-        McpFixture fixture = CreateFixture();
-        await using McpClient client = await CreateClientAsync(fixture);
+        McpClient client = await CreateClientAsync(fixture);
         string helperFilePath = Path.Combine(Path.GetDirectoryName(fixture.ProgramFilePath)!, "Helper.cs");
         await File.WriteAllTextAsync(
             helperFilePath,
@@ -1071,18 +982,10 @@ public sealed class McpServerSmokeTests
         string programStagedRecordJson = await GetStagedRecordJsonAsync(client, programStagedRecordId);
         string programStagedFilePath = ExtractJsonString(programStagedRecordJson, "stagedFilePath");
 
-        // Launch the first planned file (both files staged -> overlay build runs and passes).
-        CallToolResult helperLaunch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = helperStagedRecordId,
-                ["diffToolPath"] = GetFakeDiffToolPath()
-            });
-        Assert.False(helperLaunch.IsError == true, ExtractToolText(helperLaunch));
-        Assert.Contains("\"launched\":true", ExtractToolText(helperLaunch), StringComparison.Ordinal);
+        // The operator reviews the first planned file (both files are staged).
+        client = await ReconnectAfterInAppReviewAsync(client, fixture, helperStagedRecordId);
 
-        // Decide the first planned file BEFORE launching the second -- this is the interleave
+        // Decide the first planned file BEFORE reviewing the second -- this is the interleave
         // that used to deadlock (the helper no longer has an active staged record).
         File.Copy(helperStagedFilePath, helperFilePath, overwrite: true);
         CallToolResult helperDecision = await client.CallToolAsync(
@@ -1096,17 +999,9 @@ public sealed class McpServerSmokeTests
         Assert.False(helperDecision.IsError == true, ExtractToolText(helperDecision));
         Assert.Equal("accepted", ExtractJsonString(ExtractToolText(helperDecision), "classification"));
 
-        // Now launch the remaining planned file. The already-decided helper must count as
-        // satisfied so this launch does NOT throw the "stage missing planned file" lockout.
-        CallToolResult programLaunch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = programStagedRecordId,
-                ["diffToolPath"] = GetFakeDiffToolPath()
-            });
-        Assert.False(programLaunch.IsError == true, ExtractToolText(programLaunch));
-        Assert.Contains("\"launched\":true", ExtractToolText(programLaunch), StringComparison.Ordinal);
+        // Now review and decide the remaining planned file. The already-decided helper must
+        // count as satisfied, so the second decision still records cleanly.
+        client = await ReconnectAfterInAppReviewAsync(client, fixture, programStagedRecordId);
 
         File.Copy(programStagedFilePath, fixture.ProgramFilePath, overwrite: true);
         CallToolResult programDecision = await client.CallToolAsync(
@@ -1119,6 +1014,7 @@ public sealed class McpServerSmokeTests
             });
         Assert.False(programDecision.IsError == true, ExtractToolText(programDecision));
         Assert.Equal("accepted", ExtractJsonString(ExtractToolText(programDecision), "classification"));
+        await client.DisposeAsync();
     }
 
     [Fact]
@@ -1259,7 +1155,7 @@ public sealed class McpServerSmokeTests
     public async Task Mcp_session_multi_file_accept_flow_tracks_both_staged_records()
     {
         McpFixture fixture = CreateFixture();
-        await using McpClient client = await CreateClientAsync(fixture);
+        McpClient client = await CreateClientAsync(fixture);
         string helperFilePath = Path.Combine(Path.GetDirectoryName(fixture.ProgramFilePath)!, "Helper.cs");
         await File.WriteAllTextAsync(
             helperFilePath,
@@ -1401,25 +1297,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains(programStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
         Assert.DoesNotContain(outsiderStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
 
-        CallToolResult helperLaunch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = helperStagedRecordId,
-                ["diffToolPath"] = GetFakeDiffToolPath()
-            });
-        Assert.False(helperLaunch.IsError == true);
-        Assert.Contains("launched", ExtractToolText(helperLaunch), StringComparison.Ordinal);
-
-        CallToolResult programLaunch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = programStagedRecordId,
-                ["diffToolPath"] = GetFakeDiffToolPath()
-            });
-        Assert.False(programLaunch.IsError == true, ExtractToolText(programLaunch));
-        Assert.Contains("launched", ExtractToolText(programLaunch), StringComparison.Ordinal);
+        client = await ReconnectAfterInAppReviewAsync(client, fixture, helperStagedRecordId, programStagedRecordId);
 
         File.Copy(helperStagedFilePath, helperFilePath, overwrite: true);
         CallToolResult helperDecision = await client.CallToolAsync(
@@ -1459,6 +1337,7 @@ public sealed class McpServerSmokeTests
 
         Assert.Contains("accepted-helper", await File.ReadAllTextAsync(helperFilePath), StringComparison.Ordinal);
         Assert.Contains("Helper.Value()", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
+        await client.DisposeAsync();
     }
 
     [Fact]
@@ -1785,7 +1664,7 @@ public sealed class McpServerSmokeTests
     public async Task Mcp_write_tools_reject_refresh_required_sessions_after_accept()
     {
         McpFixture fixture = CreateFixture();
-        await using McpClient client = await CreateClientAsync(fixture);
+        McpClient client = await CreateClientAsync(fixture);
         string sessionId = await StartPlannedSessionAsync(client, fixture, "refresh required after accept", fixture.ProgramFilePath);
 
         CallToolResult submit = await client.CallToolAsync(
@@ -1812,15 +1691,7 @@ public sealed class McpServerSmokeTests
         string stagedRecordJson = await GetStagedRecordJsonAsync(client, stagedRecordId);
         string stagedFilePath = ExtractJsonString(stagedRecordJson, "stagedFilePath");
 
-        CallToolResult launch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = stagedRecordId,
-                ["diffToolPath"] = GetFakeDiffToolPath()
-            });
-        Assert.False(launch.IsError == true, ExtractToolText(launch));
-        Assert.Contains("\"launched\":true", ExtractToolText(launch), StringComparison.Ordinal);
+        client = await ReconnectAfterInAppReviewAsync(client, fixture, stagedRecordId);
 
         File.Copy(stagedFilePath, fixture.ProgramFilePath, overwrite: true);
         CallToolResult decision = await client.CallToolAsync(
@@ -1857,6 +1728,7 @@ public sealed class McpServerSmokeTests
                 ["sessionId"] = sessionId
             });
         Assert.True(staleSpan.IsError == true);
+        await client.DisposeAsync();
     }
 
     private static async Task<McpClient> CreateClientAsync(McpFixture fixture)
@@ -2175,26 +2047,26 @@ public sealed class McpServerSmokeTests
         return withoutCrLf.Count(character => character == '\n');
     }
 
-    private static string GetFakeDiffToolPath()
+    // Review is in-app in the product (ClaudeWorkbench.Host's Merge Review); no MCP tool opens
+    // one. Accepting still requires the record to carry a pre-merge verdict and a recorded review,
+    // so stamp both exactly as the host does, then restart the server so it rehydrates the staged
+    // records from disk. See InAppReviewSimulator for why the restart is needed.
+    private static async Task<McpClient> ReconnectAfterInAppReviewAsync(
+        McpClient client,
+        McpFixture fixture,
+        params string[] stagedRecordIds)
     {
-        if (OperatingSystem.IsWindows())
+        await client.DisposeAsync();
+        foreach (string stagedRecordId in stagedRecordIds)
         {
-            string windowsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "where.exe");
-            if (File.Exists(windowsPath))
-            {
-                return windowsPath;
-            }
+            InAppReviewSimulator.MarkReviewed(
+                fixture.RepositoryRoot,
+                fixture.WatchedSolutionPath,
+                fixture.RuntimeRoot,
+                stagedRecordId);
         }
 
-        foreach (string candidate in new[] { "/usr/bin/true", "/bin/true" })
-        {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new FileNotFoundException("Unable to find a harmless executable for diff-launch tests.");
+        return await CreateClientAsync(fixture);
     }
 
     private static string GetBuildConfiguration()

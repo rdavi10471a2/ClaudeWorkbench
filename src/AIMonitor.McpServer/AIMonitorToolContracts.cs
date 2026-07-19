@@ -1,6 +1,5 @@
 using AIMonitor.Data;
 using AIMonitor.Indexing;
-using AIMonitor.Runtime;
 using AIMonitor.Workflow;
 
 namespace AIMonitor.McpServer;
@@ -25,9 +24,7 @@ public sealed record AIMonitorWorkflowStatus(
     string WatchedSolutionPath,
     string WatchedProjectFolder,
     string RuntimeRoot,
-    string WorkingRoot,
-    string? ResolvedDiffToolPath,
-    IReadOnlyList<string> WinMergeCandidatePaths);
+    string WorkingRoot);
 
 public sealed record AIMonitorToolErrorResult(
     bool IsError,
@@ -68,13 +65,6 @@ public sealed record AIMonitorStageCandidateResult(
     StagedEditRecord? StagedRecord,
     string NextStep);
 
-public sealed record AIMonitorStagedDiffLaunchResult(
-    StagedEditSummary StagedRecordSummary,
-    StagedEditRecord? StagedRecord,
-    PreMergeValidationResult PreMergeValidation,
-    DiffLaunchResult DiffLaunch,
-    string NextStep);
-
 public sealed record AIMonitorSelfCheckResult(
     string RepositoryRoot,
     string RuntimeRoot,
@@ -85,7 +75,6 @@ public sealed record AIMonitorSelfCheckResult(
     string StagedRoot,
     bool WatchedSolutionExists,
     bool WatchedProjectFolderExists,
-    string? ResolvedDiffToolPath,
     string SafetySummary,
     string OverallStatus,
     IReadOnlyList<AIMonitorGuardrailCheck> Guardrails);

@@ -3,8 +3,7 @@ namespace AIMonitor.Core;
 public sealed record MonitorSettings(
     string RepositoryRoot,
     string RuntimeRoot,
-    string WatchedSolutionPath,
-    IReadOnlyList<string> WinMergeCandidatePaths)
+    string WatchedSolutionPath)
 {
     public string WatchedProjectFolder =>
         Path.GetDirectoryName(WatchedSolutionPath) ?? string.Empty;
@@ -12,8 +11,7 @@ public sealed record MonitorSettings(
     public static MonitorSettings Create(
         string repositoryRoot,
         string watchedSolutionPath,
-        string? runtimeRoot = null,
-        IReadOnlyList<string>? winMergeCandidatePaths = null)
+        string? runtimeRoot = null)
     {
         string resolvedRepositoryRoot = Path.GetFullPath(repositoryRoot);
         string resolvedWatchedSolutionPath = Path.GetFullPath(watchedSolutionPath);
@@ -23,7 +21,6 @@ public sealed record MonitorSettings(
         return new MonitorSettings(
             resolvedRepositoryRoot,
             resolvedRuntimeRoot,
-            resolvedWatchedSolutionPath,
-            winMergeCandidatePaths ?? []);
+            resolvedWatchedSolutionPath);
     }
 }

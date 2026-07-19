@@ -2,7 +2,6 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
 using AIMonitor.Logging;
-using AIMonitor.Runtime;
 using AIMonitor.Workflow;
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
@@ -41,7 +40,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return the monitor workflow status, including watched solution, runtime root, Working folder, and configured external diff-tool candidates (legacy MCP/CLI path).")]
+    [Description("Return the monitor workflow status: watched solution, runtime root, and the monitor-owned Working folder.")]
     public AIMonitorWorkflowStatus GetWorkflowStatus()
     {
         runtimeState.Touch();
@@ -49,13 +48,11 @@ public sealed partial class AIMonitorTools
             settings.WatchedSolutionPath,
             settings.WatchedProjectFolder,
             settings.RuntimeRoot,
-            workflowPaths.WorkingRoot,
-            settings.WinMergeCandidatePaths.FirstOrDefault(File.Exists),
-            settings.WinMergeCandidatePaths);
+            workflowPaths.WorkingRoot);
     }
 
     [McpServerTool]
-    [Description("Return evaluated self-check guardrails for configured roots, working folders, diff tool availability, and watched-source safety boundaries.")]
+    [Description("Return evaluated self-check guardrails for configured roots, working folders, and watched-source safety boundaries.")]
     public AIMonitorSelfCheckResult GetSelfCheck()
     {
         runtimeState.Touch();
@@ -74,7 +71,6 @@ public sealed partial class AIMonitorTools
             workflowPaths.StagedRoot,
             File.Exists(settings.WatchedSolutionPath),
             Directory.Exists(settings.WatchedProjectFolder),
-            settings.WinMergeCandidatePaths.FirstOrDefault(File.Exists),
             "agents edit monitor-owned Working candidates only; the operator's in-app merge-review Accept is the sole watched-source mutation surface",
             overallStatus,
             guardrails);

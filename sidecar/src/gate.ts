@@ -22,7 +22,7 @@ const GATED_TOOLS = new Set<string>([
   "add_nested_type",
   "remove_symbol",
   "stage_candidate_for_review",
-  "launch_staged_diff",
+  // launch_staged_diff is gone — the external diff-tool path was retired; review is in-app.
   "record_diff_decision",
   // git mutations — pause at the operator gate. Push is outward-facing; commit and
   // branch changes alter repo/working-tree state. Reads (git_status/git_diff/

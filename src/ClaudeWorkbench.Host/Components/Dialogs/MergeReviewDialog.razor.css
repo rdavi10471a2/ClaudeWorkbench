@@ -161,6 +161,9 @@
 .staged-review-diagnostics li {
     margin: 2px 0;
     overflow-wrap: anywhere;
+    /* The rendered line is shortened to the solution-relative file; the raw MSBuild
+       text (overlay path + project suffix) is on the title attribute. */
+    cursor: help;
 }
 
 .staged-review-dialog-layout {

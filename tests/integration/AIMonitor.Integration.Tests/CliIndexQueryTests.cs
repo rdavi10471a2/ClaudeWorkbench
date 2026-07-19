@@ -3,6 +3,7 @@ using System.Text.Json;
 using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.MSBuild;
+using AIMonitor.Workflow;
 
 namespace AIMonitor.Integration.Tests;
 
@@ -183,7 +184,7 @@ public sealed class CliIndexQueryTests
             ?? throw new InvalidOperationException("Missing staged file path.");
         Assert.Equal(stagedHash, stageDocument.RootElement.GetProperty("stagedHash").GetString());
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         File.Copy(stagedFilePath, fixture.ProgramFilePath, overwrite: true);
 
         CliResult decision = await RunCliAsync(
@@ -283,7 +284,7 @@ public sealed class CliIndexQueryTests
         string stagedHash = stageDocument.RootElement.GetProperty("stagedHash").GetString()
             ?? throw new InvalidOperationException("Missing staged hash.");
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         File.Copy(stagedFilePath, fixture.ProgramFilePath, overwrite: true);
 
         CliResult accept = await RunCliAsync(
@@ -489,7 +490,7 @@ public sealed class CliIndexQueryTests
     }
 
     [Fact]
-    public async Task Edit_launch_diff_validation_reports_errors_only()
+    public async Task Edit_premerge_validation_reports_errors_only()
     {
         CliFixture fixture = CreateFixture();
 
@@ -526,35 +527,18 @@ public sealed class CliIndexQueryTests
         string stagedRecordId = stageDocument.RootElement.GetProperty("stagedRecordId").GetString()
             ?? throw new InvalidOperationException("Missing staged record id.");
 
-        CliResult launch = await RunCliAsync(
-            "edit",
-            "launch-diff",
-            "--staged-record-id",
-            stagedRecordId,
-            "--force-validation",
-            "--diff-tool",
-            Path.Combine(fixture.RepositoryRoot, "missing-winmerge.exe"),
-            "--repo-root",
-            fixture.RepositoryRoot,
-            "--config",
-            fixture.SettingsPath);
-
-        Assert.Equal(0, launch.ExitCode);
-        using JsonDocument launchDocument = JsonDocument.Parse(launch.StdOut);
-        JsonElement validation = launchDocument.RootElement.GetProperty("preMergeValidation");
-        Assert.Equal("failed", validation.GetProperty("status").GetString());
-        Assert.True(validation.GetProperty("isError").GetBoolean());
-        Assert.True(validation.GetProperty("diagnosticCount").GetInt32() > 0);
-        string diagnostics = string.Join(
-            Environment.NewLine,
-            validation.GetProperty("diagnostics").EnumerateArray().Select(item => item.GetString()));
+        PreMergeValidationResult validation = ValidateStaged(fixture, stagedRecordId);
+        Assert.Equal("failed", validation.Status);
+        Assert.True(validation.IsError);
+        Assert.True(validation.DiagnosticCount > 0);
+        string diagnostics = string.Join(Environment.NewLine, validation.Diagnostics);
         Assert.Contains(": error ", diagnostics, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(": warning ", diagnostics, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("intentional warning", diagnostics, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Edit_launch_diff_validation_does_not_block_on_warnings_only()
+    public async Task Edit_premerge_validation_does_not_block_on_warnings_only()
     {
         CliFixture fixture = CreateFixture();
 
@@ -591,29 +575,15 @@ public sealed class CliIndexQueryTests
         string stagedRecordId = stageDocument.RootElement.GetProperty("stagedRecordId").GetString()
             ?? throw new InvalidOperationException("Missing staged record id.");
 
-        CliResult launch = await RunCliAsync(
-            "edit",
-            "launch-diff",
-            "--staged-record-id",
-            stagedRecordId,
-            "--diff-tool",
-            Path.Combine(fixture.RepositoryRoot, "missing-winmerge.exe"),
-            "--repo-root",
-            fixture.RepositoryRoot,
-            "--config",
-            fixture.SettingsPath);
-
-        Assert.Equal(0, launch.ExitCode);
-        using JsonDocument launchDocument = JsonDocument.Parse(launch.StdOut);
-        JsonElement validation = launchDocument.RootElement.GetProperty("preMergeValidation");
-        Assert.Equal("passed", validation.GetProperty("status").GetString());
-        Assert.False(validation.GetProperty("isError").GetBoolean());
-        Assert.Equal(0, validation.GetProperty("diagnosticCount").GetInt32());
-        Assert.Empty(validation.GetProperty("diagnostics").EnumerateArray());
+        PreMergeValidationResult validation = ValidateStaged(fixture, stagedRecordId);
+        Assert.Equal("passed", validation.Status);
+        Assert.False(validation.IsError);
+        Assert.Equal(0, validation.DiagnosticCount);
+        Assert.Empty(validation.Diagnostics);
     }
 
     [Fact]
-    public async Task Edit_launch_diff_validation_excludes_runtime_when_runtime_is_under_watched_root()
+    public async Task Edit_premerge_validation_excludes_runtime_when_runtime_is_under_watched_root()
     {
         CliFixture fixture = CreateFixture(runtimeUnderWatchedRoot: true);
         string runtimeMarkerPath = Path.Combine(Path.GetDirectoryName(fixture.WatchedSolutionPath)!, "runtime", "marker.txt");
@@ -651,30 +621,12 @@ public sealed class CliIndexQueryTests
         string stagedRecordId = stageDocument.RootElement.GetProperty("stagedRecordId").GetString()
             ?? throw new InvalidOperationException("Missing staged record id.");
 
-        CliResult launch = await RunCliAsync(
-            "edit",
-            "launch-diff",
-            "--staged-record-id",
-            stagedRecordId,
-            "--diff-tool",
-            Path.Combine(fixture.RepositoryRoot, "missing-winmerge.exe"),
-            "--repo-root",
-            fixture.RepositoryRoot,
-            "--config",
-            fixture.SettingsPath);
-
-        Assert.Equal(0, launch.ExitCode);
-        using JsonDocument launchDocument = JsonDocument.Parse(launch.StdOut);
-        string validationWorkspacePath = launchDocument.RootElement
-            .GetProperty("preMergeValidation")
-            .GetProperty("validationWorkspacePath")
-            .GetString()
-            ?? throw new InvalidOperationException("Missing validation workspace path.");
-        Assert.False(File.Exists(Path.Combine(validationWorkspacePath, "runtime", "marker.txt")));
+        PreMergeValidationResult validation = ValidateStaged(fixture, stagedRecordId);
+        Assert.False(File.Exists(Path.Combine(validation.ValidationWorkspacePath, "runtime", "marker.txt")));
     }
 
     [Fact]
-    public async Task Edit_launch_diff_blocks_when_staged_candidate_changes_after_stage()
+    public async Task Edit_premerge_validation_blocks_when_staged_candidate_changes_after_stage()
     {
         CliFixture fixture = CreateFixture();
 
@@ -713,25 +665,9 @@ public sealed class CliIndexQueryTests
             ?? throw new InvalidOperationException("Missing staged file path.");
         await File.WriteAllTextAsync(stagedFilePath, "namespace Example { internal static class Program { public static string Value => \"tampered\"; } }");
 
-        CliResult launch = await RunCliAsync(
-            "edit",
-            "launch-diff",
-            "--staged-record-id",
-            stagedRecordId,
-            "--diff-tool",
-            GetFakeDiffToolPath(),
-            "--repo-root",
-            fixture.RepositoryRoot,
-            "--config",
-            fixture.SettingsPath);
-
-        Assert.Equal(0, launch.ExitCode);
-        using JsonDocument launchDocument = JsonDocument.Parse(launch.StdOut);
-        JsonElement validation = launchDocument.RootElement.GetProperty("preMergeValidation");
-        Assert.Equal("staged-hash-mismatch", validation.GetProperty("status").GetString());
-        Assert.True(validation.GetProperty("isError").GetBoolean());
-        Assert.False(launchDocument.RootElement.GetProperty("diffLaunch").GetProperty("launched").GetBoolean());
-        Assert.Contains("validation failed", launchDocument.RootElement.GetProperty("diffLaunch").GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+        PreMergeValidationResult validation = ValidateStaged(fixture, stagedRecordId);
+        Assert.Equal("staged-hash-mismatch", validation.Status);
+        Assert.True(validation.IsError);
     }
 
     [Fact]
@@ -802,22 +738,8 @@ public sealed class CliIndexQueryTests
         string programStagedRecordId = programStageDocument.RootElement.GetProperty("stagedRecordId").GetString()
             ?? throw new InvalidOperationException("Missing program staged record id.");
 
-        CliResult launch = await RunCliAsync(
-            "edit",
-            "launch-diff",
-            "--staged-record-id",
-            programStagedRecordId,
-            "--diff-tool",
-            GetFakeDiffToolPath(),
-            "--repo-root",
-            fixture.RepositoryRoot,
-            "--config",
-            fixture.SettingsPath);
-
-        Assert.Equal(0, launch.ExitCode);
-        using JsonDocument launchDocument = JsonDocument.Parse(launch.StdOut);
-        Assert.Equal("failed", launchDocument.RootElement.GetProperty("preMergeValidation").GetProperty("status").GetString());
-        Assert.False(launchDocument.RootElement.GetProperty("diffLaunch").GetProperty("launched").GetBoolean());
+        PreMergeValidationResult validation = ValidateStaged(fixture, programStagedRecordId);
+        Assert.Equal("failed", validation.Status);
         Assert.Equal(originalProgramText, await File.ReadAllTextAsync(fixture.ProgramFilePath));
         Assert.Equal(originalHelperText, await File.ReadAllTextAsync(helperFilePath));
     }
@@ -871,7 +793,7 @@ public sealed class CliIndexQueryTests
         Assert.True(File.Exists(reviewBaselineFilePath));
         Assert.False(File.Exists(newFilePath));
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         Assert.True(File.Exists(newFilePath));
         Assert.Equal(string.Empty, await File.ReadAllTextAsync(newFilePath));
         Directory.CreateDirectory(Path.GetDirectoryName(newFilePath)!);
@@ -936,7 +858,7 @@ public sealed class CliIndexQueryTests
             ?? throw new InvalidOperationException("Missing staged record id.");
         Assert.False(File.Exists(newFilePath));
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         Assert.True(File.Exists(newFilePath));
         Assert.Equal(string.Empty, await File.ReadAllTextAsync(newFilePath));
 
@@ -1002,7 +924,7 @@ public sealed class CliIndexQueryTests
         string stagedFilePath = stagedRecordDocument.RootElement.GetProperty("stagedFilePath").GetString()
             ?? throw new InvalidOperationException("Missing staged file path.");
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         File.Copy(stagedFilePath, razorFilePath, overwrite: true);
 
         CliResult decision = await RunCliAsync(
@@ -1070,7 +992,7 @@ public sealed class CliIndexQueryTests
             ?? throw new InvalidOperationException("Missing staged file path.");
         Assert.EndsWith("site.css", stagedFilePath, StringComparison.OrdinalIgnoreCase);
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         File.Copy(stagedFilePath, cssFilePath, overwrite: true);
 
         CliResult decision = await RunCliAsync(
@@ -1131,7 +1053,7 @@ public sealed class CliIndexQueryTests
             ?? throw new InvalidOperationException("Missing staged record id.");
         string stagedHash = stageDocument.RootElement.GetProperty("stagedHash").GetString()
             ?? throw new InvalidOperationException("Missing staged hash.");
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         await File.WriteAllTextAsync(fixture.ProgramFilePath, "namespace Example\r\n{\r\n    internal static class Program { }\r\n}\r\n");
 
         CliResult decision = await RunCliAsync(
@@ -1192,7 +1114,7 @@ public sealed class CliIndexQueryTests
         string stagedHash = stageDocument.RootElement.GetProperty("stagedHash").GetString()
             ?? throw new InvalidOperationException("Missing staged hash.");
 
-        await LaunchDiffAsync(fixture, stagedRecordId);
+        MarkReviewedInApp(fixture, stagedRecordId);
         await File.WriteAllTextAsync(fixture.ProgramFilePath, "namespace Example { internal static class Program { public static string Value => \"unexpected\"; } }");
 
         CliResult decision = await RunCliAsync(
@@ -1399,46 +1321,24 @@ public sealed class CliIndexQueryTests
         return JsonDocument.Parse(record.StdOut);
     }
 
-    private static async Task LaunchDiffAsync(CliFixture fixture, string stagedRecordId)
+    // Pre-merge (GATE 1) validation used to be reachable through the retired `edit launch-diff`
+    // command. The engine service behind it is unchanged, so assert against it directly.
+    private static PreMergeValidationResult ValidateStaged(CliFixture fixture, string stagedRecordId)
     {
-        CliResult launch = await RunCliAsync(
-            "edit",
-            "launch-diff",
-            "--staged-record-id",
-            stagedRecordId,
-            "--diff-tool",
-            GetFakeDiffToolPath(),
-            "--repo-root",
-            fixture.RepositoryRoot,
-            "--config",
-            fixture.SettingsPath);
-
-        Assert.Equal(0, launch.ExitCode);
-        using JsonDocument launchDocument = JsonDocument.Parse(launch.StdOut);
-        Assert.Equal("passed", launchDocument.RootElement.GetProperty("preMergeValidation").GetProperty("status").GetString());
-        Assert.True(launchDocument.RootElement.GetProperty("diffLaunch").GetProperty("launched").GetBoolean());
+        MonitorSettings settings = MonitorSettingsLoader.Load(fixture.RepositoryRoot, fixture.SettingsPath);
+        StagedEditRecord record = new WorkflowEditService(settings).GetStagedRecord(stagedRecordId);
+        return new PreMergeValidationService().Validate(settings, record);
     }
 
-    private static string GetFakeDiffToolPath()
+    // Accepting still requires a recorded review; the product records it in-app. See InAppReviewSimulator.
+    private static void MarkReviewedInApp(CliFixture fixture, string stagedRecordId)
     {
-        if (OperatingSystem.IsWindows())
-        {
-            string windowsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "where.exe");
-            if (File.Exists(windowsPath))
-            {
-                return windowsPath;
-            }
-        }
-
-        foreach (string candidate in new[] { "/usr/bin/true", "/bin/true" })
-        {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new FileNotFoundException("Unable to find a harmless executable for diff-launch tests.");
+        MonitorSettings settings = MonitorSettingsLoader.Load(fixture.RepositoryRoot, fixture.SettingsPath);
+        InAppReviewSimulator.MarkReviewed(
+            settings.RepositoryRoot,
+            settings.WatchedSolutionPath,
+            settings.RuntimeRoot,
+            stagedRecordId);
     }
 
     private static string GetBuildConfiguration()

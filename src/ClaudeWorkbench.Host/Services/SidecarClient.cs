@@ -59,9 +59,26 @@ public sealed class SidecarClient
 
     // Echo a merge-review outcome (build + index result) to the agent: the sidecar
     // surfaces it in the transcript and prepends it to the agent's next prompt.
-    public async Task PostReviewOutcomeAsync(string summary, CancellationToken cancellationToken = default)
+    // Returns false when the agent was NOT told (sidecar down, or it rejected the
+    // post). This is the only channel that reports a failed build back to the agent,
+    // so a silent drop is a bug — never let the transport throw past the caller, but
+    // do report the failure so the operator can be warned.
+    public async Task<bool> PostReviewOutcomeAsync(string summary, CancellationToken cancellationToken = default)
     {
-        await http.PostAsJsonAsync("/review-outcome", new { summary }, cancellationToken);
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return false;
+        }
+
+        try
+        {
+            HttpResponseMessage response = await http.PostAsJsonAsync("/review-outcome", new { summary }, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            return false;
+        }
     }
 
     // Live usage off the sidecar's Query handle (/usage). Lenient parse — the SDK

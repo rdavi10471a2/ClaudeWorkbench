@@ -8,10 +8,11 @@ namespace AIMonitor.Integration.Tests;
 // With the planned-session gate in place, every watched-source mutation requires a session whose edit plan
 // names the file. These tests drive the full flow end to end against a real out-of-process AIMonitor.McpServer:
 // start_monitor_session(filesPlanned) -> refresh/new + edit (GATE 1 overlay validation present in the tool
-// response) -> stage -> launch (full overlay build once the batch is staged) -> simulated WinMerge merge ->
-// record_diff_decision -> terminal build + post-accept index refresh. Single-file and multi-file are both
-// covered, plus the negative gates: an unplanned file is rejected, accept-without-launch is rejected, an
-// invalid-C# candidate is rejected, and a dirty-unexpected accept (watched != staged) is rejected.
+// response) -> stage -> simulated operator review (see InAppReviewSimulator: the host stamps the review, no
+// MCP tool does) -> simulated merge -> record_diff_decision -> terminal build + post-accept index refresh.
+// Single-file and multi-file are both covered, plus the negative gates: an unplanned file is rejected,
+// accept-without-review is rejected, an invalid-C# candidate is rejected, and a dirty-unexpected accept
+// (watched != staged) is rejected.
 public sealed class McpPlannedSessionSurfaceTests
 {
     static McpPlannedSessionSurfaceTests()
@@ -26,7 +27,7 @@ public sealed class McpPlannedSessionSurfaceTests
     public async Task Single_file_planned_session_runs_full_flow_to_terminal_accept()
     {
         McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
-        await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
+        McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
         string sessionId = await McpSurfaceClient.StartPlannedSessionAsync(client, fixture, "single-file e2e", fixture.ProgramFilePath);
 
         CallToolResult refresh = await client.CallToolAsync(
@@ -68,17 +69,9 @@ public sealed class McpPlannedSessionSurfaceTests
         string stagedRecordJson = await McpSurfaceClient.StagedRecordJsonAsync(client, stagedRecordId);
         string stagedFilePath = McpSurfaceClient.JsonString(stagedRecordJson, "stagedFilePath");
 
-        CallToolResult launch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = stagedRecordId,
-                ["diffToolPath"] = McpSurfaceClient.FakeDiffToolPath()
-            });
-        Assert.False(launch.IsError == true, McpSurfaceClient.Text(launch));
-        Assert.Contains("\"launched\":true", McpSurfaceClient.Text(launch), StringComparison.Ordinal);
+        client = await McpSurfaceClient.ReconnectAfterInAppReviewAsync(client, fixture, stagedRecordId);
 
-        // Simulated WinMerge merge: copy the staged bytes verbatim into watched source.
+        // Simulated operator merge: copy the staged bytes verbatim into watched source.
         File.Copy(stagedFilePath, fixture.ProgramFilePath, overwrite: true);
 
         CallToolResult decision = await client.CallToolAsync(
@@ -107,6 +100,7 @@ public sealed class McpPlannedSessionSurfaceTests
                 ["sessionId"] = sessionId
             });
         Assert.True(staleSubmit.IsError == true, McpSurfaceClient.Text(staleSubmit));
+        await client.DisposeAsync();
     }
 
     [Fact]
@@ -114,7 +108,7 @@ public sealed class McpPlannedSessionSurfaceTests
     public async Task Multi_file_planned_session_defers_index_refresh_until_last_decision()
     {
         McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
-        await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
+        McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
         string helperFilePath = Path.Combine(fixture.WatchedDirectory, "Helper.cs");
         await File.WriteAllTextAsync(
             helperFilePath,
@@ -165,9 +159,8 @@ public sealed class McpPlannedSessionSurfaceTests
         (string helperRecordId, string helperHash, string helperStagedPath) = await StageAsync(client, helperFilePath, sessionId, "multi helper");
         (string programRecordId, string programHash, string programStagedPath) = await StageAsync(client, fixture.ProgramFilePath, sessionId, "multi program");
 
-        // Both planned files must be staged before launch opens WinMerge.
-        await LaunchAsync(client, helperRecordId);
-        await LaunchAsync(client, programRecordId);
+        // Both planned files must be staged before the operator reviews the batch.
+        client = await McpSurfaceClient.ReconnectAfterInAppReviewAsync(client, fixture, helperRecordId, programRecordId);
 
         // Decide the first file; index refresh is DEFERRED until the whole batch is decided.
         File.Copy(helperStagedPath, helperFilePath, overwrite: true);
@@ -201,6 +194,7 @@ public sealed class McpPlannedSessionSurfaceTests
 
         Assert.Contains("accepted-helper", await File.ReadAllTextAsync(helperFilePath), StringComparison.Ordinal);
         Assert.Contains("Helper.Value()", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
+        await client.DisposeAsync();
     }
 
     [Fact]
@@ -304,7 +298,7 @@ public sealed class McpPlannedSessionSurfaceTests
         string sessionId = await McpSurfaceClient.StartPlannedSessionAsync(client, fixture, "invalid csharp", fixture.ProgramFilePath);
 
         // Syntactically broken C# submitted to the working candidate must be rejected as agent feedback
-        // (not forced to WinMerge). The candidate write fails, so it never reaches staging.
+        // (not forced through to review). The candidate write fails, so it never reaches staging.
         CallToolResult submit = await client.CallToolAsync(
             "submit_file",
             new Dictionary<string, object?>
@@ -318,11 +312,11 @@ public sealed class McpPlannedSessionSurfaceTests
 
     [Fact]
     [Trait("Suite", "McpSurface")]
-    public async Task Accept_without_launch_is_rejected()
+    public async Task Accept_without_review_is_rejected()
     {
         McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
         await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
-        string sessionId = await McpSurfaceClient.StartPlannedSessionAsync(client, fixture, "accept without launch", fixture.ProgramFilePath);
+        string sessionId = await McpSurfaceClient.StartPlannedSessionAsync(client, fixture, "accept without review", fixture.ProgramFilePath);
 
         CallToolResult submit = await client.CallToolAsync(
             "submit_file",
@@ -334,9 +328,9 @@ public sealed class McpPlannedSessionSurfaceTests
             });
         Assert.False(submit.IsError == true, McpSurfaceClient.Text(submit));
 
-        (string stagedRecordId, string stagedHash, string stagedFilePath) = await StageAsync(client, fixture.ProgramFilePath, sessionId, "no launch");
+        (string stagedRecordId, string stagedHash, string stagedFilePath) = await StageAsync(client, fixture.ProgramFilePath, sessionId, "no review");
 
-        // Simulate the merge but DO NOT launch first. Accept must be refused: there is no recorded launch.
+        // Simulate the merge but DO NOT review first. Accept must be refused: there is no recorded review.
         File.Copy(stagedFilePath, fixture.ProgramFilePath, overwrite: true);
         CallToolResult decision = await client.CallToolAsync(
             "record_diff_decision",
@@ -354,7 +348,7 @@ public sealed class McpPlannedSessionSurfaceTests
     public async Task Accept_with_dirty_unexpected_watched_source_is_rejected()
     {
         McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
-        await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
+        McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
         string sessionId = await McpSurfaceClient.StartPlannedSessionAsync(client, fixture, "dirty unexpected", fixture.ProgramFilePath);
 
         CallToolResult submit = await client.CallToolAsync(
@@ -368,7 +362,7 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.False(submit.IsError == true, McpSurfaceClient.Text(submit));
 
         (string stagedRecordId, string stagedHash, _) = await StageAsync(client, fixture.ProgramFilePath, sessionId, "dirty");
-        await LaunchAsync(client, stagedRecordId);
+        client = await McpSurfaceClient.ReconnectAfterInAppReviewAsync(client, fixture, stagedRecordId);
 
         // Operator did NOT merge the staged bytes verbatim: watched source carries something else.
         await File.WriteAllTextAsync(
@@ -386,6 +380,7 @@ public sealed class McpPlannedSessionSurfaceTests
         // Accept must be refused because watched source does not match the staged candidate.
         Assert.True(decision.IsError == true || McpSurfaceClient.JsonString(McpSurfaceClient.Text(decision), "classification") != "accepted",
             McpSurfaceClient.Text(decision));
+        await client.DisposeAsync();
     }
 
     private static async Task<(string RecordId, string StagedHash, string StagedFilePath)> StageAsync(
@@ -409,18 +404,5 @@ public sealed class McpPlannedSessionSurfaceTests
         string recordJson = await McpSurfaceClient.StagedRecordJsonAsync(client, recordId);
         string stagedFilePath = McpSurfaceClient.JsonString(recordJson, "stagedFilePath");
         return (recordId, stagedHash, stagedFilePath);
-    }
-
-    private static async Task LaunchAsync(McpClient client, string stagedRecordId)
-    {
-        CallToolResult launch = await client.CallToolAsync(
-            "launch_staged_diff",
-            new Dictionary<string, object?>
-            {
-                ["stagedRecordId"] = stagedRecordId,
-                ["diffToolPath"] = McpSurfaceClient.FakeDiffToolPath()
-            });
-        Assert.False(launch.IsError == true, McpSurfaceClient.Text(launch));
-        Assert.Contains("\"launched\":true", McpSurfaceClient.Text(launch), StringComparison.Ordinal);
     }
 }

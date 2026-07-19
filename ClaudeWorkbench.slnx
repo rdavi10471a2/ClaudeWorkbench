@@ -6,7 +6,6 @@
   <Project Path="src/AIMonitor.Logging/AIMonitor.Logging.csproj" />
   <Project Path="src/AIMonitor.MSBuild/AIMonitor.MSBuild.csproj" />
   <Project Path="src/AIMonitor.McpServer/AIMonitor.McpServer.csproj" />
-  <Project Path="src/AIMonitor.Runtime/AIMonitor.Runtime.csproj" />
   <Project Path="src/AIMonitor.Workflow/AIMonitor.Workflow.csproj" />
   <Project Path="src/ClaudeWorkbench.Host/ClaudeWorkbench.Host.csproj" />
   <Project Path="src/ClaudeWorkbench.Launcher/ClaudeWorkbench.Launcher.csproj" />
@@ -19,7 +18,6 @@
   <Project Path="tests/unit/AIMonitor.Indexing.Tests/AIMonitor.Indexing.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Logging.Tests/AIMonitor.Logging.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.MSBuild.Tests/AIMonitor.MSBuild.Tests.csproj" />
-  <Project Path="tests/unit/AIMonitor.Runtime.Tests/AIMonitor.Runtime.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Workflow.Tests/AIMonitor.Workflow.Tests.csproj" />
   <Project Path="tests/unit/ClaudeWorkbench.Host.Tests/ClaudeWorkbench.Host.Tests.csproj" />
 </Solution>

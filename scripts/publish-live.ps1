@@ -48,6 +48,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Break the recursion: this script runs `dotnet publish -c Release`, which builds the same
+# projects whose Release build triggers this script (see Directory.Build.targets). The child
+# builds inherit this variable and skip the post-build publish target.
+$env:CWB_SKIP_PUBLISH_LIVE = '1'
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $hostProject = Join-Path $repoRoot 'src\ClaudeWorkbench.Host\ClaudeWorkbench.Host.csproj'
 $launcherProject = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher\ClaudeWorkbench.Launcher.csproj'

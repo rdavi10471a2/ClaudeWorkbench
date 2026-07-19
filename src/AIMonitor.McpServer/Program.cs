@@ -22,7 +22,6 @@ internal static class Program
         builder.Services.AddSingleton(new WorkspaceManager(
             settings.RepositoryRoot,
             settings.RuntimeRoot,
-            settings.WinMergeCandidatePaths,
             settings));
         builder.Services.AddSingleton<AIMonitorMcpRuntimeState>();
         builder.Services

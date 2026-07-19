@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Console.Models;
 using Microsoft.AspNetCore.Components;
@@ -117,9 +118,14 @@ public partial class MergeReviewDialog : IAsyncDisposable
                 overrideOfferedForRecordId = recordId;
             }
 
-            if (!string.IsNullOrWhiteSpace(result.AgentSummary))
+            // The accept has already written watched source by here. Telling the agent
+            // how the build went is best-effort transport: if it fails it must not abort
+            // the advance to the next staged file, but it must not vanish either — the
+            // operator has to know the agent was never told the build failed.
+            if (!string.IsNullOrWhiteSpace(result.AgentSummary)
+                && !await Sidecar.PostReviewOutcomeAsync(result.AgentSummary))
             {
-                await Sidecar.PostReviewOutcomeAsync(result.AgentSummary);
+                errorMessage = $"{result.Message} The agent could NOT be notified of the outcome (sidecar unreachable): {result.AgentSummary}";
             }
 
             await LoadNextStateAsync();
@@ -270,6 +276,106 @@ public partial class MergeReviewDialog : IAsyncDisposable
     private static string NormalizeLabel(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? "pending" : value;
+    }
+
+    // --- diagnostic presentation -------------------------------------------------
+    // The engine stores raw MSBuild lines, which point at the throwaway validation
+    // overlay copy and carry the project path as a suffix:
+    //   C:\...\validation\20260719T210222937-399f91f\Calculator.cs(25,16): error CS0103: … [C:\…\Sample.csproj]
+    // Neither part helps the operator (the overlay file is deleted after the build),
+    // so the banner shows the solution-relative file only. Purely presentational —
+    // the untouched original stays on the <li> title attribute, and anything that does
+    // not match the expected shape is rendered unchanged.
+    private static readonly Regex DiagnosticLinePattern = new(
+        @"^(?<path>.+?)\((?<span>\d+(?:,\d+){0,3})\)(?<rest>:\s.*)$",
+        RegexOptions.CultureInvariant);
+
+    // validation\<timestampTguid>\ — the per-run overlay folder the build compiles in.
+    private static readonly Regex ValidationOverlayFolderPattern = new(
+        @"^\d{8}T\d+-[0-9a-fA-F]+$",
+        RegexOptions.CultureInvariant);
+
+    private static string FormatDiagnostic(string diagnostic)
+    {
+        if (string.IsNullOrWhiteSpace(diagnostic))
+        {
+            return diagnostic;
+        }
+
+        try
+        {
+            string text = StripProjectSuffix(diagnostic.Trim());
+            Match match = DiagnosticLinePattern.Match(text);
+            if (!match.Success)
+            {
+                return diagnostic;
+            }
+
+            string path = ShortenDiagnosticPath(match.Groups["path"].Value);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return diagnostic;
+            }
+
+            return $"{path}({match.Groups["span"].Value}){match.Groups["rest"].Value}";
+        }
+        catch (Exception)
+        {
+            // Presentation only: an unexpected shape must never break the review banner.
+            return diagnostic;
+        }
+    }
+
+    private static string StripProjectSuffix(string text)
+    {
+        if (!text.EndsWith(']'))
+        {
+            return text;
+        }
+
+        int open = text.LastIndexOf('[');
+        if (open <= 0)
+        {
+            return text;
+        }
+
+        string inside = text[(open + 1)..^1];
+        bool looksLikeProjectPath = inside.EndsWith("proj", StringComparison.OrdinalIgnoreCase)
+            || inside.Contains('\\')
+            || inside.Contains('/');
+        return looksLikeProjectPath ? text[..open].TrimEnd() : text;
+    }
+
+    private static string ShortenDiagnosticPath(string path)
+    {
+        string trimmed = path.Trim();
+        string[] segments = trimmed.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length <= 1)
+        {
+            return trimmed;
+        }
+
+        // Inside the throwaway overlay: everything after validation\<run-folder>\ is
+        // already the path relative to the watched solution root.
+        for (int i = segments.Length - 2; i >= 1; i--)
+        {
+            if (string.Equals(segments[i - 1], "validation", StringComparison.OrdinalIgnoreCase)
+                && ValidationOverlayFolderPattern.IsMatch(segments[i]))
+            {
+                return string.Join('/', segments[(i + 1)..]);
+            }
+        }
+
+        // Otherwise a real watched copy: <runtime>\watched-solutions\<solution>\<relative>.
+        for (int i = 0; i < segments.Length - 2; i++)
+        {
+            if (string.Equals(segments[i], "watched-solutions", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Join('/', segments[(i + 2)..]);
+            }
+        }
+
+        return segments[^1];
     }
 
     public ValueTask DisposeAsync()

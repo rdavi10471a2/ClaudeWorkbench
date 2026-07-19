@@ -7,7 +7,7 @@ namespace AIMonitor.McpServer;
 
 // Owns the CURRENT watched workspace and the engine services bound to it, and can
 // rebuild them when the operator switches workspaces at runtime. Monitor-general
-// facts (install/repo root, runtime base, WinMerge candidates) are stable; the
+// facts (install/repo root, runtime base) are stable; the
 // per-workspace MonitorSettings + services are swapped by SwitchTo(). Consumers
 // (the MCP tools, the source browser, the UI) read the current services through
 // this manager rather than capturing a startup singleton.
@@ -19,12 +19,10 @@ public sealed class WorkspaceManager
     public WorkspaceManager(
         string repositoryRoot,
         string runtimeRoot,
-        IReadOnlyList<string> winMergeCandidatePaths,
         MonitorSettings? initial)
     {
         RepositoryRoot = repositoryRoot;
         RuntimeRoot = runtimeRoot;
-        WinMergeCandidatePaths = winMergeCandidatePaths;
         if (initial is not null && WatchedWorkspaceExists(initial))
         {
             current = WorkspaceServices.Build(initial);
@@ -34,8 +32,6 @@ public sealed class WorkspaceManager
     public string RepositoryRoot { get; }
 
     public string RuntimeRoot { get; }
-
-    public IReadOnlyList<string> WinMergeCandidatePaths { get; }
 
     public event Action? Changed;
 
@@ -78,8 +74,7 @@ public sealed class WorkspaceManager
         MonitorSettings settings = MonitorSettings.Create(
             RepositoryRoot,
             Path.GetFullPath(watchedSolutionPath),
-            RuntimeRoot,
-            WinMergeCandidatePaths);
+            RuntimeRoot);
         WorkspaceServices services = WorkspaceServices.Build(settings);
         lock (sync)
         {

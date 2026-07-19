@@ -1,0 +1,46 @@
+<Project>
+
+  <!--
+    Publish the live install automatically after a Release build of the solution.
+
+    Two guards, both load-bearing:
+
+    1. Release only. A Debug build - the inner loop, `dotnet test`, and every tool/agent
+       build - must not pay for a full publish (dotnet publish x2 + npm ci + shortcuts),
+       and must not fail because the install happens to be running.
+
+    2. CWB_SKIP_PUBLISH_LIVE. publish-live.ps1 runs `dotnet publish -c Release` itself,
+       which builds these projects again and would re-enter this target forever. The
+       script sets this variable for its own child builds to break the cycle. It is also
+       the manual escape hatch: set CWB_SKIP_PUBLISH_LIVE=1 for a Release build with no
+       publish.
+
+    Hooked to the Launcher project only, so it fires once per solution build rather than
+    once per project. The script publishes the host and sidecar itself, so it does not
+    matter whether the Launcher happens to build first.
+  -->
+  <Target Name="PublishLiveInstall"
+          AfterTargets="Build"
+          Condition="'$(MSBuildProjectName)' == 'ClaudeWorkbench.Launcher'
+                     AND '$(Configuration)' == 'Release'
+                     AND '$(CWB_SKIP_PUBLISH_LIVE)' != '1'
+                     AND '$(OS)' == 'Windows_NT'">
+
+    <PropertyGroup>
+      <PublishLiveScript>$(MSBuildThisFileDirectory)scripts\publish-live.ps1</PublishLiveScript>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Release build: publishing live install (set CWB_SKIP_PUBLISH_LIVE=1 to skip)..." />
+
+    <!--
+      ContinueOnError: a failed publish must not fail the build. The usual cause is the
+      install being open, which is a workflow state, not a code defect - the compile that
+      just succeeded is still valid and the warning says what happened.
+    -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(PublishLiveScript)&quot; -NoShortcut"
+          Condition="Exists('$(PublishLiveScript)')"
+          ContinueOnError="WarnAndContinue"
+          EnvironmentVariables="CWB_SKIP_PUBLISH_LIVE=1" />
+  </Target>
+
+</Project>

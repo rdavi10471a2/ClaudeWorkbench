@@ -2,7 +2,6 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
 using AIMonitor.Logging;
-using AIMonitor.Runtime;
 using AIMonitor.Workflow;
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
@@ -44,7 +43,7 @@ public sealed partial class AIMonitorTools
             summary.RecordPath,
             summary,
             verbose ? record : null,
-            "Candidate staged. Use get_staged_record for full details or launch_staged_diff for review.");
+            "Candidate staged. Use get_staged_record for full details; the operator reviews and decides in the ClaudeWorkbench Merge Review surface.");
     }
 
     [McpServerTool]
@@ -69,35 +68,6 @@ public sealed partial class AIMonitorTools
             decisionOptions.RefreshPlan,
             verbose,
             decisionOptions.TerminalValidationRecords);
-    }
-
-    [McpServerTool]
-    [Description("Legacy MCP/CLI path: run pre-merge validation, then launch the configured external diff tool for a staged edit record and return review paths. The ClaudeWorkbench host reviews in-app and does not use this.")]
-    public AIMonitorStagedDiffLaunchResult LaunchStagedDiff(
-        [Description("Staged edit record id returned by stage_candidate_for_review.")] string stagedRecordId,
-        [Description("Explicit diff tool executable path.")] string? diffToolPath = null,
-        [Description("Force launch after an explicit human validation override.")] bool forceValidation = false,
-        [Description("Return the full staged record inline for debugging. Defaults to compact response.")] bool verbose = false)
-    {
-        runtimeState.Touch();
-        StagedEditRecord stagedRecord = workflowService.GetStagedRecord(stagedRecordId);
-        bool deferBuildValidationUntilAccept = ShouldDeferBuildValidationUntilAccept(stagedRecord);
-        StagedDiffLaunchWorkflowResult result = new StagedDiffLaunchWorkflow().Launch(
-            settings,
-            logger,
-            workflowService,
-            stagedRecordId,
-            "AIMonitor.McpServer",
-            diffToolPath,
-            forceValidation,
-            deferBuildValidationUntilAccept,
-            verbose);
-        return new AIMonitorStagedDiffLaunchResult(
-            result.StagedRecordSummary,
-            result.StagedRecord,
-            result.PreMergeValidation,
-            result.DiffLaunch,
-            result.NextStep);
     }
 
     [McpServerTool]

@@ -22,9 +22,10 @@ const MCP_SERVER_NAME = "claude-workbench";
 const HOST_BASE = WORKBENCH_MCP_URL.replace(/\/mcp\/?$/, "");
 
 // The agent's working directory is the watched solution's folder (read-only there:
-// Read/Grep/Glob allowed, writes disallowed). Auto-derived from the host so it
-// always tracks the configured watched solution; falls back to WORKBENCH_CWD.
-let workspaceCwd: string | undefined = process.env.WORKBENCH_CWD;
+// Read/Grep/Glob allowed, writes disallowed). Auto-derived from the host's /health
+// (watchedSolutionPath) — nothing in the repo sets an env override, so there is no
+// fallback: until /health answers this stays undefined and the SDK uses its default.
+let workspaceCwd: string | undefined;
 // Operator-uploaded files live here (under the workspace runtime, NOT the watched
 // tree). Granted to the agent as an additional read-only directory so it can Read
 // attachments that sit outside cwd. Resolved from the host /health.
@@ -47,7 +48,7 @@ async function resolveWorkspaceCwd(): Promise<void> {
       uploadsDir = info.uploadsPath ?? undefined;
     }
   } catch {
-    // keep the env/default cwd if the host is not reachable yet
+    // keep the last-resolved cwd if the host is not reachable yet
   }
 }
 
@@ -70,7 +71,7 @@ function buildGovernanceCard(): string {
     "  2. refresh_file (existing file) or new_file (future file) for each planned file.",
     "  3. Edit the monitor-owned Working candidate with the typed tools (submit_symbol, add_method, add_property, replace_span_in_file, replace_text_in_file, submit_file). For C# symbol edits, call get_source_map (selector mode) first.",
     "  4. stage_candidate_for_review for each file.",
-    "  5. STOP and tell the operator it is staged for review. Do NOT call launch_staged_diff or record_diff_decision — the operator drives the merge in the UI.",
+    "  5. STOP and tell the operator it is staged for review. Do NOT call record_diff_decision — the operator drives the merge in the UI.",
     "- The task board is OPTIONAL context, not a per-turn step. Work is free-flowing by default: do NOT tie a turn to a task automatically. ONLY when the operator's request clearly concerns a board task should you call get_current_task for that task's context and record progress with update_agent_notes. For ad-hoc requests, do not load or write task notes, and never fold an unrelated request into the Active task.",
     "- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.",
   ].join("\n");

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 
@@ -324,7 +324,6 @@ public sealed class InstanceController : IDisposable
             {
                 WatchedSolutionPath = Workspace.SolutionPath,
                 RuntimeRoot = instanceDir,
-                WinMergeCandidatePaths = Array.Empty<string>(),
             },
         };
 

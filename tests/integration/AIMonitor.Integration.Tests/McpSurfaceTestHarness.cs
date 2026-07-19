@@ -1,6 +1,7 @@
 using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.MSBuild;
+using AIMonitor.Workflow;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
@@ -168,6 +169,42 @@ internal sealed class McpSurfaceFixture
         string IndexDatabasePath);
 }
 
+// Stands in for the operator's in-app review, which is the only review surface left.
+//
+// Review is in-app (ClaudeWorkbench.Host's DiffPlex Merge Review); there is no MCP tool that opens a
+// review any more, and `WorkflowEditService.RecordDecision` still refuses an accept until the record
+// carries a pre-merge verdict and a recorded review launch. In the product the Blazor host and the MCP
+// server are the SAME process, so the host's stamp is immediately visible to `record_diff_decision`.
+// This stamps those two facts exactly the way the host does in
+// `EngineReviewWorkflow.EnsureValidatedAndLaunched`: prepare the review file, run the fast GATE-1
+// staged-overlay check, then record the launch.
+//
+// These tests drive a STANDALONE server process, and staged records are owned in memory by whichever
+// process hosts the engine (write-through to disk, rehydrated lazily on first use). So a stamp made
+// here is only visible to the server after it is restarted — see ReconnectAfterInAppReviewAsync.
+internal static class InAppReviewSimulator
+{
+    public static void MarkReviewed(
+        string repositoryRoot,
+        string watchedSolutionPath,
+        string runtimeRoot,
+        string stagedRecordId)
+    {
+        MonitorSettings settings = MonitorSettings.Create(repositoryRoot, watchedSolutionPath, runtimeRoot);
+        WorkflowEditService editService = new(settings);
+        StagedEditRecord record = editService.GetStagedRecord(stagedRecordId);
+        editService.PrepareReviewFileForLaunch(stagedRecordId);
+        PreMergeValidationResult validation = new PreMergeValidationService().ValidateStagedOverlay(record, [record]);
+        editService.RecordPreMergeValidation(stagedRecordId, validation, forceApproved: false);
+        editService.RecordDiffLaunch(stagedRecordId, launched: true, "in-app merge review");
+    }
+
+    public static void MarkReviewed(McpSurfaceFixture fixture, string stagedRecordId)
+    {
+        MarkReviewed(fixture.RepositoryRoot, fixture.WatchedProjectPath, fixture.RuntimeRoot, stagedRecordId);
+    }
+}
+
 // Thin helpers over the MCP client for the suite: client creation, planned-session bootstrap, staged-record
 // inspection, and JSON probing of tool results. The JSON helpers walk the result tree so assertions do not
 // depend on the exact nesting of the MCP content envelope.
@@ -193,6 +230,22 @@ internal static class McpSurfaceClient
         };
 
         return await McpClient.CreateAsync(new StdioClientTransport(options));
+    }
+
+    // Stamp the operator's in-app review on the given staged records and hand back a fresh server
+    // connection that has rehydrated them from disk. See InAppReviewSimulator for why the restart.
+    public static async Task<McpClient> ReconnectAfterInAppReviewAsync(
+        McpClient client,
+        McpSurfaceFixture fixture,
+        params string[] stagedRecordIds)
+    {
+        await client.DisposeAsync();
+        foreach (string stagedRecordId in stagedRecordIds)
+        {
+            InAppReviewSimulator.MarkReviewed(fixture, stagedRecordId);
+        }
+
+        return await ConnectAsync(fixture);
     }
 
     public static async Task<string> StartPlannedSessionAsync(
@@ -275,28 +328,6 @@ internal static class McpSurfaceClient
             return FindBool(document.RootElement, propertyName)
                 ?? throw new InvalidOperationException($"Could not find JSON bool property '{propertyName}'.");
         }
-    }
-
-    public static string FakeDiffToolPath()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            string windowsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "where.exe");
-            if (File.Exists(windowsPath))
-            {
-                return windowsPath;
-            }
-        }
-
-        foreach (string candidate in new[] { "/usr/bin/true", "/bin/true" })
-        {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new FileNotFoundException("Unable to find a harmless executable for diff-launch tests.");
     }
 
     private static string GetBuildConfiguration()

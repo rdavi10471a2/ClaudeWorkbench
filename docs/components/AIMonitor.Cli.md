@@ -1,6 +1,6 @@
 # AIMonitor.Cli
 
-> Engine-side console harness that routes command-line verbs to the AIMonitor engine services — index queries, the staged edit workflow, index rebuilds, and hub launch — emitting JSON to stdout. Not part of the Blazor host runtime path.
+> Engine-side console harness that routes command-line verbs **directly to the AIMonitor engine services** — index queries, the staged edit workflow, index rebuilds — emitting JSON to stdout. It does **not** go through the MCP tool surface. Not part of the Blazor host runtime path.
 
 **Project:** `src/AIMonitor.Cli/AIMonitor.Cli.csproj` · **Depends on:** `AIMonitor.Core`, `AIMonitor.Data`, `AIMonitor.Workflow`, `AIMonitor.MSBuild`, `AIMonitor.Indexing`, `AIMonitor.Logging`, `AIMonitor.Runtime` (all `ProjectReference`; `net10.0`, `Exe`, implicit usings + nullable, ships an `app.manifest`) · **Depended on by:** `tests/integration/AIMonitor.Integration.Tests` (project-references it, then drives the built `AIMonitor.Cli.dll` out-of-process). Nothing in the Blazor host references it.
 
@@ -12,7 +12,7 @@ Enumerated from `Program.Main` and the sub-routers (`--help` also prints this li
 
 | Command | Handler | Backing service |
 |---|---|---|
-| `hub start [--repo-root <path>]` | `StartHub` | launches `AIMonitor.App` via `dotnet run --project` (child process) |
+| `hub start` | `StartHub` | **Unsupported.** Prints guidance to stderr and returns `1`. It used to shell out to `src/AIMonitor.App`, a WinForms project that does not exist in this repo. The operator console is `src/ClaudeWorkbench.Host`. |
 | `status [--repo-root <path>] [--config <path>]` | `Query` → `GetMonitorStatus()` | `SolutionIndexQueryService` |
 | `index rebuild` | `RebuildIndexAsync` | `SolutionIndexRebuildService.RebuildAsync` |
 | `index summary` | `Query` → `GetSummary()` | `SolutionIndexQueryService` |
@@ -83,11 +83,33 @@ flowchart TD
 ```
 
 ## Owns / Does Not Own
-- **Owns:** the command grammar / verb dispatch; option parsing conventions (`--name value`, `--flag` presence, `--*-text` vs `--*-text-file` mutual exclusion); the JSON-to-stdout + exit-code contract; the `cli-mcp-like` telemetry envelope and its log-preview redaction; the `edit stage` / `edit accept` / `edit reject` convenience response shaping; launching the hub as a child process.
-- **Does not own:** any indexing, edit-session, staging, validation, diff-launch, or decision logic (all in the sibling engine modules); settings resolution (`AIMonitor.Core`); log sink formatting (`AIMonitor.Logging`); the Blazor UI or MCP server; the watched solution's contents.
+- **Owns:** the command grammar / verb dispatch; option parsing conventions (`--name value`, `--flag` presence, `--*-text` vs `--*-text-file` mutual exclusion); the JSON-to-stdout + exit-code contract; the `cli-mcp-like` telemetry envelope and its log-preview redaction; the `edit stage` / `edit accept` / `edit reject` convenience response shaping.
+- **Does not own:** any indexing, edit-session, staging, validation, or decision logic (all in the sibling engine modules); settings resolution (`AIMonitor.Core`); log sink formatting (`AIMonitor.Logging`); the Blazor UI or MCP server; the watched solution's contents; launching the operator console (the `hub start` verb is retired).
 
 ## Role in the system
-AIMonitor.Cli is a developer / CI harness, **not** a component of the ClaudeWorkbench Blazor host (`AIMonitor.App` / the Host) runtime path — nothing the operator console loads references this project. It is the out-of-process, shell-and-JSON front door to the same engine services the app and the MCP server use in-process, which makes it ideal for scripted end-to-end exercises and for reproducing engine behavior deterministically. The one link back to the app is `hub start`, which merely *shells out* to `dotnet run --project src/AIMonitor.App/AIMonitor.App.csproj` (resolved under `--repo-root`, default cwd) — the CLI is not loaded by the app it starts.
+AIMonitor.Cli is a developer / CI harness, **not** a component of the ClaudeWorkbench Blazor host runtime path — nothing the operator console loads references this project. It is the out-of-process, shell-and-JSON front door to the same engine services the app and the MCP server use in-process, which makes it ideal for scripted end-to-end exercises and for reproducing engine behavior deterministically.
+
+### Nothing a user touches runs this code
+
+**No product project references `AIMonitor.Cli`.** The only non-test reference to it anywhere in the repo is its own `Program.cs`; the solution file merely lists it so it builds. The Blazor host, the sidecar and the Launcher all reach the engine in-process and never invoke this binary.
+
+It is **test-only infrastructure**, and its sole consumer is `tests/integration/AIMonitor.Integration.Tests`. That is why it reads as dead weight on every inspection — and why deleting it silently deletes engine coverage instead of removing cruft.
+
+### It does NOT call the MCP surface — read this before changing test coverage
+
+This is the single most misremembered fact about this project, so it is recorded plainly:
+
+- `AIMonitor.Cli.csproj` has **no `ProjectReference` to `AIMonitor.McpServer`**, and `Program.cs` contains no reference to `AIMonitorTools`, an MCP client, or `CallToolAsync`. Every verb constructs an engine service and calls it **directly**.
+- The `adapterProtocol = "cli-mcp-like"` telemetry envelope is exactly that — a *log shape* chosen so CLI runs and MCP runs produce comparable telemetry. It is **not** evidence that calls travel through MCP. The name is a vestige of an earlier design (the Claude/Codex era) in which both front ends flowed through a shared adapter class; that shared path no longer exists.
+
+The consequence for testing: the CLI and the MCP surface cover **different layers, and neither substitutes for the other**.
+
+| Layer | Driven by | Scale |
+|---|---|---|
+| Engine, out-of-process | `CliIndexQueryTests` via this CLI | ~59 invocations (`edit`, `stage`, `refresh`, `record-decision`, `index`, `status`, …) |
+| MCP tool surface | `McpServerSmokeTests`, `McpSurfaceTestHarness`, `McpReadIndexSurfaceTests`, `McpPlannedSessionSurfaceTests`, `ClaudeSmokesPhase1McpTests` | ~152 `CallToolAsync` invocations |
+
+So **do not** thin one on the assumption it duplicates the other, and **do not** delete CLI verbs as "dead because nothing calls them from a shell" — the integration suite stands on them. Verbs are only safe to remove once nothing in `tests/` drives them (as was the case for `hub start` and the retired `edit launch-diff`).
 
 ## Gotchas & invariants
 - **JSON is the API.** stdout is always the serialized result (indented, web casing, enums as strings via `JsonStringEnumConverter`). Human-readable lines only appear for `index rebuild` and `hub start`. Errors go to **stderr**, never stdout.

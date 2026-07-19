@@ -1,4 +1,4 @@
-using AIMonitor.Core;
+﻿using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Logging;
 using AIMonitor.McpServer;
@@ -44,7 +44,6 @@ internal static class Program
         builder.Services.AddSingleton(new WorkspaceManager(
             settings.RepositoryRoot,
             settings.RuntimeRoot,
-            settings.WinMergeCandidatePaths,
             settings));
         builder.Services.AddSingleton<AIMonitorMcpRuntimeState>();
         builder.Services

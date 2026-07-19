@@ -2,7 +2,6 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
 using AIMonitor.Logging;
-using AIMonitor.Runtime;
 using AIMonitor.Workflow;
 using System.Diagnostics;
 using System.Text.Json;
@@ -21,7 +20,7 @@ internal static class Program
         {
             Console.WriteLine("AIMonitor CLI scaffold");
             Console.WriteLine("Commands:");
-            Console.WriteLine("  hub start [--repo-root <path>]");
+            Console.WriteLine("  hub start (not supported — use: dotnet run --project src/ClaudeWorkbench.Host)");
             Console.WriteLine("  status [--repo-root <path>] [--config <path>]");
             Console.WriteLine("  index rebuild [--repo-root <path>] [--config <path>]");
             Console.WriteLine("  index summary [--repo-root <path>] [--config <path>]");
@@ -36,8 +35,8 @@ internal static class Program
             Console.WriteLine("  edit replace-text --file <path> --old-text <text>|--old-text-file <path> --new-text <text>|--new-text-file <path> [--expected-matches <n>] [--expected-working-hash <hash>] [--repo-root <path>] [--config <path>]");
             Console.WriteLine("  edit status --file <path> [--repo-root <path>] [--config <path>]");
             Console.WriteLine("  edit stage --file <path> [--ledger-summary <text>] [--repo-root <path>] [--config <path>]");
-            Console.WriteLine("  edit launch-diff --staged-record-id <id> [--diff-tool <path>] [--force-validation] [--repo-root <path>] [--config <path>]");
-            Console.WriteLine("  edit record-decision --staged-record-id <id> --decision accepted|rejected [--expected-staged-hash <hash>] [--repo-root <path>] [--config <path>]");
+            Console.WriteLine("  edit review (--file <path> | --staged-record-id <id>) [--force-validation] [--repo-root <path>] [--config <path>]");
+        Console.WriteLine("  edit record-decision --staged-record-id <id> --decision accepted|rejected [--expected-staged-hash <hash>] [--repo-root <path>] [--config <path>]");
             Console.WriteLine("  edit accept --file <path> --expected-staged-hash <hash> [--repo-root <path>] [--config <path>] (shortcut)");
             Console.WriteLine("  edit reject --file <path> [--repo-root <path>] [--config <path>] (shortcut)");
             return 0;
@@ -45,7 +44,7 @@ internal static class Program
 
         if (IsHubStart(args))
         {
-            return StartHub(args);
+            return StartHub();
         }
 
         if (string.Equals(args[0], "status", StringComparison.OrdinalIgnoreCase))
@@ -201,26 +200,13 @@ internal static class Program
                     service.Stage(RequireOption(args, "--file"), GetOption(args, "--ledger-summary")),
                     HasOption(args, "--verbose")),
                 "staged-record" => service.GetStagedRecord(RequireOption(args, "--staged-record-id")),
-                "launch-diff" => LaunchDiff(args, settings, logger, service),
+                "review" => Review(args, service),
                 "record-decision" => RecordDecision(args, settings, logger, service),
                 "accept" => Accept(args, settings, logger, service),
                 "reject" => Reject(args, settings, logger, service),
                 _ => throw new InvalidOperationException($"Unknown edit command: {args[1]}")
             };
         });
-    }
-
-    private static object LaunchDiff(string[] args, MonitorSettings settings, IMonitorLogger logger, WorkflowEditService service)
-    {
-        return new StagedDiffLaunchWorkflow().Launch(
-            settings,
-            logger,
-            service,
-            RequireOption(args, "--staged-record-id"),
-            "AIMonitor.Cli",
-            GetOption(args, "--diff-tool"),
-            HasOption(args, "--force-validation"),
-            HasOption(args, "--verbose"));
     }
 
     private static object CreateStageResponse(WorkflowEditService service, StagedEditRecord record, bool verbose)
@@ -238,7 +224,7 @@ internal static class Program
             stagedRecordPath = summary.RecordPath,
             stagedRecordSummary = summary,
             stagedRecord = verbose ? record : null,
-            nextStep = "Candidate staged. Use edit staged-record for full details or edit launch-diff for review."
+            nextStep = "Candidate staged. Use edit staged-record for full details; the operator reviews and decides in the ClaudeWorkbench Merge Review surface."
         };
     }
 
@@ -253,6 +239,41 @@ internal static class Program
             GetOption(args, "--expected-staged-hash"),
             "AIMonitor.Cli",
             HasOption(args, "--verbose"));
+    }
+
+    // The engine refuses to record an accept until a review has been recorded for the staged
+    // record. In the app that stamp is applied by EngineReviewWorkflow.EnsureValidatedAndLaunched
+    // when the operator opens Merge Review. Out-of-process callers need an explicit equivalent:
+    // it used to be a side effect of the retired `edit launch-diff` verb, and without it
+    // `edit accept` is unreachable. This records the same GATE-1 verdict and review stamp the
+    // host does — it launches nothing.
+    private static object Review(string[] args, WorkflowEditService service)
+    {
+        string? stagedRecordId = GetOption(args, "--staged-record-id");
+        if (string.IsNullOrWhiteSpace(stagedRecordId))
+        {
+            EditSessionStatus status = service.GetStatus(RequireOption(args, "--file"));
+            if (string.IsNullOrWhiteSpace(status.LastStagedRecordId))
+            {
+                throw new InvalidOperationException("No staged record exists for this file. Run edit stage first.");
+            }
+
+            stagedRecordId = status.LastStagedRecordId;
+        }
+
+        StagedEditRecord record = service.GetStagedRecord(stagedRecordId);
+        service.PrepareReviewFileForLaunch(stagedRecordId);
+        PreMergeValidationResult validation = new PreMergeValidationService().ValidateStagedOverlay(record, [record]);
+        service.RecordPreMergeValidation(stagedRecordId, validation, HasOption(args, "--force-validation"));
+        StagedEditRecord reviewed = service.RecordDiffLaunch(stagedRecordId, launched: true, "cli review");
+        return new
+        {
+            stagedRecordId,
+            preMergeValidationStatus = validation.Status,
+            preMergeValidationIsError = validation.IsError,
+            preMergeValidationDiagnosticCount = validation.DiagnosticCount,
+            launchStatus = reviewed.LaunchStatus
+        };
     }
 
     private static object Accept(string[] args, MonitorSettings settings, IMonitorLogger logger, WorkflowEditService service)
@@ -408,36 +429,16 @@ internal static class Program
         }
     }
 
-    private static int StartHub(string[] args)
+    // 'hub start' used to shell out to src/AIMonitor.App (the WinForms hub of the
+    // AIMonitor lineage). That project does not exist in ClaudeWorkbench, so the verb
+    // could only ever fail with a confusing "project was not found". It now fails fast
+    // and points the operator at the real console instead.
+    private static int StartHub()
     {
-        try
-        {
-            string repositoryRoot = GetOption(args, "--repo-root") ?? Directory.GetCurrentDirectory();
-            string appProject = Path.Combine(repositoryRoot, "src", "AIMonitor.App", "AIMonitor.App.csproj");
-            if (!File.Exists(appProject))
-            {
-                Console.Error.WriteLine($"AIMonitor.App project was not found: {appProject}");
-                return 1;
-            }
-
-            using System.Diagnostics.Process process = new();
-            process.StartInfo = new System.Diagnostics.ProcessStartInfo("dotnet")
-            {
-                WorkingDirectory = repositoryRoot,
-                UseShellExecute = true
-            };
-            process.StartInfo.ArgumentList.Add("run");
-            process.StartInfo.ArgumentList.Add("--project");
-            process.StartInfo.ArgumentList.Add(appProject);
-            process.Start();
-            Console.WriteLine($"Started AIMonitor hub from {appProject}");
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine(ex.Message);
-            return 1;
-        }
+        Console.Error.WriteLine("'hub start' is not supported in ClaudeWorkbench: the AIMonitor.App hub no longer exists.");
+        Console.Error.WriteLine("The operator console is ClaudeWorkbench.Host — run 'dotnet run --project src/ClaudeWorkbench.Host',");
+        Console.Error.WriteLine("or start it from the Launcher in a published install.");
+        return 1;
     }
 
     private static SolutionIndexQueryService CreateQueryService(string[] args)

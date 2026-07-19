@@ -2,7 +2,6 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
 using AIMonitor.Logging;
-using AIMonitor.Runtime;
 using AIMonitor.Workflow;
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
@@ -88,7 +87,7 @@ public sealed partial class AIMonitorTools
         builder.AppendLine("- MCP edit sessions start with `start_monitor_session` and a non-empty `filesPlanned` list.");
         builder.AppendLine("- Candidate edits happen in monitor-owned Working files.");
         builder.AppendLine("- Review uses `stage_candidate_for_review`, then the operator's in-app Merge Review; the host performs the accept-time write.");
-        builder.AppendLine("- Planned sessions require all planned files to be staged before review launch.");
+        builder.AppendLine("- Planned sessions require all planned files to be staged before the operator reviews them.");
         builder.AppendLine("- Planned sessions defer the expensive build/index pass until all planned files are accepted/rejected.");
         builder.AppendLine("- Accepted decisions trigger index refresh metadata after the planned session reaches terminal decisions; refresh before editing the same watched file again.");
         return builder.ToString();
@@ -107,7 +106,7 @@ public sealed partial class AIMonitorTools
         builder.AppendLine("4. For existing files, call `refresh_file`. For future watched files, call `new_file`.");
         builder.AppendLine("5. Edit only the monitor-owned Working candidate with `submit_file`, text/span tools, or Roslyn typed edit tools.");
         builder.AppendLine("6. Stage every planned file with `stage_candidate_for_review(path, sessionId)`, then STOP.");
-        builder.AppendLine("7. The operator reviews the staged diff in the ClaudeWorkbench Merge Review dialog and accepts or rejects each file. Do NOT call `launch_staged_diff` or `record_diff_decision`, and do not expect any external diff tool — review, the accept-time write to watched source, and the decision record are host/operator actions in this environment.");
+        builder.AppendLine("7. The operator reviews the staged diff in the ClaudeWorkbench Merge Review dialog and accepts or rejects each file. Do NOT call `record_diff_decision` — review, the accept-time write to watched source, and the decision record are host/operator actions in this environment.");
         builder.AppendLine("8. After the operator accepts, that file has been written to the watched solution. Call `refresh_file` before editing the same file again.");
         builder.AppendLine();
         builder.AppendLine("Notes:");
@@ -138,10 +137,9 @@ public sealed partial class AIMonitorTools
             CheckPathOutsideRoot("runtime-outside-watched-source", runtimeRoot, watchedProjectFolder, "Runtime state is outside watched source.", "Runtime state is inside watched source."),
         ];
 
-        // WinMerge is retired: review/merge is in-app (the DiffPlex merge-review surface),
-        // so there is no external diff tool to probe. The old 'diff-tool-available'
-        // guardrail warned on every self-check when no WinMerge binary was on disk — a
-        // false alarm now that nothing uses WinMerge. Dropped.
+        // Review/merge is in-app (the DiffPlex merge-review surface), so there is no
+        // external diff tool to probe. The old 'diff-tool-available' guardrail warned on
+        // every self-check once no external diff binary was expected on disk. Dropped.
         return checks.ToArray();
     }
 
@@ -384,46 +382,6 @@ public sealed partial class AIMonitorTools
 
         AIMonitorSessionEditPlan editPlan = RequireSessionEditPlan(sessionId);
         EnsurePlannedFile(editPlan, sourceFilePath);
-    }
-
-    private bool ShouldDeferBuildValidationUntilAccept(StagedEditRecord stagedRecord)
-    {
-        if (string.IsNullOrWhiteSpace(stagedRecord.SessionId))
-        {
-            return false;
-        }
-
-        AIMonitorSessionEditPlan editPlan = RequireSessionEditPlan(stagedRecord.SessionId);
-        EnsurePlannedFile(editPlan, stagedRecord.WatchedFilePath);
-        IReadOnlyList<StagedEditRecord> sessionRecords = workflowService.ListStagedRecords(stagedRecord.SessionId);
-        foreach (AIMonitorSessionPlannedFile plannedFile in editPlan.FilesPlanned)
-        {
-            string plannedPath = Path.GetFullPath(plannedFile.SourceFilePath);
-            IEnumerable<StagedEditRecord> plannedFileRecords = sessionRecords.Where(record =>
-                Path.GetFullPath(record.WatchedFilePath).Equals(plannedPath, StringComparison.OrdinalIgnoreCase));
-            // Launch-deadlock fix: a planned file already carrying a final decision is
-            // satisfied. Interleaving launch -> decide -> launch on the remaining files
-            // must not throw just because an earlier file was decided and no longer has an
-            // active (undecided) staged record. Only files NOT yet decided must still have
-            // an active staged record.
-            bool alreadyDecided = plannedFileRecords.Any(record => !string.IsNullOrWhiteSpace(record.Decision));
-            if (alreadyDecided)
-            {
-                continue;
-            }
-
-            bool hasActiveStagedRecord = plannedFileRecords.Any(record =>
-                string.IsNullOrWhiteSpace(record.Decision)
-                && string.IsNullOrWhiteSpace(record.SupersededByStagedRecordId)
-                && !record.Status.Equals("superseded", StringComparison.OrdinalIgnoreCase)
-                && !record.Classification.Equals("superseded", StringComparison.OrdinalIgnoreCase));
-            if (!hasActiveStagedRecord)
-            {
-                throw new InvalidOperationException("Cannot launch review until every planned session edit file has a staged record. Stage missing planned file: " + plannedFile.RelativePath);
-            }
-        }
-
-        return true;
     }
 
     private AIMonitorSessionEditPlan RequireSessionEditPlan(string sessionId)
