@@ -110,7 +110,9 @@ flowchart TD
 
 ### (a) Operator Accept writes watched source
 
-`EngineReviewWorkflow.Accept` validates, then copies the staged bytes into the watched tree, then records the decision (which runs the terminal build + index rebuild). Note honestly the **write-before-validate ordering**: `File.Copy(record.StagedFilePath, record.WatchedFilePath, overwrite: true)` executes *before* `StagedDecisionWorkflow.Record` runs GATE 2's authoritative build. The pre-accept guard is only GATE 1 (a fast staged-overlay readiness check, no `dotnet build`); if the full build then fails, the watched file has already been overwritten. A rejected/failed build does not roll the file back.
+`EngineReviewWorkflow.Accept` runs **GATE 2's authoritative build first, then writes**, then records the decision (index rebuild). GATE 1 remains the fast staged-overlay readiness check (no `dotnet build`); the terminal build runs *before* any bytes reach the watched tree, and **a failed build is a hard stop** — nothing is written, so there is nothing to roll back.
+
+> Historical note: this used to be the reverse (`File.Copy` before `StagedDecisionWorkflow.Record` ran the build), which meant a failed build left the watched file already overwritten. Fixed in `b029a03` — see the `H2 + write-before-build` comment in `EngineReviewWorkflow.cs`.
 
 ```mermaid
 sequenceDiagram
