@@ -83,6 +83,18 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
 
             PreMergeValidationResult revalidation = new PreMergeValidationService().Validate(workspace.Settings, record);
             workspace.EditService.RecordPreMergeValidation(stagedRecordId, revalidation, forceApproved: true);
+            record = workspace.EditService.GetStagedRecord(stagedRecordId);
+        }
+
+        // --- H1: validate the staged record BEFORE writing watched source ---
+        // The record must still be pending. If it was superseded by a newer candidate or
+        // already decided, accepting it would overwrite watched source with stale/wrong
+        // bytes and record nothing. (RecordDecision enforces this too, but only AFTER the
+        // write in the old ordering — the write must not happen first.)
+        if (!IsPending(record))
+        {
+            return new ReviewActionResult(
+                $"Cannot accept {record.RelativePath}: this staged record is no longer pending (superseded or already decided). Re-stage the current candidate.");
         }
 
         if (!File.Exists(record.StagedFilePath))
@@ -90,62 +102,130 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             return new ReviewActionResult($"Staged candidate file is missing: {record.StagedFilePath}");
         }
 
-        // Operator-authorized write of the reviewed staged bytes into the watched tree.
-        // This is the in-app equivalent of the WinMerge "take proposed" save.
-        string? watchedDirectory = Path.GetDirectoryName(record.WatchedFilePath);
-        if (!string.IsNullOrEmpty(watchedDirectory))
+        // The diff-stable guarantee: the staged snapshot must be byte-identical to what was
+        // hashed at staging time, so "what was reviewed is what gets written". Re-hash and
+        // verify BEFORE touching watched source.
+        if (!FileHash.Compute(record.StagedFilePath).Equals(record.StagedHash, StringComparison.OrdinalIgnoreCase))
         {
-            Directory.CreateDirectory(watchedDirectory);
+            return new ReviewActionResult(
+                $"Cannot accept {record.RelativePath}: the staged candidate changed after staging. Refresh, reapply the edit, and stage again.");
         }
 
-        File.Copy(record.StagedFilePath, record.WatchedFilePath, overwrite: true);
-
-        // Only the LAST file in the edit session rebuilds the index (and runs the
-        // terminal build). Earlier files defer, so the operator advances through the
-        // session quickly and pays the reindex once, at the end.
+        // Terminal = last pending file in the session. Only the terminal accept runs the
+        // full build + reindex over every accepted file in the session.
         bool terminal = true;
         PostAcceptIndexRefreshPlan? refreshPlan = null;
+        List<StagedEditRecord> overlayRecords = new() { record };
         if (!string.IsNullOrWhiteSpace(record.SessionId))
         {
             IReadOnlyList<StagedEditRecord> sessionRecords = workspace.EditService.ListStagedRecords(record.SessionId);
             terminal = !sessionRecords.Any(other =>
                 !string.Equals(other.StagedRecordId, stagedRecordId, StringComparison.Ordinal) && IsPending(other));
+            StagedEditRecord[] acceptedOthers = sessionRecords
+                .Where(other => !string.Equals(other.StagedRecordId, stagedRecordId, StringComparison.Ordinal)
+                    && (other.Classification is "accepted" or "accepted-normalized"))
+                .ToArray();
             if (terminal)
             {
-                string[] changedPaths = sessionRecords
-                    .Where(other => !string.Equals(other.StagedRecordId, stagedRecordId, StringComparison.Ordinal)
-                        && (other.Classification is "accepted" or "accepted-normalized"))
-                    .Select(other => other.WatchedFilePath)
-                    .Append(record.WatchedFilePath)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                refreshPlan = new PostAcceptIndexRefreshPlan { ChangedFilePaths = changedPaths };
+                refreshPlan = new PostAcceptIndexRefreshPlan
+                {
+                    ChangedFilePaths = acceptedOthers
+                        .Select(other => other.WatchedFilePath)
+                        .Append(record.WatchedFilePath)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray()
+                };
+                overlayRecords.AddRange(acceptedOthers);
             }
         }
 
-        // Records the decision; on the terminal file runs the build and rebuilds the
-        // solution index for every accepted session file. Synchronous so the dialog's
-        // busy overlay blocks until the index is current.
-        ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
-            workspace.Settings,
-            logger,
-            workspace.EditService,
-            stagedRecordId,
-            "accepted",
-            record.StagedHash,
-            "ClaudeWorkbench",
-            deferIndexRefresh: !terminal,
-            refreshPlan: refreshPlan);
+        // --- H2 + write-before-build: run the authoritative GATE-2 build BEFORE writing ---
+        // On the terminal accept, compile the combined session overlay (a real dotnet build,
+        // not the hash-only readiness check GATE 1 runs). A failed build is a hard stop
+        // unless the operator overrode validation. The old in-app path never ran this build.
+        PreMergeValidationResult? terminalBuild = null;
+        if (terminal)
+        {
+            try
+            {
+                terminalBuild = new PreMergeValidationService().Validate(workspace.Settings, record, overlayRecords);
+            }
+            catch (Exception exception)
+            {
+                return new ReviewActionResult($"Terminal build validation could not run for {record.RelativePath}: {exception.Message}");
+            }
 
-        string message = terminal
-            ? $"Accepted. {record.RelativePath} written; index rebuilt for the edit session."
-            : $"Accepted. {record.RelativePath} written; index rebuild deferred to the final file.";
-        return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, terminal));
+            if (terminalBuild.IsError && !record.PreMergeValidationForceApproved && !forceApproveValidation)
+            {
+                string detail = terminalBuild.DiagnosticCount > 0
+                    ? string.Join(" | ", terminalBuild.Diagnostics.Take(5))
+                    : terminalBuild.Message;
+                return new ReviewActionResult(
+                    $"Build FAILED for the edit session ({terminalBuild.DiagnosticCount} error(s)); not accepted. {detail} Use Accept With Validation Override to merge despite the failure.");
+            }
+        }
+
+        // --- atomic, operator-authorized write of the reviewed staged bytes ---
+        // Write to a sibling temp file then atomically rename, so a crash/disk-full mid-write
+        // cannot leave watched source truncated. All guards above have passed by here.
+        string tempPath = record.WatchedFilePath + ".cwb-accept-tmp";
+        try
+        {
+            string? watchedDirectory = Path.GetDirectoryName(record.WatchedFilePath);
+            if (!string.IsNullOrEmpty(watchedDirectory))
+            {
+                Directory.CreateDirectory(watchedDirectory);
+            }
+
+            File.Copy(record.StagedFilePath, tempPath, overwrite: true);
+            File.Move(tempPath, record.WatchedFilePath, overwrite: true);
+
+            // Record the decision + reindex. The terminal build already ran above (pre-write),
+            // so we do NOT pass terminalValidationRecords here (it would re-run the build).
+            ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
+                workspace.Settings,
+                logger,
+                workspace.EditService,
+                stagedRecordId,
+                "accepted",
+                record.StagedHash,
+                "ClaudeWorkbench",
+                deferIndexRefresh: !terminal,
+                refreshPlan: refreshPlan);
+
+            string message = terminal
+                ? $"Accepted. {record.RelativePath} written; index rebuilt for the edit session."
+                : $"Accepted. {record.RelativePath} written; index rebuild deferred to the final file.";
+            return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, terminal, terminalBuild));
+        }
+        catch (Exception exception)
+        {
+            TryDeleteTemp(tempPath);
+            return new ReviewActionResult($"Accept failed while writing {record.RelativePath}: {exception.Message}");
+        }
+    }
+
+    private static void TryDeleteTemp(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+        catch (Exception)
+        {
+            // Best-effort cleanup of the accept temp file.
+        }
     }
 
     // Concise compilation + index outcome echoed back to the agent. Only the
     // terminal accept ran the build and index rebuild, so only it reports.
-    private static string? BuildOutcomeSummary(ReviewDecisionWithIndexRefreshResult result, bool terminal)
+    private static string? BuildOutcomeSummary(
+        ReviewDecisionWithIndexRefreshResult result,
+        bool terminal,
+        PreMergeValidationResult? terminalBuild)
     {
         if (!terminal)
         {
@@ -153,7 +233,9 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         }
 
         List<string> parts = new() { $"Accepted {result.RelativePath} ({result.Classification})." };
-        if (result.TerminalPreMergeValidation is PreMergeValidationResult build)
+        // terminalBuild is the pre-write GATE-2 build this class now runs; fall back to the
+        // engine's own terminal validation if a caller ever supplies it there instead.
+        if ((terminalBuild ?? result.TerminalPreMergeValidation) is PreMergeValidationResult build)
         {
             parts.Add(build.IsError
                 ? $"Build FAILED with {build.DiagnosticCount} error(s): {string.Join(" | ", build.Diagnostics.Take(5))}"
