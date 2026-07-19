@@ -1,0 +1,142 @@
+.help-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background: rgba(15, 23, 32, 0.55);
+}
+
+.help-panel {
+    background: #ffffff;
+    color: #1f2933;
+    width: min(720px, 100%);
+    max-height: calc(100vh - 56px);
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+}
+
+.help-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #e3e8ee;
+    background: linear-gradient(180deg, #f7f9fb, #ffffff);
+}
+
+.help-title h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #172033;
+}
+
+.help-title p {
+    margin: 4px 0 0;
+    color: #5a6b7b;
+    font-size: 0.9rem;
+}
+
+.help-close {
+    border: none;
+    background: transparent;
+    font-size: 1.6rem;
+    line-height: 1;
+    color: #5a6b7b;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.help-close:hover {
+    background: #eef2f6;
+    color: #172033;
+}
+
+.help-body {
+    padding: 20px 24px 24px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    line-height: 1.55;
+}
+
+.help-body h3 {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a98a6;
+}
+
+.help-rule {
+    background: #fdf4ec;
+    border: 1px solid #f2d6bd;
+    border-left: 3px solid #db4b2b;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.95rem;
+}
+
+.help-steps,
+.help-list {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.92rem;
+}
+
+.help-tabs {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.help-tabs > div {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    align-items: baseline;
+}
+
+.help-tabs dt {
+    font-weight: 700;
+    color: #2f6d68;
+}
+
+.help-tabs dd {
+    margin: 0;
+    color: #3d4c5a;
+    font-size: 0.92rem;
+}
+
+.help-more {
+    border-top: 1px solid #e3e8ee;
+    padding-top: 14px;
+    color: #5a6b7b;
+    font-size: 0.88rem;
+}
+
+.help-body code {
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.85em;
+    background: #eef2f6;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #2f4858;
+}
+
+.help-body b {
+    color: #172033;
+}

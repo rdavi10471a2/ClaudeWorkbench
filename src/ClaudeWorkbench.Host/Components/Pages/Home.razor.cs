@@ -32,6 +32,7 @@ public partial class Home : IDisposable
     private bool workspacePickerOpen;
     private bool reviewDialogOpen;
     private bool aboutOpen;
+    private bool helpOpen;
     private IJSObjectReference? unloadModule;
 
     protected override void OnInitialized()

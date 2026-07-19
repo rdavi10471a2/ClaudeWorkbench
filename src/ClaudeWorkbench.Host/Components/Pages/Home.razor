@@ -28,10 +28,17 @@ else
                 @(Session.Status.Connected ? "Claude available" : "Claude unavailable")
             </span>
             <button type="button" class="wb-about-link" @onclick="@(() => aboutOpen = true)" title="What is best in life?">About</button>
+            <RadzenButton Icon="help_outline"
+                          Text="Help"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Title="How ClaudeWorkbench works — the governed loop, tabs, and controls"
+                          Click="@(() => helpOpen = true)" />
             <RadzenButton Icon="settings"
                           Text="Settings"
                           ButtonStyle="ButtonStyle.Light"
                           Size="ButtonSize.Small"
+                          Title="Agent settings — model, reasoning level, native read tools"
                           Click="@(() => settingsOpen = true)" />
         </div>
     </header>
@@ -86,6 +93,8 @@ else
     </main>
 
     <AgentSettingsDialog Visible="@settingsOpen" OnClose="@(() => settingsOpen = false)" />
+
+    <HelpDialog Visible="@helpOpen" OnClose="@(() => helpOpen = false)" />
 
     @if (aboutOpen)
     {

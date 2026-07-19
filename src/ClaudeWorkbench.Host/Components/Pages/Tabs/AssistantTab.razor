@@ -56,6 +56,7 @@
                                   Text="Stop"
                                   Class="chat-send-button"
                                   ButtonStyle="ButtonStyle.Danger"
+                                  Title="Interrupt the current turn"
                                   Click="@StopAsync" />
                 }
                 else
@@ -64,6 +65,7 @@
                                   Text="Submit Turn"
                                   Class="chat-send-button"
                                   ButtonStyle="ButtonStyle.Primary"
+                                  Title="Send this prompt to Claude"
                                   Click="@SubmitAsync"
                                   Disabled="@(string.IsNullOrWhiteSpace(draft) && attachments.Count == 0)" />
                 }
@@ -84,6 +86,7 @@
                                       Text="Usage"
                                       ButtonStyle="ButtonStyle.Light"
                                       Size="ButtonSize.Small"
+                                      Title="Context-window fill and subscription usage"
                                       Click="@ToggleUsageAsync" />
                         @if (usageOpen)
                         {
@@ -139,18 +142,21 @@
                                   Text="New Thread"
                                   ButtonStyle="ButtonStyle.Light"
                                   Size="ButtonSize.Small"
+                                  Title="Start a fresh conversation (resets auto-approve)"
                                   Click="@NewThreadAsync"
                                   Disabled="@(Session.Status.Working)" />
                     <RadzenButton Icon="content_copy"
                                   Text="Copy"
                                   ButtonStyle="ButtonStyle.Light"
                                   Size="ButtonSize.Small"
+                                  Title="Copy the transcript to the clipboard"
                                   Click="@CopyAsync"
                                   Disabled="@(!HasTranscript)" />
                     <RadzenButton Icon="open_in_new"
                                   Text="Pop Out"
                                   ButtonStyle="ButtonStyle.Light"
                                   Size="ButtonSize.Small"
+                                  Title="Open the transcript in a new window"
                                   Click="@PopOutAsync"
                                   Disabled="@(!HasTranscript)" />
                 </div>

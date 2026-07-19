@@ -1,0 +1,71 @@
+@* In-app help. A self-contained modal (Visible + OnClose, like AgentSettingsDialog).
+   Condensed from docs/guide/. Backdrop-click and the X both dismiss. *@
+
+@if (Visible)
+{
+    <div class="help-backdrop" @onclick="Close">
+        <div class="help-panel" role="dialog" aria-modal="true" aria-label="ClaudeWorkbench help" @onclick:stopPropagation="true">
+            <header class="help-head">
+                <div class="help-title">
+                    <h2>ClaudeWorkbench — Help</h2>
+                    <p>Governed, human-gated AI edits to your watched solution.</p>
+                </div>
+                <button type="button" class="help-close" @onclick="Close" aria-label="Close help">&times;</button>
+            </header>
+
+            <div class="help-body">
+                <section class="help-rule">
+                    <strong>The one rule:</strong> the agent proposes and stages &mdash; <em>you</em> accept.
+                    Only your <b>Accept</b> writes real source. Claude is read-only to your solution and
+                    can't run a shell, write files, or push to git on its own.
+                </section>
+
+                <section>
+                    <h3>The governed loop</h3>
+                    <ol class="help-steps">
+                        <li><b>Prompt</b> in the <b>Workbench</b> tab.</li>
+                        <li>Claude reads your code and edits a monitor-owned <b>Working copy</b> &mdash; never your real file.</li>
+                        <li>Anything that could reach your source <b>pauses at your gate</b> &mdash; Approve or Reject.</li>
+                        <li>Claude <b>stages</b> its changes (immutable, hashed) and stops.</li>
+                        <li>The <b>Merge Review</b> opens &mdash; review the side-by-side diff and <b>Accept</b> (writes source) or Reject.</li>
+                    </ol>
+                </section>
+
+                <section>
+                    <h3>The tabs</h3>
+                    <dl class="help-tabs">
+                        <div><dt>Tasks</dt><dd>Kanban board + the agent's durable task memory. The <em>Active</em> task is the shared context Claude loads each turn.</dd></div>
+                        <div><dt>Workbench</dt><dd>Chat with Claude, approve gate requests, watch the transcript, check usage.</dd></div>
+                        <div><dt>Source</dt><dd>Browse the watched solution's indexed source tree.</dd></div>
+                        <div><dt>Git</dt><dd>Branch, stage / commit / push accepted changes, view diffs. Or just ask Claude to commit &mdash; it's gated.</dd></div>
+                        <div><dt>Activity</dt><dd>The live engine event log.</dd></div>
+                    </dl>
+                </section>
+
+                <section>
+                    <h3>Key controls</h3>
+                    <ul class="help-list">
+                        <li><b>Select Solution</b> &mdash; pick or switch the watched solution.</li>
+                        <li><b>Auto-approve</b> (composer) &mdash; per-thread: candidate edits skip the per-call gate. The merge-review Accept still gates every real write.</li>
+                        <li><b>New Thread</b> &mdash; start a fresh conversation (resets auto-approve).</li>
+                        <li><b>Commit / Push</b> (Git tab) &mdash; deliberate and operator-driven; nothing reaches GitHub without your click.</li>
+                        <li><b>Settings</b> &mdash; model, reasoning level, native read tools.</li>
+                    </ul>
+                </section>
+
+                <section class="help-more">
+                    Full developer + user documentation lives in the repository under <code>docs/</code>
+                    (start at <code>docs/README.md</code>).
+                </section>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Task Close() => OnClose.InvokeAsync();
+}
