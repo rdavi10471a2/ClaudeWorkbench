@@ -75,7 +75,7 @@ public sealed partial class AIMonitorTools
             File.Exists(settings.WatchedSolutionPath),
             Directory.Exists(settings.WatchedProjectFolder),
             settings.WinMergeCandidatePaths.FirstOrDefault(File.Exists),
-            "agents edit monitor-owned Working candidates only; WinMerge review/save remains the watched-source mutation surface",
+            "agents edit monitor-owned Working candidates only; the operator's in-app merge-review Accept is the sole watched-source mutation surface",
             overallStatus,
             guardrails);
     }

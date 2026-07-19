@@ -138,11 +138,10 @@ public sealed partial class AIMonitorTools
             CheckPathOutsideRoot("runtime-outside-watched-source", runtimeRoot, watchedProjectFolder, "Runtime state is outside watched source.", "Runtime state is inside watched source."),
         ];
 
-        string? diffTool = settings.WinMergeCandidatePaths.FirstOrDefault(File.Exists);
-        checks.Add(diffTool is null
-            ? new AIMonitorGuardrailCheck("diff-tool-available", "warning", "No configured WinMerge candidate exists on disk.", string.Join(";", settings.WinMergeCandidatePaths))
-            : new AIMonitorGuardrailCheck("diff-tool-available", "passed", "Configured WinMerge candidate exists.", diffTool));
-
+        // WinMerge is retired: review/merge is in-app (the DiffPlex merge-review surface),
+        // so there is no external diff tool to probe. The old 'diff-tool-available'
+        // guardrail warned on every self-check when no WinMerge binary was on disk — a
+        // false alarm now that nothing uses WinMerge. Dropped.
         return checks.ToArray();
     }
 
