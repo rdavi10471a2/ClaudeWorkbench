@@ -17,6 +17,18 @@ public sealed class WorkflowEditService
     private readonly WorkflowEditPaths paths;
     private readonly CandidateEditValidator editValidator;
 
+    // Staged edit records are mutable session state (staged -> validated -> launched ->
+    // decided) owned by this single host process — the agent stages through the in-process
+    // MCP surface and the operator accepts through the Blazor host, both against this same
+    // instance. So the records are held IN MEMORY as the source of truth, guarded by one
+    // lock, with an atomic write-through to disk for durability (a staged-but-unaccepted
+    // edit survives a host restart; the cache is lazily rehydrated from disk on first use).
+    // This removes the file-sharing violation the old read-file/mutate/write-file-every-step
+    // design hit when the accept path and a supersede/list overlapped, and it also means a
+    // torn on-disk file can never make a record blink out of ListStagedRecords.
+    private readonly object recordSync = new();
+    private Dictionary<string, StagedEditRecord>? recordCache;
+
     public WorkflowEditService(MonitorSettings settings)
     {
         paths = new WorkflowEditPaths(settings);
@@ -1059,53 +1071,91 @@ public sealed class WorkflowEditService
 
     private StagedEditRecord? LoadStagedRecord(string stagedRecordId)
     {
-        string recordPath = paths.GetStagedRecordPath(stagedRecordId);
-        if (!File.Exists(recordPath))
+        lock (recordSync)
         {
-            return null;
+            // Return an isolated copy so a caller mutating the returned record (before it
+            // calls SaveStagedRecord) can't reach into the cached instance.
+            return RecordCache().TryGetValue(stagedRecordId, out StagedEditRecord? record)
+                ? CloneRecord(record)
+                : null;
         }
-
-        return JsonSerializer.Deserialize<StagedEditRecord>(File.ReadAllText(recordPath), JsonOptions);
     }
 
     private void SaveStagedRecord(StagedEditRecord record)
     {
-        string recordPath = paths.GetStagedRecordPath(record.StagedRecordId);
-        Directory.CreateDirectory(Path.GetDirectoryName(recordPath) ?? ".");
-        File.WriteAllText(recordPath, JsonSerializer.Serialize(record, JsonOptions));
+        lock (recordSync)
+        {
+            string recordPath = paths.GetStagedRecordPath(record.StagedRecordId);
+            Directory.CreateDirectory(Path.GetDirectoryName(recordPath) ?? ".");
+
+            // Atomic write-through: serialize to a sibling temp then replace, so a crash or
+            // disk-full mid-write leaves the previous record intact rather than a truncated
+            // file. The temp name is not "*.json", so RecordCache() rehydration ignores it.
+            string tempPath = recordPath + ".writing";
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(record, JsonOptions));
+            File.Move(tempPath, recordPath, overwrite: true);
+
+            RecordCache()[record.StagedRecordId] = CloneRecord(record);
+        }
     }
 
     public IReadOnlyList<StagedEditRecord> ListStagedRecords(string? sessionId = null)
     {
-        if (!Directory.Exists(paths.StagedRecordsRoot))
+        lock (recordSync)
         {
-            return [];
+            IEnumerable<StagedEditRecord> records = RecordCache().Values.Select(CloneRecord);
+
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                records = records.Where(record => record.SessionId.Equals(sessionId, StringComparison.Ordinal));
+            }
+
+            return records
+                .OrderByDescending(record => record.CreatedAtUtc, StringComparer.Ordinal)
+                .ToArray();
+        }
+    }
+
+    // Lazily rehydrate the in-memory record store from disk (records persisted by an earlier
+    // host run) the first time it is needed. Caller must hold recordSync.
+    private Dictionary<string, StagedEditRecord> RecordCache()
+    {
+        if (recordCache is not null)
+        {
+            return recordCache;
         }
 
-        IEnumerable<StagedEditRecord> records = Directory
-            .EnumerateFiles(paths.StagedRecordsRoot, "*.json")
-            .Select(path =>
+        Dictionary<string, StagedEditRecord> cache = new(StringComparer.Ordinal);
+        if (Directory.Exists(paths.StagedRecordsRoot))
+        {
+            foreach (string path in Directory
+                .EnumerateFiles(paths.StagedRecordsRoot, "*.json")
+                .Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
             {
                 try
                 {
-                    return JsonSerializer.Deserialize<StagedEditRecord>(File.ReadAllText(path), JsonOptions);
+                    StagedEditRecord? record = JsonSerializer.Deserialize<StagedEditRecord>(File.ReadAllText(path), JsonOptions);
+                    if (record is not null && !string.IsNullOrEmpty(record.StagedRecordId))
+                    {
+                        cache[record.StagedRecordId] = record;
+                    }
                 }
                 catch (JsonException)
                 {
-                    return null;
+                    // Skip a torn/corrupt file left by a crash mid-write; the atomic write
+                    // path above prevents new ones.
                 }
-            })
-            .Where(record => record is not null)
-            .Select(record => record!);
-
-        if (!string.IsNullOrWhiteSpace(sessionId))
-        {
-            records = records.Where(record => record.SessionId.Equals(sessionId, StringComparison.Ordinal));
+            }
         }
 
-        return records
-            .OrderByDescending(record => record.CreatedAtUtc, StringComparer.Ordinal)
-            .ToArray();
+        recordCache = cache;
+        return recordCache;
+    }
+
+    private static StagedEditRecord CloneRecord(StagedEditRecord record)
+    {
+        return JsonSerializer.Deserialize<StagedEditRecord>(
+            JsonSerializer.Serialize(record, JsonOptions), JsonOptions)!;
     }
 
     private void SupersedeActiveRecordsForFile(string fullWatchedPath, string supersededByStagedRecordId)
