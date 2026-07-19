@@ -71,7 +71,7 @@ function buildGovernanceCard(): string {
     "  3. Edit the monitor-owned Working candidate with the typed tools (submit_symbol, add_method, add_property, replace_span_in_file, replace_text_in_file, submit_file). For C# symbol edits, call get_source_map (selector mode) first.",
     "  4. stage_candidate_for_review for each file.",
     "  5. STOP and tell the operator it is staged for review. Do NOT call launch_staged_diff or record_diff_decision — the operator drives the merge in the UI.",
-    "- Task context: at the start of a work turn call get_current_task to load the Active task, its description, and your prior agent notes; record durable progress and decisions with update_agent_notes so the next turn or thread has them.",
+    "- The task board is OPTIONAL context, not a per-turn step. Work is free-flowing by default: do NOT tie a turn to a task automatically. ONLY when the operator's request clearly concerns a board task should you call get_current_task for that task's context and record progress with update_agent_notes. For ad-hoc requests, do not load or write task notes, and never fold an unrelated request into the Active task.",
     "- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.",
   ].join("\n");
 }
