@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>ClaudeWorkbench.Host</RootNamespace>
+    <!-- Host runtime state (working/staged watched-solution mirrors) lands under
+         runtime/ inside this project. Those are copies of watched-solution source
+         and must never be globbed into the Host assembly, or duplicate-type
+         (CS0101/CS0111) build errors appear once a watched solution is configured. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);runtime\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
