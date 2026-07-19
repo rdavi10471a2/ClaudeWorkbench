@@ -56,6 +56,19 @@ internal static class Program
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
+
+        // Launch + supervise the Node sidecar as a child process (single-start app).
+        string sidecarDirectory = builder.Configuration["Sidecar:Directory"]
+            ?? Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "sidecar"));
+        builder.Services.AddSingleton(new SidecarLaunchOptions
+        {
+            AutoStart = builder.Configuration.GetValue("Sidecar:AutoStart", true),
+            NodeExecutable = builder.Configuration["Sidecar:NodeExecutable"] ?? "node",
+            SidecarDirectory = sidecarDirectory,
+            Port = new Uri(sidecarBase).Port,
+            McpUrl = builder.Configuration["Sidecar:McpUrl"] ?? "http://localhost:6100/mcp"
+        });
+        builder.Services.AddHostedService<SidecarProcessHost>();
         builder.Services.AddSingleton<AgentSettingsService>();
         builder.Services.AddSingleton<DirectoryBrowserService>();
         builder.Services.AddSingleton<RuntimeProvisioner>();

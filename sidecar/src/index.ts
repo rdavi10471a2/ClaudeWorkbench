@@ -29,6 +29,8 @@ let workspaceCwd: string | undefined = process.env.WORKBENCH_CWD;
 // tree). Granted to the agent as an additional read-only directory so it can Read
 // attachments that sit outside cwd. Resolved from the host /health.
 let uploadsDir: string | undefined;
+// The watched solution the agent is governing, for the injected role card.
+let watchedSolutionPath: string | undefined;
 
 async function resolveWorkspaceCwd(): Promise<void> {
   try {
@@ -40,12 +42,38 @@ async function resolveWorkspaceCwd(): Promise<void> {
       };
       if (info.watchedSolutionPath) {
         workspaceCwd = dirname(info.watchedSolutionPath);
+        watchedSolutionPath = info.watchedSolutionPath;
       }
       uploadsDir = info.uploadsPath ?? undefined;
     }
   } catch {
     // keep the env/default cwd if the host is not reachable yet
   }
+}
+
+// The governed role card, injected as the system prompt so the agent understands
+// its read-only + staging-workflow contract from turn one (instead of discovering
+// it by hitting a deny). This is the programmatic skill-card seam: no CLAUDE.md is
+// loaded (settingSources: []), so authored guidance is injected here.
+function buildGovernanceCard(): string {
+  const project = watchedSolutionPath ?? workspaceCwd ?? "(resolving)";
+  return [
+    "This session runs inside ClaudeWorkbench as a GOVERNED, READ-ONLY coding agent over a watched project. Follow these rules exactly.",
+    "",
+    `WATCHED PROJECT: ${project}`,
+    "",
+    "- You have NO Write, Edit, MultiEdit, NotebookEdit, or shell (Bash/PowerShell) tools, and you never will. Never claim you can write files to disk, and do not ask for those tools.",
+    "- Inspect the workspace with Read, Grep, Glob and the claude-workbench MCP tools. Verify workspace facts with a tool before stating them — never answer from memory or infer from the tool list.",
+    "- EVERY change to watched source goes through the AIMonitor staging workflow. The operator's Accept in the Merge Review dialog is the ONLY path that writes watched source; you cannot bypass it.",
+    "- When asked to change code, call get_staging_guide, then:",
+    "  1. start_monitor_session with filesPlanned listing every file you intend to change.",
+    "  2. refresh_file (existing file) or new_file (future file) for each planned file.",
+    "  3. Edit the monitor-owned Working candidate with the typed tools (submit_symbol, add_method, add_property, replace_span_in_file, replace_text_in_file, submit_file). For C# symbol edits, call get_source_map (selector mode) first.",
+    "  4. stage_candidate_for_review for each file.",
+    "  5. STOP and tell the operator it is staged for review. Do NOT call launch_staged_diff or record_diff_decision — the operator drives the merge in the UI.",
+    "- Task context: at the start of a work turn call get_current_task to load the Active task, its description, and your prior agent notes; record durable progress and decisions with update_agent_notes so the next turn or thread has them.",
+    "- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.",
+  ].join("\n");
 }
 
 void resolveWorkspaceCwd();
@@ -296,6 +324,8 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
     },
     canUseTool,
     permissionMode: "default",
+    // Governed role card injected up front (default claude_code prompt + our rules).
+    systemPrompt: { type: "preset", preset: "claude_code", append: buildGovernanceCard() },
     cwd: workspaceCwd,
     // Operator uploads sit outside cwd; grant read there so the agent can Read them.
     ...(uploadsDir ? { additionalDirectories: [uploadsDir] } : {}),
