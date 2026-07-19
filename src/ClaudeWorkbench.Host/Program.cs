@@ -51,7 +51,8 @@ internal static class Program
                 options.ServerInfo = new Implementation { Name = "claude-workbench", Version = "0.1.0" };
             })
             .WithHttpTransport()
-            .WithTools<AIMonitorTools>();
+            .WithTools<AIMonitorTools>()
+            .WithTools<Tasks.TaskMcpTools>();
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
@@ -67,6 +68,7 @@ internal static class Program
         builder.Services.AddScoped<IOperatorConsole>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddScoped<IApprovalQueue>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddSingleton<IReviewWorkflow, EngineReviewWorkflow>();
+        builder.Services.AddSingleton<Tasks.TaskBoardRepositoryFactory>();
         builder.Services.AddScoped<Tasks.IWorkflowTaskBoardViewService, Tasks.WorkflowTaskBoardViewService>();
         builder.Services.AddSingleton<Source.SourceWorkspace>();
 

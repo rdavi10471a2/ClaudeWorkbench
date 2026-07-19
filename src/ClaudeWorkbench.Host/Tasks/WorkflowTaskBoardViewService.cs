@@ -1,23 +1,20 @@
-using AIMonitor.Core;
-using AIMonitor.McpServer;
-
 namespace ClaudeWorkbench.Host.Tasks;
 
 // Maps repository rows to board view models and builds the columns (states +
-// a synthetic Archived column). Resolves the board.sqlite + task-memory paths
-// from the single watched workspace via WorkspaceManager.
+// a synthetic Archived column). The board's on-disk location comes from the
+// shared TaskBoardRepositoryFactory (also used by the MCP task tools).
 public sealed class WorkflowTaskBoardViewService : IWorkflowTaskBoardViewService
 {
-    private readonly WorkspaceManager workspace;
+    private readonly TaskBoardRepositoryFactory factory;
 
-    public WorkflowTaskBoardViewService(WorkspaceManager workspace)
+    public WorkflowTaskBoardViewService(TaskBoardRepositoryFactory factory)
     {
-        this.workspace = workspace;
+        this.factory = factory;
     }
 
     public TaskBoardViewModel GetBoard(string? selectedTaskId)
     {
-        if (!workspace.HasWorkspace)
+        if (!factory.HasWorkspace)
         {
             return TaskBoardViewModel.Empty;
         }
@@ -52,7 +49,7 @@ public sealed class WorkflowTaskBoardViewService : IWorkflowTaskBoardViewService
             : ToDetailViewModel(repository, selectedRow, snapshot.Files, snapshot.Events);
 
         return new TaskBoardViewModel(
-            workspace.WatchedSolutionPath ?? string.Empty,
+            factory.WatchedSolutionPath ?? string.Empty,
             repository.DatabasePath,
             repository.TaskMemoryRoot,
             columns,
@@ -134,7 +131,7 @@ public sealed class WorkflowTaskBoardViewService : IWorkflowTaskBoardViewService
             .FirstOrDefault(candidate => candidate.Id.Equals(archivedDiscussionId, StringComparison.Ordinal))
             ?? throw new InvalidOperationException("Archived discussion was not found: " + archivedDiscussionId);
         string archiveRoot = Path.GetFullPath(Path.Combine(
-            MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings),
+            factory.WorkspaceRoot,
             "planning",
             "archived-discussions"));
         string archivePath = Path.GetFullPath(row.MarkdownPath);
@@ -153,10 +150,7 @@ public sealed class WorkflowTaskBoardViewService : IWorkflowTaskBoardViewService
 
     private WorkflowTaskBoardRepository CreateRepository()
     {
-        string root = MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings);
-        return new WorkflowTaskBoardRepository(
-            Path.Combine(root, "planning", "board.sqlite"),
-            Path.Combine(root, "planning", "task-memory"));
+        return factory.Create();
     }
 
     private static WorkflowTaskRow? SelectTask(IReadOnlyList<WorkflowTaskRow> tasks, string? selectedTaskId)
