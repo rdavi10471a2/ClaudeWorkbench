@@ -13,9 +13,12 @@
     overflow: hidden;
 }
 
+/* Columns hold their 50/50 split until a line is too long, then grow to the widest line
+   so the whole grid scrolls sideways as one unit — line numbers and the column divider
+   stay aligned. Code lines do NOT wrap (see .diff-view-line code). */
 .diff-view-scroll {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(50%, max-content) minmax(50%, max-content);
     align-content: start;
     overflow: auto;
     flex: 1;
@@ -64,12 +67,15 @@
     user-select: none;
 }
 
+/* Never wrap: a wrapped line silently breaks the row-for-row alignment between the two
+   panes (one side grows taller than its counterpart) and makes long lines unreadable.
+   Long lines run off and the grid scrolls horizontally instead. */
 .diff-view-line code {
     color: #172033;
     display: block;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
     padding: 0.25rem 0.65rem;
-    white-space: pre-wrap;
+    white-space: pre;
 }
 
 .diff-view-line.inserted {

@@ -48,7 +48,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Classify a completed WinMerge review for a staged edit. Accepted decisions require the expected staged hash.")]
+    [Description("Legacy MCP/CLI path: classify a completed review for a staged edit. Accepted decisions require the expected staged hash. The ClaudeWorkbench host records decisions itself from the in-app Merge Review.")]
     public ReviewDecisionWithIndexRefreshResult RecordDiffDecision(
         [Description("Staged edit record id returned by stage_candidate_for_review.")] string stagedRecordId,
         [Description("Operator-reported outcome: accepted or rejected.")] string decision,
@@ -72,7 +72,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Run pre-merge validation, then launch WinMerge for a staged edit record and return review paths.")]
+    [Description("Legacy MCP/CLI path: run pre-merge validation, then launch the configured external diff tool for a staged edit record and return review paths. The ClaudeWorkbench host reviews in-app and does not use this.")]
     public AIMonitorStagedDiffLaunchResult LaunchStagedDiff(
         [Description("Staged edit record id returned by stage_candidate_for_review.")] string stagedRecordId,
         [Description("Explicit diff tool executable path.")] string? diffToolPath = null,

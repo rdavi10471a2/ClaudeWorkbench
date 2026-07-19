@@ -44,10 +44,16 @@ public partial class MergeReviewDialog : IAsyncDisposable
         && !selectedModel.IsDecided
         && (!selectedModel.PreMergeValidationIsError || selectedModel.PreMergeValidationForceApproved);
 
+    // Set when an accept attempt came back refused-but-overridable. The GATE-2 build only
+    // runs at accept time and leaves the record's GATE-1 status clean, so without this the
+    // override the message tells you to use would never light up for a build failure.
+    private string? overrideOfferedForRecordId;
+
     private bool CanForceAccept => selectedModel is not null
         && !selectedModel.IsDecided
-        && selectedModel.PreMergeValidationIsError
-        && !selectedModel.PreMergeValidationForceApproved;
+        && !selectedModel.PreMergeValidationForceApproved
+        && (selectedModel.PreMergeValidationIsError
+            || string.Equals(overrideOfferedForRecordId, selectedRecordId, StringComparison.Ordinal));
 
     protected override void OnParametersSet()
     {
@@ -72,6 +78,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
             selectedModel = Review.Load(stagedRecordId);
             selectedRecordId = stagedRecordId;
             errorMessage = null;
+            overrideOfferedForRecordId = null; // a fresh record has not been refused yet
         }
         catch (Exception ex)
         {
@@ -105,6 +112,11 @@ public partial class MergeReviewDialog : IAsyncDisposable
             string recordId = selectedRecordId;
             ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation));
             errorMessage = result.Message;
+            if (result.OverrideAvailable)
+            {
+                overrideOfferedForRecordId = recordId;
+            }
+
             if (!string.IsNullOrWhiteSpace(result.AgentSummary))
             {
                 await Sidecar.PostReviewOutcomeAsync(result.AgentSummary);

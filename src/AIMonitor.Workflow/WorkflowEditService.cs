@@ -699,11 +699,24 @@ public sealed class WorkflowEditService
             StagedNormalizedHash = FileHash.ComputeNormalizedFile(stagedFilePath),
             CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
             Status = "staged",
-            Message = "Working candidate was snapshotted for WinMerge review.",
+            Message = "Working candidate was snapshotted for review.",
             LastCompareRunId = compare.RunId,
             LastCompareSnapshotPath = compare.ProposedSnapshotPath,
             LastLedgerPath = compare.LedgerPath
         };
+
+        // Carry the candidate's last overlay COMPILE result onto the record. The session
+        // already compiled this candidate (CandidateEditValidator) and knows it is broken;
+        // without stamping it here the record reads clean, the operator's review surface has
+        // no idea, and the failure only appears at the terminal build after accept.
+        if (manifest.LastOverlayValidation is { HasErrors: true } overlayCompile)
+        {
+            record.PreMergeValidationStatus = overlayCompile.Status;
+            record.PreMergeValidationIsError = true;
+            record.PreMergeValidationDiagnosticCount = overlayCompile.Diagnostics.Count;
+            record.PreMergeValidationAtUtc = DateTimeOffset.UtcNow.ToString("O");
+        }
+
         SupersedeActiveRecordsForFile(fullWatchedPath, stagedRecordId);
         SaveStagedRecord(record);
 

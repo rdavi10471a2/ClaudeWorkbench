@@ -41,7 +41,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return the monitor workflow status, including watched solution, runtime root, Working folder, and configured WinMerge candidates.")]
+    [Description("Return the monitor workflow status, including watched solution, runtime root, Working folder, and configured external diff-tool candidates (legacy MCP/CLI path).")]
     public AIMonitorWorkflowStatus GetWorkflowStatus()
     {
         runtimeState.Touch();

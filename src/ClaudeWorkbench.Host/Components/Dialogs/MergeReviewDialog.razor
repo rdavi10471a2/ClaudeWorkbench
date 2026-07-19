@@ -7,7 +7,7 @@
             <div class="staged-review-busy-card">
                 <div class="staged-review-busy-spinner"></div>
                 <strong>Applying review decision</strong>
-                <span>Writing the accepted file, running the build, and rebuilding the solution index. Please wait…</span>
+                <span>Running the build, writing the accepted file, and rebuilding the solution index. Please wait…</span>
             </div>
         </div>
     }
@@ -24,10 +24,10 @@
         <div class="staged-review-error">@errorMessage</div>
     }
 
-    @if (selectedModel is not null && selectedModel.PreMergeValidationIsError && !selectedModel.PreMergeValidationForceApproved)
+    @if (selectedModel is not null && CanForceAccept)
     {
         <div class="staged-review-warning">
-            <strong>Pre-merge validation reported errors.</strong>
+            <strong>Validation reported errors.</strong>
             <span>Normal accept is disabled for this staged record. Use <em>Accept With Validation Override</em> only if you want to merge despite that failure.</span>
             @if (selectedModel.PreMergeValidationDiagnostics.Count > 0)
             {

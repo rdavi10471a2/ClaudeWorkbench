@@ -27,8 +27,8 @@ public sealed class PreMergeValidationService
             DiagnosticCount = 0,
             Diagnostics = [],
             Message = overlayRecords.Length <= 1
-                ? "Staged file is ready for WinMerge review. Build/index validation is deferred until accept."
-                : $"Planned staged overlay is ready for WinMerge review with {overlayRecords.Length} staged files. Build/index validation is deferred until the planned files are accepted."
+                ? "Staged file is ready for review. Build/index validation is deferred until accept."
+                : $"Planned staged overlay is ready for review with {overlayRecords.Length} staged files. Build/index validation is deferred until the planned files are accepted."
         };
     }
 

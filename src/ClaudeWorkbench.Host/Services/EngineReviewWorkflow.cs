@@ -9,9 +9,10 @@ using ClaudeWorkbench.Host.Console.Models;
 namespace ClaudeWorkbench.Host.Services;
 
 // In-process adapter over the AIMonitor workflow engine. Replaces the external
-// WinMerge step: GATE 1 pre-merge validation runs in-app, and on accept the staged
-// bytes are written to the watched file here (host-side, operator-authorized) before
-// the decision is recorded. The agent never writes watched source.
+// diff-tool step entirely: review is in-app (DiffPlex). GATE 1 runs as a readiness
+// check, and on accept the authoritative GATE 2 build runs FIRST — only if it passes
+// are the staged bytes written to the watched file here (host-side, operator-authorized)
+// and the decision recorded. The agent never writes watched source.
 public sealed class EngineReviewWorkflow : IReviewWorkflow
 {
     private readonly WorkspaceManager workspace;
@@ -78,7 +79,8 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             if (!forceApproveValidation)
             {
                 return new ReviewActionResult(
-                    "Pre-merge validation reported errors. Use Accept With Validation Override to merge despite the failure.");
+                    "Pre-merge validation reported errors. Use Accept With Validation Override to merge despite the failure.",
+                    overrideAvailable: true);
             }
 
             PreMergeValidationResult revalidation = new PreMergeValidationService().Validate(workspace.Settings, record);
@@ -161,7 +163,8 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                     ? string.Join(" | ", terminalBuild.Diagnostics.Take(5))
                     : terminalBuild.Message;
                 return new ReviewActionResult(
-                    $"Build FAILED for the edit session ({terminalBuild.DiagnosticCount} error(s)); not accepted. {detail} Use Accept With Validation Override to merge despite the failure.");
+                    $"Build FAILED for the edit session ({terminalBuild.DiagnosticCount} error(s)); not accepted. {detail} Use Accept With Validation Override to merge despite the failure.",
+                    overrideAvailable: true);
             }
         }
 
@@ -286,6 +289,13 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             PreMergeValidationResult validation = new PreMergeValidationService().ValidateStagedOverlay(record, [record]);
             workspace.EditService.RecordPreMergeValidation(record.StagedRecordId, validation, forceApproved: false);
             diagnosticsCache[record.StagedRecordId] = validation.Diagnostics;
+        }
+        else
+        {
+            // The record already carries a verdict — staging stamped the candidate's overlay
+            // COMPILE result. Prepare the review file, but do not run GATE 1 over the top:
+            // its readiness check would report "staged-file-ready" and erase the compile error.
+            workspace.EditService.PrepareReviewFileForLaunch(record.StagedRecordId);
         }
 
         StagedEditRecord current = workspace.EditService.GetStagedRecord(record.StagedRecordId);
