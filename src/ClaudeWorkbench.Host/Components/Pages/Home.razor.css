@@ -39,17 +39,32 @@
 
 .brand-lockup {
     display: grid;
-    grid-template-columns: 52px minmax(0, auto);
+    grid-template-columns: auto minmax(0, auto);
     align-items: center;
-    column-gap: 10px;
+    column-gap: 12px;
     min-width: 0;
 }
 
 .brand-logo {
     display: block;
-    width: 56px;
-    height: 40px;
-    object-fit: contain;
+    height: 46px;
+    width: auto;
+}
+
+.wb-about-link {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #516274;
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.wb-about-link:hover {
+    color: #db4b2b;
+    background: rgba(219, 75, 43, 0.08);
 }
 
 .command-bar h1 {

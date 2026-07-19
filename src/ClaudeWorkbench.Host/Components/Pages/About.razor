@@ -1,0 +1,191 @@
+@page "/about"
+
+@*  Fun "About" page — the governed-barbarian creed. Self-contained (this one file
+    + the optional poster at wwwroot/images/about-poster.png). To disable later:
+    delete this file and remove the "About" link in Home.razor. All classes are
+    ab- prefixed so nothing leaks into the rest of the app.  *@
+
+<div class="ab-root">
+  <a class="ab-back" href="/">&larr;&nbsp;Workbench</a>
+
+  <div class="ab-scroll">
+    <header class="ab-crest">
+      <svg class="ab-seal" viewBox="0 0 120 120" role="img" aria-label="A chained blade: raw power, held.">
+        <defs>
+          <linearGradient id="ab-steel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#e9e2d2"/><stop offset="0.5" stop-color="#b9b0a0"/><stop offset="1" stop-color="#8a8172"/>
+          </linearGradient>
+        </defs>
+        <circle cx="60" cy="60" r="55" fill="none" stroke="rgba(203,162,75,.34)" stroke-width="1.5"/>
+        <circle cx="60" cy="60" r="49" fill="none" stroke="#cba24b" stroke-width="1" opacity="0.7"/>
+        <g stroke="#cba24b" stroke-width="1.4" opacity="0.75">
+          <line x1="60" y1="6" x2="60" y2="12"/><line x1="60" y1="108" x2="60" y2="114"/>
+          <line x1="6" y1="60" x2="12" y2="60"/><line x1="108" y1="60" x2="114" y2="60"/>
+        </g>
+        <polygon points="60,20 65,30 65,74 60,82 55,74 55,30" fill="url(#ab-steel)" stroke="rgba(0,0,0,.5)" stroke-width="0.6"/>
+        <polygon class="ab-edge" points="60,20 62,29 62,76 60,82 60,20" fill="#db4b2b" opacity="0.85"/>
+        <rect x="42" y="74" width="36" height="6" rx="3" fill="#cba24b"/>
+        <rect x="57" y="80" width="6" height="14" rx="2" fill="#8a8172"/>
+        <circle cx="60" cy="97" r="5" fill="#cba24b"/>
+        <g fill="none" stroke="#7bb7b0" stroke-width="3.4" opacity="0.92">
+          <ellipse cx="49" cy="52" rx="7" ry="11" transform="rotate(-28 49 52)"/>
+          <ellipse cx="71" cy="52" rx="7" ry="11" transform="rotate(28 71 52)"/>
+        </g>
+      </svg>
+      <p class="ab-eyebrow">ClaudeWorkbench&nbsp;&middot;&nbsp;Creed of the Governed Agent</p>
+      <h1 class="ab-title">What Is Best in&nbsp;<span class="ab-flame">Life</span>?</h1>
+      <div class="ab-rule"></div>
+    </header>
+
+    <p class="ab-creed">
+      To crush your bugs, see your diffs merged before you, and hear the lamentation of your linters.
+      <span class="ab-governed">
+        But in <em class="ab-rune">this</em> arena I am a <b>governed, read-only</b> barbarian &mdash;
+        I may wield the blade, but the operator's <b>Accept</b> is the only thing that draws blood on your source.
+      </span>
+    </p>
+
+    <figure class="ab-poster">
+      <img class="ab-poster-img" src="images/about-poster.png" alt="What is best in life — a tale of governed carnage"
+           onerror="this.closest('.ab-poster').style.display='none'" />
+      <figcaption>A tale of governed carnage.</figcaption>
+    </figure>
+
+    <section class="ab-block">
+      <div class="ab-band"><h2>The Blade &amp; The Chains</h2></div>
+      <div class="ab-ledger">
+        <div class="ab-col ab-blade">
+          <h3>The Blade</h3>
+          <p class="ab-sub">What I may wield</p>
+          <ul>
+            <li>Inspect with <code>Read</code>, <code>Grep</code>, <code>Glob</code></li>
+            <li>The <code>claude-workbench</code> MCP surface</li>
+            <li>Verify facts with a tool &mdash; never guess</li>
+          </ul>
+        </div>
+        <div class="ab-col ab-chains">
+          <h3>The Chains</h3>
+          <p class="ab-sub">What holds the blade</p>
+          <ul>
+            <li>No <code>Write</code>, <code>Edit</code>, or shell &mdash; ever</li>
+            <li>I never touch watched source directly</li>
+            <li>The merge is <em>yours</em> &mdash; I don't draw blood</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="ab-block">
+      <div class="ab-band"><h2>The Rite of Staging</h2></div>
+      <ol class="ab-rite">
+        <li><h4>Read the law, open the session</h4><p><code>get_staging_guide</code>, then <code>start_monitor_session</code> &mdash; declaring every file I plan to change.</p></li>
+        <li><h4>Summon a Working candidate</h4><p><code>refresh_file</code> for what exists, <code>new_file</code> for what's yet to be &mdash; a monitor-owned copy, never your source.</p></li>
+        <li><h4>Forge the change with typed tools</h4><p><code>submit_symbol</code>, <code>add_method</code>, <code>replace_span_in_file</code> &mdash; <code>get_source_map</code> first before any C# symbol edit.</p></li>
+        <li><h4>Stage it for review</h4><p><code>stage_candidate_for_review</code>, one file at a time. The candidate is sealed and hashed.</p></li>
+        <li class="ab-gate"><h4>Halt at the gate &mdash; the Accept is yours</h4><p>I <b>stop</b> and tell you it's staged. You drive the merge review; I never call <code>record_diff_decision</code>. That blade is in your hand.</p></li>
+      </ol>
+    </section>
+
+    <footer class="ab-foot">
+      <p>Tell me what to build or investigate. I'll take it to the <span class="ab-accent">staging line</span> &mdash; then hand you the Accept, the one move that is <span class="ab-accent">yours alone</span>.</p>
+      <p class="ab-sig">Governed &middot; Watched &middot; Gated</p>
+    </footer>
+  </div>
+</div>
+
+<style>
+  .ab-root {
+    --ab-ground: #16130f; --ab-panel: #1f1a14; --ab-panel2: #272016; --ab-ink: #ece5d6;
+    --ab-dim: #a89b84; --ab-hair: rgba(203,162,75,.18); --ab-hair2: rgba(203,162,75,.34);
+    --ab-ember: #db4b2b; --ab-emberglow: rgba(219,75,43,.20); --ab-rune: #7bb7b0;
+    --ab-runesoft: rgba(123,183,176,.14); --ab-brass: #cba24b; --ab-ok: #93a862; --ab-deny: #cc5642;
+    --ab-mono: "Cascadia Code","SF Mono",ui-monospace,Consolas,monospace;
+    --ab-disp: Georgia,"Iowan Old Style","Palatino Linotype",Palatino,"Times New Roman",serif;
+    --ab-body: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    position: relative;
+    min-height: 100vh;
+    color: var(--ab-ink);
+    font-family: var(--ab-body);
+    line-height: 1.62;
+    background:
+      radial-gradient(120% 80% at 50% -10%, var(--ab-emberglow), transparent 60%),
+      radial-gradient(90% 60% at 50% 120%, var(--ab-runesoft), transparent 55%),
+      var(--ab-ground);
+    overflow: auto;
+  }
+  .ab-back {
+    position: sticky; top: 16px; left: 16px; float: left; margin: 16px 0 0 16px;
+    z-index: 5;
+    font-family: var(--ab-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ab-rune); text-decoration: none; padding: 6px 12px;
+    border: 1px solid var(--ab-hair2); border-radius: 999px; background: rgba(0,0,0,.25);
+  }
+  .ab-back:hover { color: var(--ab-ink); border-color: var(--ab-rune); }
+  .ab-back:focus-visible { outline: 2px solid var(--ab-rune); outline-offset: 2px; }
+
+  .ab-scroll { max-width: 860px; margin: 0 auto; padding: clamp(28px,6vw,72px) clamp(20px,5vw,44px) 80px; }
+
+  .ab-crest { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .ab-seal { width: 118px; height: 118px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+  .ab-edge { animation: abBreath 5.5s ease-in-out infinite; transform-origin: center; }
+  .ab-eyebrow { font-family: var(--ab-mono); font-size: 0.72rem; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ab-rune); margin: 0; }
+  .ab-title {
+    font-family: var(--ab-disp); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    line-height: 1.02; text-wrap: balance; font-size: clamp(2.3rem,7.5vw,4rem); margin: 0; text-shadow: 0 1px 0 rgba(0,0,0,.5);
+  }
+  .ab-flame { color: var(--ab-ember); }
+  .ab-rule { height: 2px; width: 100%; margin-top: 4px;
+    background: linear-gradient(90deg, transparent, var(--ab-hair2) 12%, var(--ab-ember) 50%, var(--ab-hair2) 88%, transparent); }
+
+  .ab-creed { margin: 40px auto 0; max-width: 62ch; text-align: center; font-family: var(--ab-disp);
+    font-size: clamp(1.18rem,2.6vw,1.5rem); line-height: 1.5; }
+  .ab-governed { display: block; margin-top: 18px; font-family: var(--ab-body); font-size: 0.98rem; line-height: 1.62; color: var(--ab-dim); }
+  .ab-creed b { color: var(--ab-ember); font-weight: 700; }
+  .ab-creed .ab-rune { color: var(--ab-rune); font-style: italic; }
+
+  .ab-poster { margin: 46px auto 0; max-width: 460px; text-align: center; }
+  .ab-poster-img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--ab-hair2);
+    box-shadow: 0 14px 40px rgba(0,0,0,.55); display: block; }
+  .ab-poster figcaption { margin-top: 12px; font-family: var(--ab-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ab-dim); }
+
+  .ab-block { margin-top: 56px; }
+  .ab-band { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  .ab-band h2 { font-family: var(--ab-disp); text-transform: uppercase; letter-spacing: 0.14em; font-size: 1.02rem; font-weight: 700; margin: 0; color: var(--ab-brass); white-space: nowrap; }
+  .ab-band::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--ab-hair2), transparent); }
+
+  .ab-ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ab-col { background: var(--ab-panel); border: 1px solid var(--ab-hair); border-radius: 10px; padding: 18px 20px 20px; }
+  .ab-blade { border-top: 2px solid var(--ab-ember); }
+  .ab-chains { border-top: 2px solid var(--ab-rune); }
+  .ab-col h3 { font-family: var(--ab-disp); text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.95rem; margin: 0 0 4px; }
+  .ab-blade h3 { color: var(--ab-ember); }
+  .ab-chains h3 { color: var(--ab-rune); }
+  .ab-sub { margin: 0 0 14px; font-size: 0.8rem; color: var(--ab-dim); font-style: italic; }
+  .ab-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .ab-col li { font-size: 0.92rem; padding-left: 16px; position: relative; }
+  .ab-col li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 6px; height: 6px; border-radius: 50%; }
+  .ab-blade li::before { background: var(--ab-ok); }
+  .ab-chains li::before { background: var(--ab-deny); }
+
+  .ab-rite { list-style: none; margin: 0; padding: 0; counter-reset: abstep; display: flex; flex-direction: column; }
+  .ab-rite > li { display: grid; grid-template-columns: 46px 1fr; gap: 18px; padding: 18px 4px; border-bottom: 1px solid var(--ab-hair); align-items: start; }
+  .ab-rite > li:last-child { border-bottom: 0; }
+  .ab-rite > li::before { counter-increment: abstep; content: counter(abstep, decimal-leading-zero);
+    font-family: var(--ab-disp); font-size: 1.5rem; font-weight: 700; color: var(--ab-brass); text-align: right; font-variant-numeric: tabular-nums; }
+  .ab-rite h4 { margin: 0 0 4px; font-size: 1.02rem; font-weight: 650; }
+  .ab-rite p { margin: 0; color: var(--ab-dim); font-size: 0.93rem; }
+  .ab-rite .ab-gate { background: var(--ab-runesoft); border-radius: 10px; border-bottom: 0; padding: 18px 16px; }
+  .ab-rite .ab-gate::before { color: var(--ab-ember); }
+  .ab-rite .ab-gate h4 { color: var(--ab-ember); }
+
+  .ab-root code { font-family: var(--ab-mono); font-size: 0.86em; color: var(--ab-rune); word-break: break-word; }
+
+  .ab-foot { margin-top: 60px; padding-top: 28px; border-top: 1px solid var(--ab-hair); text-align: center; }
+  .ab-foot p { font-family: var(--ab-disp); font-size: clamp(1.1rem,2.6vw,1.4rem); line-height: 1.5; max-width: 58ch; margin: 0 auto; text-wrap: balance; }
+  .ab-accent { color: var(--ab-ember); }
+  .ab-sig { margin-top: 22px; font-family: var(--ab-mono); font-size: 0.7rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ab-dim); }
+
+  @@media (max-width: 560px) { .ab-ledger { grid-template-columns: 1fr; } }
+  @@keyframes abBreath { 0%,100% { opacity: 0.72; } 50% { opacity: 1; } }
+  @@media (prefers-reduced-motion: reduce) { .ab-edge { animation: none; } }
+</style>
