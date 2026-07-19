@@ -22,7 +22,7 @@ internal static class Program
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
         builder.WebHost.UseStaticWebAssets();
 
-        string repositoryRoot = GetOption(args, "--repo-root") ?? builder.Environment.ContentRootPath;
+        string repositoryRoot = GetOption(args, "--repo-root") ?? ResolveContentRoot(builder.Environment.ContentRootPath);
         string configPath = GetOption(args, "--config") ?? Path.Combine(repositoryRoot, "config", "appsettings.json");
         // First run: the mutable config is git-ignored, so seed it from the committed
         // template (placeholder solution -> the app opens the workspace picker).
@@ -37,6 +37,7 @@ internal static class Program
         }
 
         MonitorSettings settings = MonitorSettingsLoader.Load(repositoryRoot, configPath);
+        builder.Services.AddSingleton(new MonitorConfigPath(Path.GetFullPath(configPath)));
 
         builder.Services.AddSingleton<IMonitorLogger>(_ =>
             new JsonLinesMonitorLogger(MonitorLogPaths.GetDefaultLogPath(settings)));
@@ -61,7 +62,7 @@ internal static class Program
 
         // Launch + supervise the Node sidecar as a child process (single-start app).
         string sidecarDirectory = builder.Configuration["Sidecar:Directory"]
-            ?? Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "sidecar"));
+            ?? ResolveSidecarDirectory(repositoryRoot);
         builder.Services.AddSingleton(new SidecarLaunchOptions
         {
             AutoStart = builder.Configuration.GetValue("Sidecar:AutoStart", true),
@@ -208,6 +209,41 @@ internal static class Program
 
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.Run();
+    }
+
+    // The folder holding config/ — the host project under `dotnet run`, the publish folder
+    // otherwise. ContentRootPath is the process's current directory, which is only right when
+    // the host was started from its own project: the launcher starts it from its bin folder.
+    // Fall back to the binary's own location, which the build populates with config/.
+    private static string ResolveContentRoot(string contentRootPath)
+    {
+        if (Directory.Exists(Path.Combine(contentRootPath, "config")))
+        {
+            return contentRootPath;
+        }
+
+        string baseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        return Directory.Exists(Path.Combine(baseDirectory, "config")) ? baseDirectory : contentRootPath;
+    }
+
+    // The Node sidecar, found by walking up from the binary's own location — so it resolves
+    // the same however the host was started. Covers both the repo layout (<repo>\sidecar) and
+    // a publish that ships the sidecar next to the exe.
+    private static string ResolveSidecarDirectory(string repositoryRoot)
+    {
+        string? directory = AppContext.BaseDirectory;
+        for (int depth = 0; depth < 8 && directory is not null; depth++)
+        {
+            string candidate = Path.Combine(directory, "sidecar");
+            if (File.Exists(Path.Combine(candidate, "dist", "index.js")))
+            {
+                return Path.GetFullPath(candidate);
+            }
+
+            directory = Path.GetDirectoryName(directory);
+        }
+
+        return Path.GetFullPath(Path.Combine(repositoryRoot, "sidecar"));
     }
 
     private static string? GetOption(string[] args, string optionName)

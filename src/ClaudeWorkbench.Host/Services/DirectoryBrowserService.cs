@@ -12,7 +12,7 @@ public sealed class DirectoryBrowserService
         if (!Directory.Exists(resolvedPath))
         {
             errorMessage = "Directory does not exist.";
-            resolvedPath = Directory.GetCurrentDirectory();
+            resolvedPath = DefaultPath;
         }
 
         DirectoryEntryViewModel[] drives = GetDrives();
@@ -49,17 +49,29 @@ public sealed class DirectoryBrowserService
             errorMessage);
     }
 
+    // Where the picker opens when it has nothing better to go on (first run, before any
+    // workspace is chosen). NOT the current directory: the host is normally started by the
+    // Launcher from its own bin folder, so cwd would drop the operator into the install.
+    private static string DefaultPath
+    {
+        get
+        {
+            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Directory.Exists(profile) ? profile : Directory.GetCurrentDirectory();
+        }
+    }
+
     private static string ResolveRequestedPath(string? requestedPath)
     {
         if (string.IsNullOrWhiteSpace(requestedPath))
         {
-            return Directory.GetCurrentDirectory();
+            return DefaultPath;
         }
 
         string expanded = Environment.ExpandEnvironmentVariables(requestedPath.Trim().Trim('"'));
         if (File.Exists(expanded))
         {
-            return Path.GetDirectoryName(Path.GetFullPath(expanded)) ?? Directory.GetCurrentDirectory();
+            return Path.GetDirectoryName(Path.GetFullPath(expanded)) ?? DefaultPath;
         }
 
         return Path.GetFullPath(expanded);

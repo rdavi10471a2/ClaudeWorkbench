@@ -14,3 +14,6 @@ agent-settings.json
 
 # monitor watched-solution config (mutable; written by the workspace picker). Seed from appsettings.template.json.
 **/config/appsettings.json
+
+# launcher state (workspace list + settings) - lives in the install/checkout so it travels with it
+launcher.json

@@ -24,6 +24,7 @@ reading, tests — and is written from the actual source.
 |---|---|---|
 | [ClaudeWorkbench.Host](ClaudeWorkbench.Host.md) | .NET :6100 | Blazor UI + MCP HTTP surface + sidecar supervisor + **the sole watched-source writer** |
 | [Sidecar](Sidecar.md) | Node :6110 | Claude Agent SDK, MCP client, the **deny-by-default operator gate**, SSE events |
+| [ClaudeWorkbench.Launcher](ClaudeWorkbench.Launcher.md) | WinForms (optional) | Runs several workspaces side by side: a host+sidecar+browser per instance, one Job Object each |
 
 > Read order for a newcomer: **Host → Sidecar → Workflow**, then the rest. Start from the
 > [docs index](../README.md#guided-reading-path).

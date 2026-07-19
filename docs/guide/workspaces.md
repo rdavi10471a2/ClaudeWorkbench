@@ -12,7 +12,9 @@ active at a time.
 
 ## What happens when you select one
 
-1. The choice is saved to `config/appsettings.json` (git-ignored, per-machine).
+1. The choice is saved back to the config the host was started with — `config/appsettings.json`
+   (git-ignored, per-machine) by default, or whatever `--config` pointed at. Under the
+   [Launcher](deploying.md) that is the instance's own config, so instances never fight over one file.
 2. The workspace **runtime** is provisioned: a skeleton under the `RuntimeRoot`, the task
    board database, and an `uploads` folder.
 3. The **solution index** builds (Roslyn semantic extraction → SQLite) so the agent can
@@ -28,6 +30,9 @@ written on an operator Accept.
 > `RuntimeRoot` resolves relative to the repo root when it isn't an absolute path. The
 > Host project excludes its `runtime/` folder from compilation, so mirrored `.cs`
 > candidates never get built into the app.
+>
+> Started from the [Launcher](deploying.md), each instance gets its own `RuntimeRoot` at
+> `<workbench>\runtime\<workspace>` — same contents, one folder per watched solution.
 
 ## The agent's working directory
 

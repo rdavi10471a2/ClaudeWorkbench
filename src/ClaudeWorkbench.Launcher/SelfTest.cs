@@ -20,11 +20,16 @@ internal static class SelfTest
         {
             LauncherState state = LauncherState.Load();
             state.Browser = BrowserKind.DefaultShell; // irrelevant; browser is skipped below
+            Line($"launcherExe={AppContext.BaseDirectory}");
+            Line($"workbenchRoot={state.WorkbenchRoot ?? "(not found)"}");
+            Line($"statePath={LauncherState.StatePath}");
             Line($"hostExe={state.HostExePath}");
             Line($"sidecarDir={state.SidecarDirectory}");
+            Line($"instancesRoot={state.EffectiveInstancesRoot}");
 
             WorkspaceEntry workspace = new() { Name = "selftest", SolutionPath = solutionPath };
             using InstanceController controller = new(workspace, state);
+            Line($"instanceDir={state.InstanceDirectoryFor(workspace)}");
 
             await controller.StartAsync(Array.Empty<int>(), launchBrowser: false);
             Line($"status={controller.Status} host={controller.HostPort} sidecar={controller.SidecarPort} err={controller.LastError}");
@@ -36,15 +41,17 @@ internal static class SelfTest
             }
             else
             {
-                bool hostUp = Probe(controller.HostPort);
-                bool sidecarUp = Probe(controller.SidecarPort);
+                // The host reports healthy before its sidecar child has finished binding, so
+                // both ports have to be waited on rather than probed once. A fresh install
+                // (cold node_modules) is comfortably slower than a warm dev checkout.
+                bool hostUp = await WaitForPort(controller.HostPort, open: true, TimeSpan.FromSeconds(30));
+                bool sidecarUp = await WaitForPort(controller.SidecarPort, open: true, TimeSpan.FromSeconds(30));
                 Line($"after start: hostUp={hostUp} sidecarUp={sidecarUp}");
 
                 controller.Stop();
-                await Task.Delay(2000);
 
-                bool hostClosed = !Probe(controller.HostPort);
-                bool sidecarClosed = !Probe(controller.SidecarPort);
+                bool hostClosed = await WaitForPort(controller.HostPort, open: false, TimeSpan.FromSeconds(15));
+                bool sidecarClosed = await WaitForPort(controller.SidecarPort, open: false, TimeSpan.FromSeconds(15));
                 Line($"after stop:  hostClosed={hostClosed} sidecarClosed={sidecarClosed}");
 
                 bool ok = hostUp && sidecarUp && hostClosed && sidecarClosed;
@@ -71,6 +78,23 @@ internal static class SelfTest
         }
 
         return code;
+    }
+
+    // Poll until the port reaches the wanted state, or give up. Returns whether it got there.
+    private static async Task<bool> WaitForPort(int port, bool open, TimeSpan timeout)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (Probe(port) == open)
+            {
+                return true;
+            }
+
+            await Task.Delay(250);
+        }
+
+        return false;
     }
 
     private static bool Probe(int port)

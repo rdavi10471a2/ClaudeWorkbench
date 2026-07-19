@@ -13,7 +13,7 @@ public sealed class HelpForm : Form
         "  • Start — launches that workspace's backend (host + sidecar) and opens a browser window.\r\n" +
         "  • Stop — shuts that instance down.\r\n" +
         "  • Remove — takes the workspace off the list.\r\n" +
-        "  • Settings — host exe path, sidecar folder, and which browser to open.\r\n" +
+        "  • Settings — host exe path, sidecar folder, instances folder, and which browser to open.\r\n" +
         "\r\n" +
         "Lifecycle (kill one, kill all)\r\n" +
         "  • Closing the browser window stops that instance's backend on its own, within a few seconds.\r\n" +
@@ -32,7 +32,12 @@ public sealed class HelpForm : Form
         "\r\n" +
         "Notes\r\n" +
         "  • The first agent turn may wait a moment while a large solution builds its index.\r\n" +
-        "  • Each instance's host output is captured to <instance>\\host.log for troubleshooting.";
+        "  • Each instance provisions into <workbench>\\runtime\\<workspace> — its index, config\r\n" +
+        "    and host.log all live there. The folder is claimed on first start and kept\r\n" +
+        "    afterwards, so renaming a workspace doesn't strand its index.\r\n" +
+        "  • The Launcher exe can live anywhere (a desktop shortcut, a Release build, a publish\r\n" +
+        "    folder). It locates the workbench from the host exe in Settings, so instances always\r\n" +
+        "    land next to the code they're watching rather than beside the Launcher.";
 
     public HelpForm()
     {

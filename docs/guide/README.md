@@ -11,6 +11,7 @@ How to operate ClaudeWorkbench. (For how it works inside, see
 6. [Tasks Board](tasks-board.md) — the kanban board + the agent's durable task memory
 7. [Settings & Usage](settings-and-usage.md) — model/reasoning, auto-approve, usage meters, auth
 8. [Troubleshooting](troubleshooting.md) — common issues and fixes
+9. [Deploying](deploying.md) — the Launcher, publishing a live install, how paths resolve
 
 **The one rule to remember:** the agent proposes and stages; **you** accept; only the
 accept writes real source.

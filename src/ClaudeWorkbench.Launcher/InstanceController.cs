@@ -314,15 +314,16 @@ public sealed class InstanceController : IDisposable
     {
         string configDir = Path.Combine(instanceDir, "config");
         Directory.CreateDirectory(configDir);
-        string runtimeRoot = Path.Combine(instanceDir, "runtime");
-        Directory.CreateDirectory(runtimeRoot);
 
+        // The instance directory IS the runtime root: provisioning writes its
+        // watched-solutions\ and logs\ here, alongside this config and host.log, so everything
+        // for one workspace sits under <workbench>\runtime\<workspace>.
         var config = new
         {
             Monitor = new
             {
                 WatchedSolutionPath = Workspace.SolutionPath,
-                RuntimeRoot = runtimeRoot,
+                RuntimeRoot = instanceDir,
                 WinMergeCandidatePaths = Array.Empty<string>(),
             },
         };
@@ -332,12 +333,7 @@ public sealed class InstanceController : IDisposable
         return configPath;
     }
 
-    private string InstanceDirectory()
-    {
-        string dir = Path.Combine(LauncherState.StateDirectory, "instances", Workspace.Id);
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
+    private string InstanceDirectory() => state.InstanceDirectoryFor(Workspace);
 
     public void Dispose() => Stop();
 }
