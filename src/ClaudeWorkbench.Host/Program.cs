@@ -101,6 +101,9 @@ internal static class Program
         {
             builder.Services.AddSingleton<BrowserPresenceTracker>();
             builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, BrowserLifetimeCircuitHandler>();
+            // Tab-close shutdown should be snappy: don't let a slow-to-stop background service
+            // hold the process for the default ~30s. Force completion within a few seconds.
+            builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(4));
         }
 
         builder.Services.AddRadzenComponents();

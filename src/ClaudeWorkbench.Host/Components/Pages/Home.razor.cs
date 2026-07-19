@@ -31,6 +31,12 @@ public partial class Home : IDisposable
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
+    // Browser tab title: solution name first so it's readable in a narrow tab and each
+    // launcher window is distinguishable.
+    private string PageTitleText => Workspace.HasWorkspace && !string.IsNullOrWhiteSpace(Workspace.WatchedSolutionPath)
+        ? $"{Path.GetFileNameWithoutExtension(Workspace.WatchedSolutionPath)} — ClaudeWorkbench"
+        : "ClaudeWorkbench";
+
     private bool settingsOpen;
     private bool workspacePickerOpen;
     private bool reviewDialogOpen;
@@ -50,10 +56,18 @@ public partial class Home : IDisposable
         if (firstRender)
         {
             unloadModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
-            await unloadModule.InvokeVoidAsync(
-                "setBeforeUnloadGuard",
-                true,
-                "Leaving or refreshing will reset the current Claude Workbench session.");
+            // When a launcher owns this instance, the tab close is intentional (it tears the
+            // backend down), so the "leaving will reset your session" guard must NOT fire —
+            // it would prompt on close and delay the circuit drop that stops the backend.
+            bool launcherOwned = string.Equals(
+                Environment.GetEnvironmentVariable("CWB_EXIT_WITH_BROWSER"), "1", StringComparison.Ordinal);
+            if (!launcherOwned)
+            {
+                await unloadModule.InvokeVoidAsync(
+                    "setBeforeUnloadGuard",
+                    true,
+                    "Leaving or refreshing will reset the current Claude Workbench session.");
+            }
         }
     }
 

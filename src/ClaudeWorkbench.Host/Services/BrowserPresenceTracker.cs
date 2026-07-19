@@ -25,7 +25,7 @@ public sealed class BrowserPresenceTracker : IDisposable
         this.logger = logger;
         int seconds = int.TryParse(Environment.GetEnvironmentVariable("CWB_EXIT_GRACE_SECONDS"), out int parsed) && parsed > 0
             ? parsed
-            : 8;
+            : 3;
         grace = TimeSpan.FromSeconds(seconds);
     }
 
