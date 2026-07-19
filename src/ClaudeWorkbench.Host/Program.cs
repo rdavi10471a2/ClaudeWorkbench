@@ -94,6 +94,15 @@ internal static class Program
         builder.Services.AddSingleton<GitWorkspaceService>();
         builder.Services.AddSingleton<IndexRebuildStatus>();
 
+        // Launcher-owned instance: shut down when the last browser tab closes (the tab
+        // owns the instance's lifetime; graceful shutdown kills the sidecar too). Opt-in,
+        // so a plain `dotnet run` dev session is unaffected.
+        if (string.Equals(Environment.GetEnvironmentVariable("CWB_EXIT_WITH_BROWSER"), "1", StringComparison.Ordinal))
+        {
+            builder.Services.AddSingleton<BrowserPresenceTracker>();
+            builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, BrowserLifetimeCircuitHandler>();
+        }
+
         builder.Services.AddRadzenComponents();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
