@@ -72,9 +72,14 @@ else
 
             <RadzenTabs RenderMode="TabRenderMode.Client">
                 <Tabs>
+                    @* Tasks tab disabled until the thread<->task workflow is built (see
+                       docs/ThreadTaskWorkflow.md). The board + task MCP tools still exist, but
+                       the sidecar role card is now free-flowing (opt-in), so nothing ties a turn
+                       to a task. Re-enable by uncommenting.
                     <RadzenTabsItem Text="Tasks">
                         <TasksTab WorkspaceRoot="@Session.WorkspacePath" />
                     </RadzenTabsItem>
+                    *@
                     <RadzenTabsItem Text="Workbench">
                         <AssistantTab />
                     </RadzenTabsItem>
