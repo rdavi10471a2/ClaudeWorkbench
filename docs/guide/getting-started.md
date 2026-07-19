@@ -7,7 +7,7 @@ inside*, see the [architecture doc](../architecture/Architecture.md).
 
 | Requirement | Why |
 |---|---|
-| **.NET 10 SDK** | The Blazor host + extracted engine + in-proc MCP server |
+| **.NET 10 SDK** | The Blazor host + extracted engine + in-proc MCP server. The **SDK**, not just the runtime — indexing loads solutions through MSBuild |
 | **Node.js** (LTS) | The sidecar runs the Claude Agent SDK (Node-only) |
 | **`claude` CLI** | The Agent SDK spawns it; **bundled with the SDK** — no separate install |
 | **A Claude login** | A **subscription** login (`~/.claude`) runs it for yourself — no API key needed |
@@ -26,6 +26,13 @@ npm run build      # builds dist/  (host runs node dist/index.js)
 
 ## Run
 
+There are **two ways to run** the workbench. This page covers the first:
+
+- **From the checkout** (below) — one instance on port `6100`, which is what you want
+  while developing.
+- **From a published install** — the **Launcher** runs several watched solutions side by
+  side, each with its own ports, runtime and index. See [deploying](deploying.md).
+
 ```powershell
 dotnet run --project src/ClaudeWorkbench.Host
 ```
@@ -34,19 +41,21 @@ The host **launches and supervises the sidecar itself** (single-start), then ser
 console at **http://localhost:6100**. You do not start the sidecar separately.
 
 > First run: the mutable `config/appsettings.json` is seeded from a template pointing at a
-> placeholder, so the app opens the **workspace picker**.
+> placeholder, so the app opens the **workspace picker**. It opens at your **user profile**
+> folder — browse from there to your solution.
 
 ## Your first turn
 
 1. **Pick a watched solution** — the workspace picker (or **Select Solution**). Point it
-   at a `.sln`. See [workspaces](workspaces.md).
+   at a `.sln` / `.slnx`. See [workspaces](workspaces.md).
 2. Open the **Workbench** tab and type a prompt, e.g. *"add a `Ping()` method to
    `Foo`."*
 3. Claude reasons and, to change anything, calls governed tools that **pause at your
    gate** — Approve them.
-4. When the turn finishes with staged edits, the **Merge Review** opens. Review the
-   side-by-side diff and **Accept** (or Reject). Accept is the only thing that writes real
-   source. See [merge review](merge-review.md).
+4. When the turn finishes with staged edits, the **Merge Review** opens in-app (no
+   external diff tool). Review the side-by-side diff and **Accept** (or Reject). Accept is
+   the only thing that writes real source — and it validates and builds *first*, so a
+   failed build writes nothing. See [merge review](merge-review.md).
 5. Optionally use the **Git** tab to commit + push the accepted change. See
    [git panel](git-panel.md).
 

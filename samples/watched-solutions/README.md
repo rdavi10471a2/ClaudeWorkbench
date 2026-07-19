@@ -1,30 +1,42 @@
 # Watched Solution Samples
 
-Samples are human-readable projects used to demonstrate AIMonitor behavior.
+Samples are human-readable projects used to demonstrate watched-solution behavior.
 
 Watched solution copies are local-only by default. Put large or real-world samples
 under this folder when you want a local smoke target, but do not commit those
 project copies.
 
-`WorkflowHarnessSample`, `CodexWindows`, and `CodexBlazor` are the exceptions: they are
-committed, tiny watched solutions used by repeatable workflow smokes.
+The committed exceptions are these tiny watched solutions, kept because a repeatable
+smoke or demo points at them:
 
-- Use `config/appsettings.workflow-harness-sample.json` with MCP server or a
-  WinForms app started with `--config config/appsettings.workflow-harness-sample.json`
-  when a shared/Claude-style smoke should avoid a developer's real watched
-  application.
-- Use `config/appsettings.codex-windows.json`, `config/appsettings.codex-blazor.json`, or the disposable-copy
-  recipe in `samples/codex-workflow-tests/` when a Codex CLI workflow sample
-  should avoid a developer's real watched application.
+| Sample | Used for |
+|---|---|
+| `CalculatorSample` | The **flow smoke** fixture (`sidecar/src/smoke/`) — accept / reject / multi-file, driven end to end against a real Claude turn. Also the workspace the publish script ships and the Launcher seeds on first run. |
+| `WorkflowHarnessSample` | A minimal watched solution for staging/decision workflow smokes. |
+| `CodexWindows`, `CodexBlazor` | Windows and Blazor shapes for CLI-driven workflow samples. |
+| `BlazorSample`, `WinFormsSample` | Indexing/source-map shapes (Razor + `.razor.cs`, WinForms designer files). |
 
-Example roots:
+Use a sample instead of a developer's real watched application whenever a smoke is
+shared, scripted, or Claude-driven.
 
-- `C:\SchemaStudioWebViewer`
-- `C:\Source\USExcomManager`
-- `C:\VSCodeProjects\AIMonitor\samples\watched-solutions\BlazorDetectorSample`
-- `C:\VSCodeProjects\AIMonitor\samples\watched-solutions\WorkflowHarnessSample`
-- `C:\VSCodeProjects\AIMonitor\samples\watched-solutions\CodexWindows`
-- `C:\VSCodeProjects\AIMonitor\samples\watched-solutions\CodexBlazor`
+## Pointing the app at one
+
+The only committed sample config is
+`src/ClaudeWorkbench.Host/config/appsettings.calculator-sample.json`. Its paths are
+**relative** — `WatchedSolutionPath` resolves against the config file's own folder and
+`RuntimeRoot` against the repo root — so it works in any checkout:
+
+```bash
+dotnet run --project src/ClaudeWorkbench.Host \
+  -- --config src/ClaudeWorkbench.Host/config/appsettings.calculator-sample.json
+```
+
+For the other samples, pick the solution in the app's workspace picker, or add a
+workspace in the Launcher and point it at the `.slnx`. Copy the calculator config if
+you want a committed config of your own — keep the paths relative, never an absolute
+path into your checkout.
+
+## Notes
 
 Do not use samples as the only regression proof. If a behavior must stay fixed, add a test fixture or smoke.
 

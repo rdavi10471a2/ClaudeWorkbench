@@ -45,21 +45,23 @@ flowchart TB
 ## 2. Containers (C4 Level 2) — the two processes
 
 ClaudeWorkbench is a **two-process** app. A .NET Blazor **Host** and a Node **sidecar**.
+An optional third container, the **Launcher**, runs several of those pairs side by side.
 
 ```mermaid
 flowchart TB
     operator([Operator])
+    launcher["ClaudeWorkbench.Launcher (optional)<br/>WinForms control panel · Job Object"]
 
     subgraph host["Blazor Host — .NET 10 process, :6100"]
         direction TB
-        ui[Blazor operator console<br/>Tasks · Workbench · Source · Git · Activity]
+        ui["Blazor operator console<br/>Tasks (disabled) · Workbench · Source · Git · Activity"]
         mcp[claude-workbench MCP server<br/>Streamable HTTP /mcp · ~71 tools]
         engine[AIMonitor.* engine<br/>Core · Logging · MSBuild · Data · Indexing · Workflow · Runtime · McpServer]
         rev[EngineReviewWorkflow<br/>the ONLY watched-source writer]
         git[GitService<br/>argv git CLI, no shell]
     end
 
-    subgraph side["Node Sidecar — :6110"]
+    subgraph side["Node Sidecar — :6110, loopback-only"]
         direction TB
         sdk[Claude Agent SDK]
         gate[canUseTool operator gate<br/>deny-by-default]
@@ -81,11 +83,13 @@ flowchart TB
     engine --> idx
     ui --> board
     mcp --> engine
-    rev -->|File.Copy on Accept| watched
+    rev -->|"on Accept: build passes, then atomic write"| watched
     engine -->|reads| watched
     git --> watched
     git --> remote
     host -.->|launches + supervises single-start| side
+    operator -.->|optional: pick a workspace| launcher
+    launcher -.->|one host+sidecar+browser per workspace,<br/>all in one Job Object| host
 ```
 
 **Why two processes.** The Claude Agent SDK is **Node-only** (no .NET SDK). So a thin Node
@@ -99,6 +103,21 @@ pipe. Details: [`../components/Sidecar.md`](../components/Sidecar.md) and
 |---|---|---|---|
 | **Host** | 6100 | .NET 10 (ASP.NET/Blazor Server) | Engine, MCP HTTP surface, operator UI, sidecar supervisor, the sole watched-source writer |
 | **Sidecar** | 6110 | Node (Claude Agent SDK, Express) | Drives Claude, MCP client, the `canUseTool` operator gate, neutral SSE events |
+| **Launcher** *(optional)* | n/a — assigns a free pair per instance | .NET 10 WinForms (Windows) | Multi-instance control panel: one Host+sidecar+browser per workspace, held in a Job Object |
+
+The sidecar binds **loopback only** (`127.0.0.1`) and rejects any request whose `Host` header
+isn't localhost or that carries a non-local `Origin` — a DNS-rebinding defense on the control
+surface. See [`../components/Sidecar.md`](../components/Sidecar.md).
+
+**The optional third container.** [`ClaudeWorkbench.Launcher`](../components/ClaudeWorkbench.Launcher.md)
+runs *above* the pair, not inside the governed path: the Host is single-workspace (one
+`WatchedSolutionPath`, one port pair, one runtime), so the Launcher allocates a free host+sidecar
+port pair per instance, writes each instance its own config, and starts Host + browser window
+inside a Windows **Job Object** so they die together. It sets `CWB_EXIT_WITH_BROWSER=1`, which
+makes the Host shut itself down (taking its sidecar with it) once the last browser circuit drops
+— `BrowserPresenceTracker` + `BrowserLifetimeCircuitHandler`. The Launcher never reads a watched
+solution and never touches the gate; it only points a Host at one. Ports `6100`/`6110` are the
+plain-`dotnet run` defaults; under the Launcher each instance gets its own free pair.
 
 ---
 
@@ -136,12 +155,15 @@ sequenceDiagram
     Claude-->>Side: turn finishes (files staged)
     UI->>Op: open Merge Review (DiffPlex side-by-side)
     Op->>UI: Accept
-    UI->>Src: EngineReviewWorkflow writes staged bytes
+    Note over UI: EngineReviewWorkflow: still-pending? re-hash staged?<br/>GATE-2 overlay build — any failure = hard stop, nothing written
+    UI->>Src: writes staged bytes (temp file + atomic rename)
     UI->>MCP: RecordDecision + post-accept index refresh
 ```
 
 - The agent **stops at the staging line** — it never calls the accept. The operator's
   **Accept** is the only thing that writes real source.
+- **Validate, then write.** Every accept check runs *before* watched source is touched; a
+  failed build leaves the file exactly as it was.
 - **Freshness at accept.** The solution index rebuilds after an accepted decision — the
   normal point where downstream truth is refreshed.
 
@@ -155,8 +177,21 @@ Two independent checks protect watched source. Both must be satisfied to accept.
 
 | Gate | When | What it checks | Where |
 |---|---|---|---|
-| **GATE 1 — pre-merge validation** | at stage/launch | the staged overlay is readiness-checked (and, on the MCP/CLI path, a full overlay build) | `PreMergeValidationService`, `StagedDiffLaunchWorkflow` |
-| **GATE 2 — decision** | at accept | `expectedStagedHash` matches, the staged file is **re-hashed unchanged**, launched, validation completed, and the reviewed (watched) file matches the staged candidate (`dirty-unexpected` guard) | `WorkflowEditService.RecordDecision` |
+| **GATE 1 — pre-merge validation** | at stage/review-open | a fast staged-overlay **readiness check**, no `dotnet build` (on the MCP/CLI path, a full overlay build) | `PreMergeValidationService`, `StagedDiffLaunchWorkflow` |
+| **GATE 2 — the authoritative build + decision** | at accept, **before anything is written** | the record is still pending, the staged file **re-hashes unchanged**, and the combined session overlay **compiles** (a real build) — then, and only then, the bytes are written and `expectedStagedHash` / `dirty-unexpected` are re-checked as the decision is recorded | `EngineReviewWorkflow.Accept` → `PreMergeValidationService`, then `WorkflowEditService.RecordDecision` |
+
+**Ordering matters, and it is validate-then-write.** In the in-app path the GATE-2 build runs
+*before* watched source is touched: a failed build (or a superseded record, or a staged file that
+changed since staging) is a **hard stop** — nothing is written and the operator is told why.
+Only a validation override (*Accept With Validation Override*) proceeds past a failing build.
+The write itself is a temp file plus an atomic rename, so a crash mid-write cannot truncate
+watched source. Because the build already ran, the decision is recorded *without*
+`terminalValidationRecords` — it would otherwise build a second time.
+
+The build runs once per **edit session**, on the *terminal* accept (the last pending file),
+over the combined overlay of every file accepted in that session — so a multi-file edit is
+compiled as a whole, not file by file. The post-accept index rebuild is deferred to that same
+terminal accept.
 
 The core safety invariant: **an accepted edit equals exactly what was reviewed** — the
 staged snapshot is copy-once/immutable, accept re-hashes it, and accept independently
@@ -177,6 +212,11 @@ Governance is **not** policy prose in the model's context. Two mechanisms carry 
   `Write`/`Edit`/`Bash`/`PowerShell`/`Agent`/`WebFetch`/anything unknown are **denied**.
   So the watched workspace is read-only to the agent, and every change must go through the
   governed MCP surface.
+- **The allow-set cannot be widened from the wire.** A turn's `enabledTools` is intersected
+  with a fixed blockable set (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`,
+  `PowerShell`) — the writers/shells an operator may deliberately opt back in. Any other name
+  in a `/prompt` body is dropped, so a request body can't splice `Agent` or `WebFetch` into the
+  permitted surface.
 
 ```mermaid
 flowchart TD

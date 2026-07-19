@@ -5,10 +5,12 @@ active at a time.
 
 ## Selecting / switching
 
-- On first run (or when none is configured) the **workspace picker** opens automatically.
-- Anytime, use **Select Solution** (top-right) to switch.
-- Point it at a `.sln` (or project). Switching **rewrites** `config/appsettings.json` and
-  rebuilds the engine services against the new solution.
+- On first run (or when none is configured) the **workspace picker** opens automatically,
+  starting at your **user profile** folder — not wherever the app was launched from.
+- Anytime, use **Select Solution** (on the workspace toolbar) to switch.
+- Browse to a folder and click a `.sln` / `.slnx` under **Solutions in this folder**.
+  Switching **rewrites the config the host was started with** (see below) and rebuilds the
+  engine services against the new solution.
 
 ## What happens when you select one
 
@@ -18,7 +20,9 @@ active at a time.
 2. The workspace **runtime** is provisioned: a skeleton under the `RuntimeRoot`, the task
    board database, and an `uploads` folder.
 3. The **solution index** builds (Roslyn semantic extraction → SQLite) so the agent can
-   query symbols. This can take a moment on a large solution.
+   query symbols. This can take a moment on a large solution — watch the **Indexing**
+   spinner on the workspace toolbar. Reopening the app with a solution already attached
+   warms the index the same way, in the background, once the host is up.
 
 ## The runtime folder
 

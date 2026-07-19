@@ -6,7 +6,7 @@
 
 ## Purpose
 
-ClaudeWorkbench.Host is the runtime that turns the extracted AIMonitor engine into an operator-driven, human-gated workbench for AI edits to a watched .NET solution. It runs as a **single start** (`dotnet run` / the published exe) on port `:6100` and does four jobs in one process, sharing one engine instance and one logging sink in-process:
+ClaudeWorkbench.Host is the runtime that turns the extracted AIMonitor engine into an operator-driven, human-gated workbench for AI edits to a watched .NET solution. It runs as a **single start** (`dotnet run` / the published exe) on port `:6100` — one workspace per process; `ClaudeWorkbench.Launcher` runs several instances side by side by overriding the port pair per instance — and does four jobs in one process, sharing one engine instance and one logging sink in-process:
 
 1. hosts the AIMonitor engine (via `WorkspaceManager` + the `AIMonitor.*` project references);
 2. exposes the `claude-workbench` MCP tool surface over HTTP for the sidecar's agent to call;
@@ -92,7 +92,7 @@ flowchart TD
 | Service | File | Role |
 |---|---|---|
 | `WorkspaceManager` | (engine, `AIMonitor.McpServer`) | The shared, singleton engine handle. Holds `Settings`, `EditService`, `RepositoryRoot`, `WatchedSolutionPath`, `HasWorkspace`; every host service that touches the watched solution goes through it. |
-| `EngineReviewWorkflow` | `Services/EngineReviewWorkflow.cs` | `IReviewWorkflow` (singleton). In-process adapter over the AIMonitor workflow engine that replaces the external WinMerge step. **The only place watched source is written** (`File.Copy` into the watched tree on operator Accept). |
+| `EngineReviewWorkflow` | `Services/EngineReviewWorkflow.cs` | `IReviewWorkflow` (singleton). In-process adapter over the AIMonitor workflow engine that replaces the external WinMerge step. **The only place watched source is written** (an atomic temp-then-rename write into the watched tree on operator Accept, after the GATE-2 build passes). |
 | `SidecarProcessHost` | `Services/SidecarProcessHost.cs` | `IHostedService` that launches + supervises `node dist/index.js`; skips launch if the port is already open; kills the child tree on shutdown. |
 | `SidecarEventStream` | `Services/SidecarEventStream.cs` | `BackgroundService` that reads the sidecar's SSE `/events`, maintaining bounded event history (max 500), the pending-gate set, elicitations, connection + active-turn state; raises `Changed`. Reconnects every 2 s on drop; re-seeds gates/elicitations on each connect. |
 | `SidecarClient` | `Services/SidecarClient.cs` | Typed `HttpClient` for the sidecar's control surface: `/prompt`, `/gates/{id}`, `/elicitations/{id}`, `/stop`, `/new-thread`, `/review-outcome`, `/usage`. |
@@ -125,10 +125,14 @@ sequenceDiagram
     ERW->>Val: EnsureValidatedAndLaunched (staged-overlay check, no build)
     Val-->>ERW: PreMergeValidationResult
     Note over ERW: if error & not force-approved → return, no write
-    ERW->>FS: File.Copy(staged → watched, overwrite:true)
-    Note right of FS: WRITE happens here — before GATE 2 build
-    ERW->>SDW: Record("accepted", ...) → terminal build + index rebuild
-    SDW-->>ERW: build + index outcome
+    ERW->>ERW: record still pending? staged file present? re-hash == StagedHash?
+    ERW->>Val: (terminal accept) Validate(session overlay) — authoritative GATE 2 build
+    Val-->>ERW: PreMergeValidationResult
+    Note over ERW: build failed & not force-approved → return, NOTHING written
+    ERW->>FS: copy staged → *.cwb-accept-tmp, then File.Move(overwrite:true)
+    Note right of FS: WRITE happens here — after the GATE 2 build
+    ERW->>SDW: Record("accepted", ...) → index rebuild (no terminalValidationRecords: build already ran)
+    SDW-->>ERW: decision + index outcome
     ERW-->>Op: ReviewActionResult (message + outcome summary)
 ```
 
@@ -168,22 +172,26 @@ Two consumers, one backing service. `GitService` is a stateless CLI wrapper that
 
 ## Owns / Does Not Own
 
-**Owns:** the *only* write to watched source — `EngineReviewWorkflow.Accept`'s `File.Copy` into the watched tree, gated behind an operator Blazor action. Owns the MCP HTTP surface composition, the sidecar lifecycle, the Blazor console, and the git seam.
+**Owns:** the *only* write to watched source — `EngineReviewWorkflow.Accept`'s atomic temp-then-rename write into the watched tree, gated behind an operator Blazor action. Owns the MCP HTTP surface composition, the sidecar lifecycle, the Blazor console, and the git seam.
 
 **Does not own:** engine internals. `WorkspaceManager`, `EditService`, `StagedDecisionWorkflow`, `PreMergeValidationService`, the index, and the underlying `AIMonitorTools` all live in the `AIMonitor.*` projects; the Host adapts and orchestrates them but does not implement staging, validation, indexing, or search.
 
 ## Gotchas & invariants
 
-- **Write-before-validate (Accept).** `File.Copy` into the watched tree runs *before* GATE 2's authoritative build in `StagedDecisionWorkflow.Record`. The pre-write guard is only GATE 1's fast overlay check. A build that fails after the copy leaves the overwritten file in place — there is no rollback. Known issue.
-- **Non-atomic `File.Copy`.** The watched write is a direct `File.Copy(..., overwrite: true)` — not a write-to-temp-then-rename. A crash mid-copy can leave a truncated watched file.
+- **Validate-before-write (Accept).** Every guard runs before a byte reaches the watched tree: the record must still be pending (not superseded, not decided), the staged file must exist and still re-hash to `record.StagedHash`, and on the terminal accept the authoritative GATE-2 build must pass. A failed build is a hard stop — nothing is written, so there is nothing to roll back — unless the operator explicitly overrides validation.
+- **The watched write is atomic.** `Accept` copies the staged file to a sibling `*.cwb-accept-tmp` and then `File.Move(..., overwrite: true)`s it into place, so a crash or disk-full mid-write cannot leave watched source truncated; the temp file is best-effort deleted on failure.
+- **The terminal build runs in the Host, not in `StagedDecisionWorkflow`.** `Accept` deliberately calls `Record(...)` **without** `terminalValidationRecords` — passing them would re-run the build it already ran pre-write.
 - **`runtime/**` is excluded from compilation.** `DefaultItemExcludes` in the `.csproj` excludes `runtime\**`. Those folders hold working/staged mirrors of watched-solution `.cs` source; if globbed into the Host assembly they produce duplicate-type build errors (CS0101/CS0111) as soon as a watched solution is configured. Do not remove the exclude.
 - **SSE fragility.** `SidecarEventStream.ReadStreamAsync` deserializes each `data:` line independently; a malformed JSON payload throws out of the read loop, marks the stream disconnected, and forces the 2 s reconnect — a single bad line tears the current stream. On reconnect it re-seeds gates and elicitations from `/gates` and `/elicitations` so stale state self-heals.
 - **DI lifetimes.** `WorkspaceManager`, `EngineReviewWorkflow`, `SidecarEventStream`, `GitService`, `GitWorkspaceService`, `TaskBoardRepositoryFactory`, and `SourceWorkspace` are **singletons**; `SidecarOperatorConsole`, `IOperatorConsole`, `IApprovalQueue`, `UploadService`, and the task view service are **scoped** (per Blazor circuit). The scoped `SidecarOperatorConsole` subscribes to the singleton stream's `Changed` and unsubscribes on `Dispose` — leaking that subscription would pin dead circuits.
 - **Single-start / port reuse.** `SidecarProcessHost` skips launching if something already listens on the sidecar port (a dev/standalone sidecar), so a stray process silently takes over supervision.
+- **Paths anchor to the binary, not the process cwd.** `ResolveContentRoot` uses `ContentRootPath` only when it actually contains `config\`, else falls back to `AppContext.BaseDirectory` — the Launcher starts the host from its bin folder. `ResolveSidecarDirectory` likewise walks up from `AppContext.BaseDirectory` looking for a `sidecar\dist\index.js`, falling back to `<repoRoot>\sidecar`. Both are overridable (`--repo-root`, `--config`, `Sidecar:Directory`).
+- **The startup index warm is background, not blocking.** With a workspace already attached, `ApplicationStarted` fires a background `WorkspaceManager.ProvisionAsync()` behind the `IndexRebuildStatus` spinner, because a cold index makes the first agent turn flaky (`start_monitor_session` cannot prove the single owning project). Kestrel is never blocked; a failure is logged as `startup-index-rebuild-failed` and the app keeps running. Indexing needs the **.NET SDK** present — `MSBuildLocator.RegisterDefaults()` resolves a real MSBuild toolset.
+- **The `/review/*` endpoints are test-only and off by default.** `GET /review/pending`, `POST /review/accept`, `POST /review/reject`, and `POST /review/warmup` are mapped **only** when `CWB_ENABLE_REVIEW_API=1`. They call the same `IReviewWorkflow` methods the Merge Review dialog's buttons call, bypassing the human merge window, so the sidecar flow smoke can drive an accept without an operator. Production never sets the variable, which is what keeps "operator Accept is the only path that writes watched source" true in real use.
 
 ## Where to start reading
 
-1. `Program.cs` — the whole wiring story: settings load, MCP composition, sidecar options, and every DI registration in ~120 lines.
+1. `Program.cs` — the whole wiring story in one file: content-root/config resolution, settings load, MCP composition, sidecar options, every DI registration, the startup index warm, and the endpoint map.
 2. `Services/EngineReviewWorkflow.cs` — the accept path and the one watched-source write; read `Accept` and `EnsureValidatedAndLaunched` together.
 3. `Services/SidecarEventStream.cs` — how sidecar events become UI state (the `Apply` switch and reconnect loop).
 

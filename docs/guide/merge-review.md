@@ -12,17 +12,33 @@ file in order.
 
 ## What you see
 
-A **side-by-side diff**: **Current Source** vs. the **Proposed Candidate**, rendered by the
-shared `DiffView` (green = added, red = removed, amber = modified). The same renderer is
-used by the Git panel, so diffs look identical everywhere.
+A **side-by-side diff** of the **Proposed Candidate** (left) against your **Current
+Source** (right), rendered by the shared `DiffView` (green = added, red = removed,
+amber = modified). The same renderer is used by the Git panel, so diffs look identical
+everywhere. Review is entirely in-app — there is no external diff tool to install or
+launch.
 
 ## The three actions
 
 | Button | When it's available | What it does |
 |---|---|---|
-| **Accept Proposed** | validation isn't a hard error (or was force-approved) | Writes the reviewed staged bytes to your real file, records the decision, and (on the last file of a session) rebuilds the index |
-| **Accept With Validation Override** | pre-merge validation reported errors | Accepts despite the validation failure — use only when you understand the errors |
+| **Accept Proposed** | pre-merge validation isn't a hard error (or was force-approved) | Re-checks and re-hashes the staged candidate, runs the authoritative build on the **last** file of a session, and only then writes the reviewed bytes to your real file, records the decision, and rebuilds the index |
+| **Accept With Validation Override** | pre-merge validation reported errors for this record | Accepts despite the validation failure — use only when you understand the errors |
 | **Reject** | always (until decided) | Declines. Rejecting stops the whole edit session; remaining files stay pending |
+
+## Nothing is written until the build passes
+
+Accept validates **before** it writes, never after. On the last pending file of an edit
+session the workbench compiles the whole session's accepted set (a real `dotnet build`,
+not the fast readiness check). If that build fails, the accept **stops there**: you get
+the error count and the first diagnostics, and **not a single byte reaches your source** —
+there is no half-applied change to clean up. Fix the code (ask Claude to re-stage) and
+accept again.
+
+The same is true of the other guards: if the staged record was superseded, already
+decided, or its bytes changed since staging, Accept refuses and writes nothing. The write
+itself goes through a temp file and an atomic rename, so an interrupted accept can't leave
+your file truncated.
 
 ## Session flow
 

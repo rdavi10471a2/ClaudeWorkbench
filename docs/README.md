@@ -75,7 +75,7 @@ Operating the app instead of hacking on it? Jump to the **[user guide](guide/)**
 | [AIMonitor.Data](components/AIMonitor.Data.md) | SQLite solution-index store + queries |
 | [AIMonitor.Indexing](components/AIMonitor.Indexing.md) | Rebuild/refresh orchestration; post-accept refresh |
 | [AIMonitor.Workflow](components/AIMonitor.Workflow.md) | **Edit sessions, staging, the two gates, hash integrity** |
-| [AIMonitor.Runtime](components/AIMonitor.Runtime.md) | GATE-1 launch; legacy WinMerge launcher (MCP/CLI only) |
+| [AIMonitor.Runtime](components/AIMonitor.Runtime.md) | GATE-1 launch; legacy WinMerge launcher — retired from the app (MCP/CLI only; review is in-app) |
 | [AIMonitor.McpServer](components/AIMonitor.McpServer.md) | The governed MCP tool surface (~60 tools) |
 | [AIMonitor.Cli](components/AIMonitor.Cli.md) | Engine-side console runner (not in the app runtime path) |
 | [ClaudeWorkbench.Host](components/ClaudeWorkbench.Host.md) | **The Blazor host: UI + MCP HTTP + sidecar + the sole source writer** |
@@ -95,6 +95,9 @@ Operating the app instead of hacking on it? Jump to the **[user guide](guide/)**
 - **Requirements & build/test:** the repo [README](../README.md).
 - **Run it:** `dotnet run --project src/ClaudeWorkbench.Host` (it launches the sidecar);
   open `http://localhost:6100`. Sidecar must be built once: `cd sidecar && npm install && npm run build`.
+  For a published install and the multi-workspace Launcher, see
+  [guide/deploying.md](guide/deploying.md). Either way the machine needs the .NET **SDK**,
+  not just the runtime — indexing goes through MSBuild.
 - **Diagrams** are [Mermaid](https://mermaid.js.org/) — they render on GitHub and stay in
   sync because they live next to the code they describe.
 - **How these docs were made:** [GENERATION.md](GENERATION.md) — Claude-generated (parallel

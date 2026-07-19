@@ -2,7 +2,7 @@
 
 > The Node process that drives Claude over the Agent SDK, acts as MCP client to the host, and enforces the deny-by-default human-operator gate on every tool call.
 
-**Path:** `sidecar/` · **Runtime:** Node (Claude Agent SDK, Express) · **Port:** :6110 · **Talks to:** host MCP (:6100/mcp) as client; host drives it via HTTP; streams events back via SSE.
+**Path:** `sidecar/` · **Runtime:** Node (Claude Agent SDK, Express) · **Port:** :6110 by default (`SIDECAR_PORT`), bound to **127.0.0.1 only** · **Talks to:** host MCP (:6100/mcp) as client; host drives it via HTTP; streams events back via SSE.
 
 ## Purpose
 
@@ -13,7 +13,7 @@ The sidecar is the single seam between the Blazor operator console and Claude. I
 - **Enforces the operator gate** via the SDK's `canUseTool` callback: deny-by-default, with governed mutations pausing until a human accepts or rejects.
 - Injects a governed role card as the system prompt so the agent knows its read-only + staging contract from turn one.
 - Streams a **neutral, vendor-decoupled event contract** (`events.ts`) back to the host over Server-Sent Events.
-- Exposes a small Express control surface the host uses to submit prompts, resolve gates/elicitations, read usage, feed back merge-review outcomes, and reset the thread.
+- Exposes a small Express control surface the host uses to submit prompts, resolve gates/elicitations, read usage, feed back merge-review outcomes, and reset the thread — loopback-bound and behind a Host/Origin guard.
 
 Isolation is deliberate: `strictMcpConfig` plus `settingSources: []` mean the machine's other MCP servers, the personal `~/.claude`, and any `CLAUDE.md` in the watched tree are **never** loaded. The only authored guidance is the injected governance card.
 
@@ -23,14 +23,14 @@ Isolation is deliberate: `strictMcpConfig` plus `settingSources: []` mean the ma
 | --- | --- |
 | `src/index.ts` | Entry point. Config, `InputStream` (streaming-input queue), `canUseTool` gate logic, `ensureSession`/`submitTurn`, SDK message → event mapping (`handleMessage`), and the full Express HTTP surface. |
 | `src/gate.ts` | The `GATED_TOOLS` set, `baseName`/`isGatedTool` helpers, and `OperatorGate` — the pending-gate registry whose promises `canUseTool` awaits and the host resolves. |
-| `src/bus.ts` | `EventBus` — SSE fan-out to any number of subscribers with a bounded 1000-event replay history (gate lifecycle events are excluded from replay). |
+| `src/bus.ts` | `EventBus` — SSE fan-out to any number of subscribers with a bounded 1000-event replay history (gate lifecycle events are excluded from replay). Every `res.write` is guarded: a dead/half-open subscriber is dropped instead of throwing out of `emit()`. |
 | `src/events.ts` | `SidecarEvent` discriminated union — the neutral sidecar→host event contract, deliberately decoupled from any agent vendor's wire shapes. |
 
 Supporting: `package.json` (deps: `@anthropic-ai/claude-agent-sdk ^0.3.212`, `express ^4.21.2`; scripts `build`/`start`/`typecheck`), `tsconfig.json` (`NodeNext` ESM, `strict`, `target ES2022`).
 
 ## How it works
 
-The host launches the sidecar once (single-start). On startup it resolves its workspace `cwd` from the host `/health` (the watched solution's folder, plus the uploads dir as an extra read-only directory). Each operator prompt is a **turn**; a series of turns sharing SDK session state is a **thread**.
+The host launches the sidecar once (single-start; under `ClaudeWorkbench.Launcher` each instance gets its own host+sidecar pair on its own port pair). On startup it resolves its workspace `cwd` from the host `/health` (the watched solution's folder, plus the uploads dir as an extra read-only directory). Each operator prompt is a **turn**; a series of turns sharing SDK session state is a **thread**.
 
 A turn's flow: the host `POST /prompt` → `submitTurn` → `ensureSession` lazily starts a long-lived streaming query → the prompt is pushed into the `InputStream` → the SDK runs the agent → each tool call routes through `canUseTool` → allowed calls run (workbench tools hit the host MCP), gated mutations pause and emit a `gate_request` → the host resolves it → SDK messages are mapped to neutral events and fanned out over `/events`.
 
@@ -77,7 +77,7 @@ Even with auto-approve, candidate mutations only touch the monitor-owned Working
 | --- | --- |
 | `ALWAYS_ALLOWED_NATIVE` | `ToolSearch`, `TodoWrite` — needed for the agent to function (`ToolSearch` loads the MCP tool schemas). Always allowed. |
 | `READ_TOOLS` | `Read`, `Grep`, `Glob` — allowed when `policy.allowNativeReads` (default true); otherwise added to `disallowedTools`. |
-| `BLOCKABLE_TOOLS` | `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, `PowerShell` — hard-removed via `disallowedTools` unless the operator opts them in through `enabledTools`. |
+| `BLOCKABLE_TOOLS` | `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, `PowerShell` — hard-removed via `disallowedTools` unless the operator opts them in through `enabledTools`. This list is also the **allowlist** `/prompt`'s `enabledTools` is filtered against: no other tool name can be opted in. |
 | `GATED_TOOLS` (gate.ts) | The workbench mutation set that pauses at the gate: `new_file`, `submit_file`, `replace_text_in_file`, `replace_span_in_file`, `submit_symbol`, `add_using`, `remove_using`, `set_type_partial`, `add_symbol`, `add_field`, `add_property`, `add_method`, `add_constructor`, `add_nested_type`, `remove_symbol`, `stage_candidate_for_review`, `launch_staged_diff`, `record_diff_decision`, and the four git mutations **`git_commit`, `git_push`, `git_create_branch`, `git_switch_branch`**. Git reads (`git_status`/`git_diff`/`git_log`/`git_list_branches`) are absent, so they auto-allow. |
 
 `activeAllowedNative` and `activeAutoApprove` are recomputed per turn from that turn's policy; `canUseTool` reads them.
@@ -119,7 +119,7 @@ Because options are frozen at session start, a **workspace switch, tool-policy c
 
 ## The control surface
 
-All endpoints are plain Express JSON handlers on :6110, driven by the host.
+All endpoints are plain Express JSON handlers on :6110, driven by the host. The listener binds `127.0.0.1`, and a middleware ahead of every route rejects (403) any request whose `Host` header is not localhost and any browser request carrying a non-local `Origin` — a DNS-rebinding defense. The host talks over loopback and sends no `Origin`, so it is unaffected.
 
 | Method + path | Purpose |
 | --- | --- |
@@ -153,12 +153,13 @@ All endpoints are plain Express JSON handlers on :6110, driven by the host.
 
 ## Gotchas & invariants
 
-- **`/prompt` `toolPolicy.enabledTools` is unvalidated.** It is copied into `activeAllowedNative` and used to remove tools from `disallowedTools` with no allowlist check — a caller can widen the allow-set to **any** tool name, including shells and writers. Safe only because the surface is localhost-trusted.
-- **The Express control surface has NO auth.** It binds `:6110` with no token/origin check, and `POST /gates/:id` is what resolves the human gate — anything that can reach the port can approve mutations. Localhost-only is the sole protection.
+- **`/prompt` `toolPolicy.enabledTools` is constrained to `BLOCKABLE_TOOLS`.** Names outside that set (`Agent`, `WebFetch`, anything unknown) are filtered out before the policy is built, so a `/prompt` body cannot widen the deny-by-default surface beyond the writers/shells an operator may deliberately opt into.
+- **The Express control surface still has no token auth — it relies on locality.** It binds `127.0.0.1` (no remote reach) and rejects spoofed `Host` / cross-origin `Origin` headers with 403, but `POST /gates/:id` is what resolves the human gate, so **another process on the same machine** could still approve mutations. That residual risk is knowingly accepted for a localhost console.
 - **`GATED_TOOLS` must stay a complete mirror of the MCP mutation set.** Any workbench mutation not listed in `GATED_TOOLS` **fails open** (auto-allowed as a "read-only" tool). Adding a new mutating tool to the host MCP server without adding its basename here silently bypasses the gate.
 - **Tool policy is frozen at turn 1, but `autoApprove` is per-turn.** `ensureSession` options (reads/blockables/model/effort/strictMcp) come from the *first* turn's policy for the whole thread; only `activeAutoApprove` is refreshed each `submitTurn`. Changing any other policy field mid-thread has no effect until New Thread.
 - **An unhandled rejection can strand `activeTurn`.** `activeTurn` is set to the turnId in `/prompt` before `submitTurn` runs; `submitTurn` is fired with `void`. If it throws before the SDK produces a `result` message, `activeTurn` never clears and every subsequent `/prompt` returns a permanent 409 until New Thread.
-- **SSE fan-out has no per-client guard.** `EventBus.emit` writes to every client with no per-connection error handling or backpressure; a wedged client is only removed on socket `close`.
+- **SSE fan-out tolerates dead subscribers but has no backpressure.** `EventBus.write` wraps each `res.write` in a `try/catch` and deletes the failing client, so a closed browser tab can no longer throw out of `emit()` and tear down the in-flight turn (deleting from the `Set` being iterated is safe). There is still no backpressure — a slow-but-open client is written to regardless.
+- **Thread state is only cleared by the query that owns it.** The read loop's `finally` nulls `activeQuery`/`activeInput`/`activeTurn` **only if `activeQuery` is still its own query**. Without that guard, New Thread followed immediately by a prompt let the old loop null out the new turn's state, so the new turn looked finished within seconds while its work continued untracked.
 - **The deny-by-default native path fails CLOSED (correct).** Unknown non-workbench tools are denied, not allowed — the safe default. This is the intended invariant and should be preserved.
 
 ## Where to start reading
@@ -167,4 +168,6 @@ Start with **`src/index.ts`** — it is the whole runtime: config, `canUseTool`,
 
 ## Tests
 
-**No automated tests yet — a known gap.** The only checks are `npm run typecheck` (`tsc --noEmit`) and `npm run build` (`tsc`). The gate policy, the `GATED_TOOLS` completeness invariant, and the turn/thread lifecycle are all currently unguarded by tests.
+**No unit tests — but there is an end-to-end flow smoke.** `npm run smoke` (`src/smoke/flow.smoke.test.ts`, `node --test` over the compiled output) drives the governed edit loop against the **live** stack on the `CalculatorSample` fixture: a real Claude turn stages a candidate, then accept / reject / multi-file accept run through `EngineReviewWorkflow` via the host's test-only `/review/*` endpoints (opt in with `CWB_ENABLE_REVIEW_API=1`), asserting the watched bytes and the GATE-2 build. It polls `GET /health` rather than subscribing to `/events`, and restores every fixture file in a `finally`. See `sidecar/src/smoke/README.md`.
+
+The static checks remain `npm run typecheck` (`tsc --noEmit`) and `npm run build` (`tsc`). The gate policy itself and the `GATED_TOOLS` completeness invariant are still unguarded by tests.

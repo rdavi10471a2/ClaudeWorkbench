@@ -16,8 +16,10 @@ Open the **Git** tab. Left panel + a side-by-side diff on the right.
 - **Fetch / Pull / Push** — Push is deliberate and operator-driven.
 - **Staged Changes** / **Changes** groups — hover a file for **stage (＋) / unstage (−) /
   discard (✕)**.
-- **Click a file** → the diff opens on the right (same `DiffView` as merge review; before
-  is the repository/HEAD side, after is the working tree/staged side).
+- **Click a file** → the diff opens on the right (same `DiffView` renderer as merge review,
+  in the conventional old-left/new-right orientation: **Repository**/**HEAD** on the left,
+  **Working tree**/**Staged** on the right — merge review flips it and puts the proposal
+  on the left).
 - **Commit** — commits the staged set; if nothing is staged it stages everything and
   commits (there's a **Stage All** button too). The message box is pre-filled with a draft
   from the changed filenames — edit it.

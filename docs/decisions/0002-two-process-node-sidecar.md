@@ -33,5 +33,16 @@ dropped).
 - The sidecar stays **thin** — a driver + gate + event bus. Business logic stays in .NET.
 - Auth is the local `claude` CLI's subscription login; no API key for personal use.
 
+## Update — 2026-07-19
+
+The two-process shape is unchanged, but it is no longer the whole picture: **one host+sidecar
+pair is one workspace**. To run several watched solutions at once, the optional
+[`ClaudeWorkbench.Launcher`](../components/ClaudeWorkbench.Launcher.md) starts a *pair per
+workspace* — its own free port pair, its own config, its own runtime folder under
+`<workbench root>\runtime\<workspace>` — with host + sidecar + browser window held in a Windows
+Job Object so they die together. The `:6100` / `:6110` above remain the plain-`dotnet run`
+defaults. The Launcher also sets `CWB_EXIT_WITH_BROWSER=1`, making the browser window own the
+instance's lifetime.
+
 See: [Architecture §2](../architecture/Architecture.md#2-containers-c4-level-2--the-two-processes),
 [Sidecar](../components/Sidecar.md), [ClaudeWorkbench.Host](../components/ClaudeWorkbench.Host.md).

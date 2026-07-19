@@ -41,3 +41,15 @@ progress with `update_agent_notes`"). It implicitly assumes the turn's subject
 The machinery (`get_current_task` / `update_agent_notes` / the board) worked
 correctly — the gap is *when* the current task is the subject, which the binding
 resolves.
+
+## Status (2026-07-19)
+
+- **Correction 2 has landed.** The injected role card no longer couples a turn to the
+  Active task: the board is now stated as *optional context, not a per-turn step* —
+  free-flowing by default, `get_current_task` / `update_agent_notes` only when the
+  operator's request clearly concerns a board task, and never folding an ad-hoc request
+  into the Active task (`sidecar/src/index.ts`, `buildGovernanceCard`).
+- **Correction 1 is still unbuilt.** There is no thread↔task binding, so nothing above
+  the wording enforces it. Meanwhile the **Tasks tab is disabled** in the UI and the
+  `TaskMcpTools` surface stays available to the agent, so the board is reachable by tool
+  but not by operator. This note stays the design of record for the binding.

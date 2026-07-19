@@ -15,7 +15,16 @@ The sidecar isn't up or the host can't reach it.
 
 Something is already listening. Stop the old process (or change `Sidecar:BaseUrl` /
 Kestrel endpoint in config). The sidecar **won't** double-launch if its port is already
-taken — the host detects it and uses the existing one.
+taken — the host detects it and uses the existing one. Running several workspaces at once
+is what the [Launcher](deploying.md) is for: it allocates a free host+sidecar port pair
+per instance instead of everything fighting over 6100/6110.
+
+## Indexing fails on a machine that "has .NET"
+
+Indexing loads the solution through MSBuild (`MSBuildLocator.RegisterDefaults()`), so the
+machine needs the **.NET 10 SDK** — the *runtime* alone is not enough. The app starts fine
+and then fails to index. Install the SDK. (Publishing self-contained does **not** remove
+this requirement; see [deploying](deploying.md#requirements).)
 
 ## The Git panel says "Git is not available"
 
@@ -42,6 +51,29 @@ build isn't holding a lock (stop the running host first).
 The Merge Review opens only when the turn **finishes** with staged edits. If the agent
 only read code, or a gate was denied, there's nothing staged. Check the transcript for
 denied gates or errors.
+
+## Accept says the build FAILED
+
+The last file of an edit session runs the authoritative build **before** anything is
+written. A failure is a hard stop: **nothing was written to your source**, so there is no
+half-applied change to undo. Read the diagnostics in the message, ask Claude to fix and
+re-stage, then accept again. (**Accept With Validation Override** exists for when you
+understand the errors and want to merge anyway.)
+
+## The app exited on its own
+
+Started by the [Launcher](deploying.md), an instance is owned by its browser window: the
+host sets `CWB_EXIT_WITH_BROWSER=1` and stops a few seconds after the last tab closes
+(graceful shutdown takes the sidecar with it). Reopening the URL won't help — Start it
+again from the Launcher. A plain `dotnet run` session does **not** set that variable and
+keeps running with no tab open.
+
+## "Indexing" sits in the toolbar at startup
+
+Expected. If a solution is already attached, the host rebuilds the index in the background
+once it's up, behind the **Indexing** spinner, so the first agent turn isn't running
+against a cold index. It never blocks startup; a large solution just takes a while. Wait
+for **Ready** before the first edit turn.
 
 ## Self-check warnings
 

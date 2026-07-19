@@ -1,34 +1,53 @@
 # Flow smoke — governed edit loop, end to end
 
-`flow.smoke.test.ts` drives the one path that carries the safety guarantee, in
-TypeScript, against the live stack:
+`flow.smoke.test.ts` drives the paths that carry the safety guarantee, in
+TypeScript, against the live stack — three tests, each a real Claude turn:
 
 ```
-POST /prompt (autoApprove) → agent stages a candidate → POST /review/accept
-→ watched source written → GATE-2 build passes
+1. accept      POST /prompt (autoApprove) → agent stages → POST /review/accept
+               → GATE-2 build passes → watched source written
+2. reject      POST /prompt (autoApprove) → agent stages → POST /review/reject
+               → watched source UNCHANGED
+3. multi-file  one session stages two files → accept both
+               → terminal build passes → both written
 ```
 
-That accept is `EngineReviewWorkflow.Accept` — where the H1/H2 fixes live. Normally
-it is an operator action at the Merge Review dialog (the only path that writes
-watched source). The smoke reaches the **same** method over HTTP via a test-only
-host endpoint so it can run without a human at the UI.
+Accept/Reject are `EngineReviewWorkflow` — where the H1/H2 fixes live. Note the
+ordering the accept test asserts: the authoritative GATE-2 build runs **before**
+anything is written, so a failing build means nothing lands. Normally these are
+operator actions at the Merge Review dialog (the only path that writes watched
+source). The smoke reaches the **same** methods over HTTP via test-only host
+endpoints so it can run without a human at the UI.
+
+Turn completion is detected by **polling** (`GET /health` → `activeTurn`) and staged
+work by `GET /review/pending` — not from the SSE `/events` stream, which several
+subscribers share.
 
 This is an **integration smoke**, not a unit test: it needs the full stack running
-against the `CalculatorSample` fixture and makes a **real Claude turn** (network +
+against the `CalculatorSample` fixture and makes **real Claude turns** (network +
 tokens).
 
 ## Fixture
 
 `samples/watched-solutions/CalculatorSample/` — a tiny buildable console solution
-with `Calculator` and `AdvancedCalculations`. The smoke asks the agent to add a
-`Modulo` method to `Calculator.cs`, accepts it, verifies the bytes landed and the
-build passed, then **restores every fixture file it touched** (guaranteed in a
-`finally`), so it is safe to re-run.
+with `Calculator` and `AdvancedCalculations`. The smoke asks the agent for small
+additions (`Modulo`, `Triple`, `Negate`/`Cube`), drives the decision, verifies what
+did or didn't land on disk, then **restores every fixture file it touched**
+(`Calculator.cs`, `AdvancedCalculations.cs`, `Program.cs` — guaranteed in a
+`finally`) and starts a fresh thread, so it is safe to re-run.
+
+The committed fixture config uses **relative** paths — `WatchedSolutionPath`
+resolves against the config file's own folder, `RuntimeRoot` against the repo root —
+so it works in any checkout with no editing.
 
 ## Run
 
-1. Start the host with the fixture config **and the review API opted in**. The host
-   launches the sidecar itself.
+Needs the **.NET 10 SDK** (indexing calls `MSBuildLocator.RegisterDefaults()`, which
+needs MSBuild/Roslyn — the runtime alone is not enough), **Node.js**, and a Claude
+login.
+
+1. Start the host **from the repo root** with the fixture config **and the review API
+   opted in**. The host launches the sidecar itself.
 
    ```bash
    # bash
@@ -49,12 +68,19 @@ build passed, then **restores every fixture file it touched** (guaranteed in a
    npm run smoke
    ```
 
-## Safety note on `/review/accept`
+## Safety note on the review endpoints
 
-`GET /review/pending` and `POST /review/accept` bypass the human merge window, so
-they are **off by default** and only mapped when `CWB_ENABLE_REVIEW_API=1`.
-Production never sets it, so the invariant "operator Accept is the only path that
-writes watched source" holds in real use; the smoke opts in explicitly.
+`GET /review/pending`, `POST /review/accept`, `POST /review/reject` and
+`POST /review/warmup` bypass the human merge window, so they are **off by default**
+and only mapped when `CWB_ENABLE_REVIEW_API=1`. Production never sets it, so the
+invariant "operator Accept is the only path that writes watched source" holds in real
+use; the smoke opts in explicitly.
+
+`/review/warmup` is why the flag is needed even before the first accept: a turn
+against a **cold** index makes `start_monitor_session` flaky (it can't prove the
+single owning project). The host does warm the index at startup, but in the
+background — so the smoke calls `/review/warmup` once in `before()` and *waits* for
+it, guaranteeing every turn runs warm.
 
 The smoke also refuses to run unless the host reports it is watching
 `CalculatorSample.slnx`, so it can never mutate a real project.

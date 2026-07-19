@@ -32,5 +32,18 @@ Enforcement is **code**, not prompt text.
 - Trade-off: the agent is genuinely constrained — it cannot self-serve a shell or write a
   file. That is the point.
 
+## Update — 2026-07-19
+
+Two hardening passes strengthened the same decision:
+
+- **The allow-set can no longer be widened from the wire.** A turn's `enabledTools` is
+  intersected with a fixed blockable set (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`,
+  `PowerShell`) — the writers an operator may deliberately opt back in. Any other name in a
+  `/prompt` body is discarded, so the deny-by-default surface can't be talked *or posted* around.
+- **The control surface is loopback-only.** The sidecar binds `127.0.0.1` and rejects requests
+  with a non-localhost `Host` header or a non-local `Origin` (DNS-rebinding defense).
+- **The write is validate-then-write.** The host-side accept runs the authoritative build before
+  it touches watched source — see [0003](0003-in-app-review-retire-winmerge.md).
+
 See: [Sidecar](../components/Sidecar.md), [AIMonitor.Workflow](../components/AIMonitor.Workflow.md),
 [Architecture §5](../architecture/Architecture.md#5-governance--the-gate-is-code).

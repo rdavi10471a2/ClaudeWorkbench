@@ -65,7 +65,7 @@ flowchart TD
 
 ### (a) Stage a candidate — hash and supersede
 
-`WorkflowEditService.Stage` (lines 629-705). Note that the immutable `StagedHash` is computed from the **copied staged file**, not the live Working file, so it is stable for the record's lifetime.
+`WorkflowEditService.Stage` (lines 641-717). Note that the immutable `StagedHash` is computed from the **copied staged file**, not the live Working file, so it is stable for the record's lifetime.
 
 ```mermaid
 sequenceDiagram
@@ -89,7 +89,7 @@ sequenceDiagram
 
 ### (b) RecordDecision("accepted") — the enforced invariants, in order
 
-`WorkflowEditService.RecordDecision` (lines 821-919). The order below is exact; each check throws `InvalidOperationException` (or `FileNotFoundException`) and aborts before any state is written.
+`WorkflowEditService.RecordDecision` (lines 833-931). The order below is exact; each check throws `InvalidOperationException` (or `FileNotFoundException`) and aborts before any state is written.
 
 ```mermaid
 sequenceDiagram
@@ -148,9 +148,9 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 
 ## Gotchas & invariants
 
-- **Shared singleton with unsynchronized record I/O.** `WorkspaceManager` builds one `WorkflowEditService` per workspace and hands it to every caller. Manifest writes are guarded by a file-based `AcquireManifestLock`, but **staged-record** reads/writes (`LoadStagedRecord` / `SaveStagedRecord`) and the read-modify-write in `SupersedeActiveRecordsForFile` / `RecordDiffLaunch` / `RecordPreMergeValidation` / `RecordDecision` are **not** covered by that lock. Concurrent operations on the same staged record can race (last-writer-wins on a bare `File.WriteAllText`).
+- **Staged records are held in memory, guarded by one lock.** `WorkspaceManager` builds one `WorkflowEditService` per workspace and hands it to every caller (the agent stages through the in-process MCP surface; the operator accepts through the Blazor host — same instance). The records are the in-memory source of truth under a single `recordSync` lock, lazily rehydrated from disk on first use, and every read returns an isolated clone so a caller mutating a returned record cannot reach into the cache. This replaced the old read-file/mutate/write-file-per-step design, which threw "the record .json is being used by another process" when an accept overlapped a supersede or list. Individual record operations are now safe; a *compound* read-modify-write spanning separate `GetStagedRecord` → mutate → `SaveStagedRecord` calls is still last-writer-wins.
 - **`CandidateEditValidator` cache is not thread-safe.** `overlayValidationCache` is a plain `Dictionary` mutated without synchronization inside a service that is shared across callers; concurrent overlay validations can corrupt it or throw.
-- **Non-atomic manifest/record persistence.** `SaveManifest` and `SaveStagedRecord` use a bare `File.WriteAllText`. A crash mid-write can leave a truncated/corrupt JSON manifest or record. Contrast `WorkflowRunRecorder.WriteAllTextAtomically`, which writes to a temp file and `File.Move`-swaps — that safer pattern is **not** applied to the safety-critical manifest and staged-record files.
+- **Staged records persist atomically; the manifest still does not.** `SaveStagedRecord` writes a sibling `<record>.json.writing` temp and `File.Move`-swaps it (the temp name is not `*.json`, so rehydration ignores it), and a torn file left by an older build is skipped on rehydrate rather than making the record blink out of `ListStagedRecords`. `SaveManifest` is still a bare `File.WriteAllText`, so a crash mid-write can leave a truncated/corrupt JSON manifest — the `WorkflowRunRecorder.WriteAllTextAtomically` pattern has not been applied there.
 - **Residual WinMerge language.** Review is now in-app (`EngineReviewWorkflow` records `RecordDiffLaunch(..., "in-app merge review")`), but user-facing messages still say "snapshotted for WinMerge review" (`Stage`, `StagedEditRecord.Message`) and "ready for WinMerge review" (`PreMergeValidationService`). Cosmetic, but misleading.
 - **Accept requires the merge to already be applied.** GATE 2's `dirty-unexpected` guard compares the *watched* file to the staged hash. `RecordDecision` does not itself write the watched file (except deleting a blank new-file target on reject); the caller must have applied the merge first, or an "accepted" decision will be rejected.
 - **`RequiresRefresh` latch after accept.** An accepted/normalized-accepted decision sets `RequiresRefresh = true` and `IndexStale = true` on the manifest. Further edits/staging are blocked (`EnsureSessionCanEdit`) until `Refresh` is re-run, guaranteeing hashes and saved line endings reflect the new watched source.
@@ -160,18 +160,19 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 
 ## Where to start reading
 
-1. `WorkflowEditService.RecordDecision` (lines 821-919) — the accept-time gate; read this first, it is the crux.
-2. `WorkflowEditService.Stage` (629-705) — how an immutable hashed record is created and prior records superseded.
+1. `WorkflowEditService.RecordDecision` (lines 833-931) — the accept-time gate; read this first, it is the crux.
+2. `WorkflowEditService.Stage` (641-717) — how an immutable hashed record is created and prior records superseded.
 3. `ReviewDecisionClassifier.Classify` — the pure decision function the whole safety story reduces to.
-4. `WorkflowEditService.WriteCandidateContent` (497-530) — the common path for every Working edit (syntax gate, line-ending preservation, overlay validation).
+4. `WorkflowEditService.WriteCandidateContent` (509-542) — the common path for every Working edit (syntax gate, line-ending preservation, overlay validation).
 5. `PreMergeValidationService.Validate` — GATE 1's isolated-workspace full-solution build.
 6. `EditSessionManifest` / `StagedEditRecord` — the persisted state shapes everything else reads and writes.
 
 ## Tests
 
-`tests/unit/AIMonitor.Workflow.Tests` — **42 tests**. Highlights:
+`tests/unit/AIMonitor.Workflow.Tests` — **46 tests**. Highlights:
 
 - `WorkflowEditServiceSafetyTests` (23) — the bulk of the invariant coverage: staging, supersession, hash-mismatch rejection, the accept-gate ordering, and `dirty-unexpected` handling.
+- `WorkflowEditServiceRecordStoreTests` (4) — the in-memory staged-record store: durability across a service restart, the atomic temp-then-rename write, clone isolation, and the concurrent accept/supersede that used to throw a file-sharing violation.
 - `ReviewDecisionClassifierTests` (3) — the classifier's four outcomes.
 - `ClaudeSmokes*` suites — end-to-end "smoke" flows exercising authoring, materialization, the Phase 2 `dirty-unexpected` path, Phase 6 validation, and WinForms source-map handling over fixtures under `samples/`.
 - `RoslynEditService*Tests` — outline/source-map behavior for the Roslyn edit helpers.

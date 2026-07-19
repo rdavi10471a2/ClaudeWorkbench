@@ -28,7 +28,9 @@ The method, so it can be repeated:
    **source-verified**, not written from memory. Known defects (e.g. the
    `EngineReviewWorkflow` write-before-validate ordering, the terminal-build gap, the stale
    FK-cascade comment, the sidecar `enabledTools`/no-auth issues) were cross-checked against
-   an earlier full code review and documented honestly.
+   an earlier full code review and documented honestly. (Most of those have since been fixed —
+   see *Since the pass* below — so treat any defect wording that survives in a page as suspect
+   and check the code.)
 3. **Connective docs** (`architecture/Architecture.md`, `README.md`, `guide/*`,
    `decisions/*`) — written by the lead session from whole-system knowledge, since they need
    cross-module coherence.
@@ -38,6 +40,24 @@ The method, so it can be repeated:
 5. **Verification** — every code fence was checked balanced; the live MCP tool count (**71
    = 60 AIMonitor + 3 Task + 8 Git**) was confirmed against an actual `tools/list`; a couple
    of agent miscounts were corrected against that ground truth.
+
+## Since the pass (checked 2026-07-19, later the same day)
+
+The code moved under the docs within hours of the pass — exactly the drift this file warns
+about. What changed, and what it invalidated:
+
+- **The accept ordering was inverted.** The authoritative GATE-2 build now runs *before* watched
+  source is written, and a failed build writes nothing. The "write-before-validate ordering" and
+  "terminal-build gap" recorded above are **fixed**.
+- **The sidecar was hardened**: `enabledTools` is constrained to a fixed blockable set, the
+  control surface binds loopback-only and guards `Host`/`Origin`.
+- **WinMerge is fully out of the path**: the `diff-tool-available` self-check guardrail was
+  dropped along with it.
+- **A new component exists**: `ClaudeWorkbench.Launcher`, with its own page at
+  [`components/ClaudeWorkbench.Launcher.md`](components/ClaudeWorkbench.Launcher.md) — written
+  by the same method (subagent reading the real source).
+- **Paths are anchored to a discovered workbench root**, so a published install runs anywhere;
+  any doc quoting an absolute checkout path is stale by construction.
 
 ## Regenerating or updating
 

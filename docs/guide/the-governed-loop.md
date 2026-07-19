@@ -8,9 +8,11 @@ control. This is the operator's view; the engineering view is in the
 
 > The agent proposes and stages. **You** accept. Only the accept writes real source.
 
-Claude is **read-only** to your watched solution. It cannot run a shell, cannot `Write`
-or `Edit` files, and cannot push to git on its own. Everything it wants to change goes
-through governed tools that you approve.
+Claude is **read-only** to your watched solution. By default it cannot run a shell, cannot
+`Write` or `Edit` files, and cannot push to git on its own. Everything it wants to change
+goes through governed tools that you approve. (The **Optional tools** in
+[Settings](settings-and-usage.md) can hand it `Bash`/`Write`/`Edit` — that deliberately
+steps outside this gate, which is why they're off by default.)
 
 ## Step by step
 
@@ -25,16 +27,19 @@ through governed tools that you approve.
    hashed snapshot. Then it **stops** and tells you it's staged. It never accepts.
 5. **You review.** When the turn ends with staged edits, the **Merge Review** dialog
    opens with a side-by-side diff. You **Accept** or **Reject**.
-6. **Accept writes source.** Accepting copies the reviewed bytes to your real file and
-   records the decision. The solution index rebuilds so downstream truth is fresh.
+6. **Accept validates, then writes source.** Accepting first re-checks the staged
+   snapshot and (on the last file of the session) runs the authoritative build. Only if
+   that passes are the reviewed bytes written to your real file and the decision
+   recorded; the solution index then rebuilds so downstream truth is fresh. A failed
+   build is a hard stop — nothing is written.
 
 ## Why the gate is trustworthy
 
 It's **code, not a prompt.** The pause is enforced by the sidecar's `canUseTool` gate and
 the engine's staging checks — not by asking the model nicely. And accepting is safe
-because the staged snapshot is **immutable and hashed**: at accept time the engine
-re-hashes it and requires your real file to match the reviewed candidate exactly. What you
-saw is what gets written.
+because the staged snapshot is **immutable and hashed**: at accept time — **before** any
+byte reaches your source — the engine re-hashes it and requires it to match what you
+reviewed exactly. What you saw is what gets written, or nothing is.
 
 ## What you'll see in the UI
 

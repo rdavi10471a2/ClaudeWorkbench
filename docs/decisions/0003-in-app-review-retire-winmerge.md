@@ -32,4 +32,20 @@ dialog and the Git panel, so diffs look identical everywhere.
   [AIMonitor.Indexing](../components/AIMonitor.Indexing.md) and
   [ClaudeWorkbench.Host](../components/ClaudeWorkbench.Host.md).
 
-See: [merge review guide](../guide/merge-review.md).
+## Update — 2026-07-19
+
+The trade-off recorded above has been **closed**. `EngineReviewWorkflow.Accept` now runs the
+authoritative GATE-2 overlay build itself, and runs it **before** any byte reaches watched
+source: still-pending check → staged re-hash → real overlay build → *then* an atomic
+temp-file-plus-rename write. A failed build is a hard stop (nothing written) unless the operator
+takes *Accept With Validation Override*. `StagedDecisionWorkflow.Record` is still called without
+`terminalValidationRecords` — now deliberately, so the build does not run twice.
+
+Also since: the retired diff tool left the *guardrails* too — the `diff-tool-available`
+self-check was dropped, so no code path expects an external diff tool. `WinMergeCandidatePaths`
+survives as a settings key (the Launcher writes it empty) and the
+`WinMergeDiffToolLauncher` + `StagedDiffLaunchWorkflow` launch path still exists for the MCP/CLI
+route, as recorded above.
+
+See: [merge review guide](../guide/merge-review.md),
+[Architecture §4](../architecture/Architecture.md#4-the-two-gates).
