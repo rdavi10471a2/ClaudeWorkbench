@@ -467,6 +467,24 @@ function handleMessage(message: SDKMessage): void {
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 
+// H3: the control surface is localhost-only. We bind to loopback (app.listen below) AND
+// reject any request whose Host header isn't localhost, plus any browser request carrying
+// a non-local Origin (DNS-rebinding defense). The Blazor host talks to us over 127.0.0.1
+// and sends no Origin, so it is unaffected.
+app.use((req, res, next) => {
+  const host = (req.headers.host ?? "").split(":")[0];
+  if (host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]" && host !== "::1") {
+    res.status(403).json({ error: "forbidden host" });
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
+    res.status(403).json({ error: "forbidden origin" });
+    return;
+  }
+  next();
+});
+
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -525,7 +543,13 @@ app.post("/prompt", (req, res) => {
   const policy: ToolPolicy = {
     allowNativeReads: raw.allowNativeReads !== false,
     strictMcpConfig: raw.strictMcpConfig !== false,
-    enabledTools: Array.isArray(raw.enabledTools) ? raw.enabledTools.map(String) : [],
+    // H3: an operator may only re-enable tools from the blockable set (the writers/shells).
+    // Arbitrary names (Agent, WebFetch, Workflow, anything unknown) can NOT be spliced into
+    // the allow-set, so a /prompt body cannot widen the deny-by-default surface beyond the
+    // intended opt-ins.
+    enabledTools: Array.isArray(raw.enabledTools)
+      ? raw.enabledTools.map(String).filter((tool) => BLOCKABLE_TOOLS.includes(tool))
+      : [],
     autoApprove: raw.autoApprove === true,
     model: typeof raw.model === "string" ? raw.model : "",
     effort: typeof raw.effort === "string" ? raw.effort : "",
@@ -607,7 +631,7 @@ app.post("/new-thread", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(SIDECAR_PORT, () => {
+app.listen(SIDECAR_PORT, "127.0.0.1", () => {
   const banner: SidecarEvent = {
     type: "error",
     message: `sidecar listening on :${SIDECAR_PORT}, MCP -> ${WORKBENCH_MCP_URL}`,
