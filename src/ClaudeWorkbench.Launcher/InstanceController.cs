@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace ClaudeWorkbench.Launcher;
@@ -18,12 +19,16 @@ public enum InstanceStatus
 // CWB_EXIT_WITH_BROWSER stopped it), Poll() notices and cleans up.
 public sealed class InstanceController : IDisposable
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(5) };
 
     private readonly LauncherState state;
     private JobObject? job;
     private Process? host;
     private Process? browser;
+    private StreamWriter? hostLog;
+
+    // Where this instance's host stdout/stderr is captured, for diagnosing a crash.
+    public string? HostLogPath { get; private set; }
 
     public InstanceController(WorkspaceEntry workspace, LauncherState state)
     {
@@ -67,9 +72,14 @@ public sealed class InstanceController : IDisposable
             host = LaunchHost(configPath, instanceDir);
             job.Assign(host.Handle);
 
-            if (!await WaitForHealthAsync(TimeSpan.FromSeconds(40)))
+            // Wait for a nicer browser-open timing, but tolerate a slow start: a big
+            // solution's index rebuild can keep the host busy well past a naive timeout.
+            // Only a host that actually EXITED is a failure — a live-but-slow host is fine
+            // (the browser will connect once it catches up), and must not be killed.
+            bool healthy = await WaitForHealthAsync(TimeSpan.FromSeconds(120));
+            if (!healthy && host.HasExited)
             {
-                throw new TimeoutException("The host did not report healthy in time.");
+                throw new InvalidOperationException("The host process exited during startup.");
             }
 
             if (launchBrowser)
@@ -85,19 +95,68 @@ public sealed class InstanceController : IDisposable
         }
         catch (Exception exception)
         {
-            LastError = exception.Message;
             Status = InstanceStatus.Error;
+            Stop(); // flushes + closes the host log
+            LastError = exception.Message + ReadLogTail();
+        }
+    }
+
+    private string ReadLogTail()
+    {
+        try
+        {
+            if (HostLogPath is not null && File.Exists(HostLogPath))
+            {
+                string[] lines = File.ReadAllLines(HostLogPath);
+                string tail = string.Join(Environment.NewLine, lines.TakeLast(12));
+                return $"{Environment.NewLine}{Environment.NewLine}Host log ({HostLogPath}):{Environment.NewLine}{tail}";
+            }
+        }
+        catch
+        {
+            // best effort
+        }
+
+        return HostLogPath is not null ? $"{Environment.NewLine}(see {HostLogPath})" : string.Empty;
+    }
+
+    // Detect a backend that went away on its own (e.g. the browser tab was closed and the
+    // host's CWB_EXIT_WITH_BROWSER shut it down). Use the PORT as ground truth: it stops
+    // listening early in shutdown, so the row flips to "stopped" promptly instead of waiting
+    // for the whole process to finish exiting.
+    public void Poll()
+    {
+        if (Status != InstanceStatus.Running)
+        {
+            return;
+        }
+
+        bool exited;
+        try
+        {
+            exited = host is null || host.HasExited;
+        }
+        catch
+        {
+            exited = true;
+        }
+
+        if (exited || !PortResponds(HostPort))
+        {
             Stop();
         }
     }
 
-    // Detect a backend that exited on its own (e.g. the browser tab was closed and the
-    // host's CWB_EXIT_WITH_BROWSER shut it down).
-    public void Poll()
+    private static bool PortResponds(int port)
     {
-        if (Status == InstanceStatus.Running && host is { HasExited: true })
+        try
         {
-            Stop();
+            using TcpClient client = new();
+            return client.ConnectAsync("127.0.0.1", port).Wait(300) && client.Connected;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -116,9 +175,37 @@ public sealed class InstanceController : IDisposable
         job = null;
         host = null;
         browser = null;
+        hostLog?.Dispose();
+        hostLog = null;
         if (Status != InstanceStatus.Error)
         {
             Status = InstanceStatus.Stopped;
+        }
+    }
+
+    private void WriteHostLog(string? line)
+    {
+        if (line is null)
+        {
+            return;
+        }
+
+        StreamWriter? writer = hostLog;
+        if (writer is null)
+        {
+            return;
+        }
+
+        lock (writer)
+        {
+            try
+            {
+                writer.WriteLine(line);
+            }
+            catch
+            {
+                // best effort
+            }
         }
     }
 
@@ -129,6 +216,8 @@ public sealed class InstanceController : IDisposable
             FileName = state.HostExePath,
             UseShellExecute = false,
             CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
             WorkingDirectory = Path.GetDirectoryName(state.HostExePath) ?? Environment.CurrentDirectory,
         };
         startInfo.ArgumentList.Add("--config");
@@ -136,6 +225,11 @@ public sealed class InstanceController : IDisposable
         startInfo.ArgumentList.Add("--repo-root");
         startInfo.ArgumentList.Add(instanceDir);
 
+        // The host's appsettings.json pins Kestrel:Endpoints:Http:Url to :6100, and that
+        // Kestrel endpoint config OUTRANKS ASPNETCORE_URLS — so a second instance would also
+        // try to bind :6100 and crash. An environment variable outranks appsettings.json, so
+        // override the exact endpoint key to force this instance's port unambiguously.
+        startInfo.Environment["Kestrel__Endpoints__Http__Url"] = Url;
         startInfo.Environment["ASPNETCORE_URLS"] = Url;
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
         startInfo.Environment["Sidecar__BaseUrl"] = $"http://localhost:{SidecarPort}";
@@ -144,8 +238,16 @@ public sealed class InstanceController : IDisposable
         // The tab owns the instance: closing the last tab shuts the host (and its sidecar) down.
         startInfo.Environment["CWB_EXIT_WITH_BROWSER"] = "1";
 
+        // Capture host output so a startup crash is diagnosable (the launcher has no console).
+        HostLogPath = Path.Combine(instanceDir, "host.log");
+        hostLog = new StreamWriter(HostLogPath, append: false) { AutoFlush = true };
+
         Process process = new() { StartInfo = startInfo };
+        process.OutputDataReceived += (_, e) => WriteHostLog(e.Data);
+        process.ErrorDataReceived += (_, e) => WriteHostLog(e.Data);
         process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         return process;
     }
 

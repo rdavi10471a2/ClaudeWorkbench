@@ -17,11 +17,11 @@ public sealed class MainForm : Form
     {
         Text = "ClaudeWorkbench Launcher";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(820, 420);
-        MinimumSize = new Size(640, 320);
+        ClientSize = new Size(1060, 480);
+        MinimumSize = new Size(760, 340);
 
         BuildUi();
-        RefreshGrid();
+        RebuildRows();
 
         pollTimer.Tick += (_, _) => PollAndRefresh();
         pollTimer.Start();
@@ -39,10 +39,11 @@ public sealed class MainForm : Form
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.RowHeadersVisible = false;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Workspace", FillWeight = 22 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Solution", HeaderText = "Solution", FillWeight = 46 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Port", HeaderText = "Port", FillWeight = 12 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Status", HeaderText = "Status", FillWeight = 20 });
+        grid.ShowCellToolTips = true; // full solution path on hover when truncated
+        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Workspace", FillWeight = 20 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Solution", HeaderText = "Solution", FillWeight = 54 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Port", HeaderText = "Port", FillWeight = 10 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Status", HeaderText = "Status", FillWeight = 16 });
         grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) StartSelected(); };
 
         FlowLayoutPanel toolbar = new()
@@ -57,6 +58,7 @@ public sealed class MainForm : Form
         toolbar.Controls.Add(Button("Stop", (_, _) => StopSelected()));
         toolbar.Controls.Add(Button("Remove", (_, _) => OnRemove()));
         toolbar.Controls.Add(Button("Settings", (_, _) => OnSettings()));
+        toolbar.Controls.Add(Button("Help", (_, _) => OnHelp()));
 
         Controls.Add(grid);
         Controls.Add(toolbar);
@@ -109,7 +111,7 @@ public sealed class MainForm : Form
         };
         state.Workspaces.Add(entry);
         state.Save();
-        RefreshGrid();
+        RebuildRows();
     }
 
     private void OnRemove()
@@ -129,7 +131,7 @@ public sealed class MainForm : Form
 
         state.Workspaces.Remove(workspace);
         state.Save();
-        RefreshGrid();
+        RebuildRows();
     }
 
     private async void StartSelected()
@@ -141,13 +143,14 @@ public sealed class MainForm : Form
         }
 
         InstanceController controller = ControllerFor(workspace);
+        UpdateStatuses(); // reflect "starting…" immediately
         await controller.StartAsync(PortsInUse(controller));
         if (controller.Status == InstanceStatus.Error)
         {
             MessageBox.Show(this, controller.LastError ?? "Failed to start.", "Start failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
-        RefreshGrid();
+        UpdateStatuses();
     }
 
     private void StopSelected()
@@ -156,7 +159,7 @@ public sealed class MainForm : Form
         if (workspace is not null && controllers.TryGetValue(workspace.Id, out InstanceController? controller))
         {
             controller.Stop();
-            RefreshGrid();
+            UpdateStatuses();
         }
     }
 
@@ -164,6 +167,12 @@ public sealed class MainForm : Form
     {
         using SettingsForm settings = new(state);
         settings.ShowDialog(this);
+    }
+
+    private void OnHelp()
+    {
+        using HelpForm help = new();
+        help.ShowDialog(this);
     }
 
     private IEnumerable<int> PortsInUse(InstanceController? except)
@@ -187,29 +196,58 @@ public sealed class MainForm : Form
             controller.Poll();
         }
 
-        RefreshGrid();
+        UpdateStatuses();
     }
 
-    private void RefreshGrid()
+    // Structural: rebuild rows when the workspace set changes (add/remove). Clears the
+    // selection, which is fine for an explicit add/remove.
+    private void RebuildRows()
     {
         grid.Rows.Clear();
         foreach (WorkspaceEntry workspace in state.Workspaces)
         {
-            controllers.TryGetValue(workspace.Id, out InstanceController? controller);
+            int index = grid.Rows.Add(workspace.Name, workspace.SolutionPath, "-", StatusText(InstanceStatus.Stopped));
+            grid.Rows[index].Tag = workspace.Id;
+            grid.Rows[index].Cells[1].ToolTipText = workspace.SolutionPath;
+        }
+
+        UpdateStatuses();
+    }
+
+    // In-place: update only the port/status cells on each poll, so selection and scroll
+    // are preserved (no more jerking) and cells only repaint when a value actually changes.
+    private void UpdateStatuses()
+    {
+        foreach (DataGridViewRow row in grid.Rows)
+        {
+            if (row.Tag is not string id)
+            {
+                continue;
+            }
+
+            controllers.TryGetValue(id, out InstanceController? controller);
             InstanceStatus status = controller?.Status ?? InstanceStatus.Stopped;
             string port = status is InstanceStatus.Running or InstanceStatus.Starting && controller is not null
                 ? controller.HostPort.ToString()
                 : "-";
+            string statusText = StatusText(status);
 
-            int index = grid.Rows.Add(workspace.Name, workspace.SolutionPath, port, StatusText(status));
-            grid.Rows[index].Tag = workspace.Id;
-            grid.Rows[index].Cells[3].Style.ForeColor = status switch
+            if (!Equals(row.Cells[2].Value, port))
             {
-                InstanceStatus.Running => Color.ForestGreen,
-                InstanceStatus.Starting => Color.DarkGoldenrod,
-                InstanceStatus.Error => Color.Firebrick,
-                _ => Color.Gray,
-            };
+                row.Cells[2].Value = port;
+            }
+
+            if (!Equals(row.Cells[3].Value, statusText))
+            {
+                row.Cells[3].Value = statusText;
+                row.Cells[3].Style.ForeColor = status switch
+                {
+                    InstanceStatus.Running => Color.ForestGreen,
+                    InstanceStatus.Starting => Color.DarkGoldenrod,
+                    InstanceStatus.Error => Color.Firebrick,
+                    _ => Color.Gray,
+                };
+            }
         }
     }
 

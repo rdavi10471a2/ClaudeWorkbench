@@ -4,21 +4,24 @@ namespace ClaudeWorkbench.Launcher;
 // editable here.
 public sealed class SettingsForm : Form
 {
+    private static readonly AnchorStyles Stretch = AnchorStyles.Left | AnchorStyles.Right;
+
     private readonly LauncherState state;
-    private readonly TextBox hostExeBox = new() { Width = 380 };
-    private readonly TextBox sidecarBox = new() { Width = 380 };
-    private readonly ComboBox browserBox = new() { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox customBrowserBox = new() { Width = 380 };
+    private readonly TextBox hostExeBox = new() { Anchor = Stretch };
+    private readonly TextBox sidecarBox = new() { Anchor = Stretch };
+    private readonly ComboBox browserBox = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, Anchor = AnchorStyles.Left };
+    private readonly TextBox customBrowserBox = new() { Anchor = Stretch };
 
     public SettingsForm(LauncherState state)
     {
         this.state = state;
         Text = "Launcher Settings";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        FormBorderStyle = FormBorderStyle.Sizable;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(560, 260);
+        ClientSize = new Size(620, 280);
+        MinimumSize = new Size(520, 300);
 
         TableLayoutPanel layout = new()
         {
@@ -27,15 +30,26 @@ public sealed class SettingsForm : Form
             ColumnCount = 3,
             RowCount = 5,
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        // Give the input rows fixed height and let the last row (buttons) take the slack.
+        for (int i = 0; i < 4; i++)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        }
+
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
         hostExeBox.Text = state.HostExePath;
         sidecarBox.Text = state.SidecarDirectory;
         customBrowserBox.Text = state.CustomBrowserPath;
         browserBox.Items.AddRange(new object[] { "Chrome", "Edge", "Custom (Chromium)", "Default browser" });
         browserBox.SelectedIndex = (int)state.Browser;
+        // The custom path only applies to the "Custom (Chromium)" choice — gray it out otherwise.
+        void SyncCustomEnabled() => customBrowserBox.Enabled = browserBox.SelectedIndex == (int)BrowserKind.Custom;
+        browserBox.SelectedIndexChanged += (_, _) => SyncCustomEnabled();
+        SyncCustomEnabled();
 
         layout.Controls.Add(new Label { Text = "Host exe", Anchor = AnchorStyles.Left, AutoSize = true }, 0, 0);
         layout.Controls.Add(hostExeBox, 1, 0);
@@ -52,13 +66,19 @@ public sealed class SettingsForm : Form
         layout.Controls.Add(customBrowserBox, 1, 3);
         layout.Controls.Add(BrowseButton(customBrowserBox, pickFolder: false, "Executables|*.exe"), 2, 3);
 
-        FlowLayoutPanel buttons = new() { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
+        FlowLayoutPanel buttons = new()
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+        };
         Button ok = new() { Text = "Save", DialogResult = DialogResult.OK, Width = 80 };
         Button cancel = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80 };
         ok.Click += (_, _) => Persist();
         buttons.Controls.Add(ok);
         buttons.Controls.Add(cancel);
         layout.Controls.Add(buttons, 1, 4);
+        layout.SetColumnSpan(buttons, 2);
 
         Controls.Add(layout);
         AcceptButton = ok;
