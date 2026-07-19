@@ -158,6 +158,13 @@ internal static class Program
                 ? Path.Combine(MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings), "uploads")
                 : null
         }));
+        // The staging procedure, served as plain text for the sidecar to splice into the
+        // agent's governance card at startup. Same content as the `get_staging_guide` MCP
+        // tool, from the same source (AgentGuidance) — the sidecar is not an MCP client
+        // itself, so it reads this the same way it already reads /health. Deliberately one
+        // source: the card used to restate these steps as TypeScript literals and drifted.
+        app.MapGet("/guidance/staging", () => Results.Text(AgentGuidance.StagingGuide, "text/markdown"));
+
         // --- test-only review HTTP surface -------------------------------------
         // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY
         // path that writes watched source. These endpoints expose the SAME
