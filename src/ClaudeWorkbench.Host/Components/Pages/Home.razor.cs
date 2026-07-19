@@ -20,6 +20,9 @@ public partial class Home : IDisposable
     private WorkspaceManager Workspace { get; set; } = default!;
 
     [Inject]
+    private Services.IndexRebuildStatus IndexStatus { get; set; } = default!;
+
+    [Inject]
     private IReviewWorkflow Review { get; set; } = default!;
 
     [Inject]
@@ -39,6 +42,7 @@ public partial class Home : IDisposable
     {
         Session.Changed += OnChanged;
         Workspace.Changed += OnChanged;
+        IndexStatus.Changed += OnChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -132,5 +136,6 @@ public partial class Home : IDisposable
     {
         Session.Changed -= OnChanged;
         Workspace.Changed -= OnChanged;
+        IndexStatus.Changed -= OnChanged;
     }
 }

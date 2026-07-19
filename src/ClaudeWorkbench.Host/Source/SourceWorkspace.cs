@@ -2,6 +2,7 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
 using AIMonitor.McpServer;
+using ClaudeWorkbench.Host.Services;
 
 namespace ClaudeWorkbench.Host.Source;
 
@@ -15,10 +16,12 @@ public sealed class SourceWorkspace
     private const long MaxReadableFileBytes = 768 * 1024;
 
     private readonly WorkspaceManager workspace;
+    private readonly IndexRebuildStatus rebuildStatus;
 
-    public SourceWorkspace(WorkspaceManager workspace)
+    public SourceWorkspace(WorkspaceManager workspace, IndexRebuildStatus rebuildStatus)
     {
         this.workspace = workspace;
+        this.rebuildStatus = rebuildStatus;
         workspace.Changed += OnWorkspaceChanged;
     }
 
@@ -77,6 +80,9 @@ public sealed class SourceWorkspace
     {
         rebuilding = true;
         Changed?.Invoke();
+        // Also drive the shared status so the global toolbar spinner reflects a manual
+        // Source-tab rebuild, consistent with the background startup rebuild.
+        using IDisposable scope = rebuildStatus.Begin();
         try
         {
             if (workspace.HasWorkspace)

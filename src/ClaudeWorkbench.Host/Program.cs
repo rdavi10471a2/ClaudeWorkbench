@@ -5,6 +5,7 @@ using AIMonitor.McpServer;
 using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Components;
 using ClaudeWorkbench.Host.Console;
+using ClaudeWorkbench.Host.Console.Models;
 using ClaudeWorkbench.Host.Services;
 using ModelContextProtocol.Protocol;
 using Radzen;
@@ -91,6 +92,7 @@ internal static class Program
         // binds it to the current watched workspace for the Git panel.
         builder.Services.AddSingleton<GitService>();
         builder.Services.AddSingleton<GitWorkspaceService>();
+        builder.Services.AddSingleton<IndexRebuildStatus>();
 
         builder.Services.AddRadzenComponents();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -98,11 +100,37 @@ internal static class Program
         WebApplication app = builder.Build();
 
         // Ensure the already-configured workspace's runtime (skeleton + task DB) exists
-        // at startup. Idempotent; no index rebuild here (that is on-demand / on select).
+        // at startup. Idempotent; the skeleton build is synchronous and cheap.
         WorkspaceManager startupWorkspace = app.Services.GetRequiredService<WorkspaceManager>();
         if (startupWorkspace.HasWorkspace)
         {
             app.Services.GetRequiredService<RuntimeProvisioner>().EnsureRuntime(startupWorkspace.Settings);
+
+            // Reopening the app with a solution attached would otherwise leave the index
+            // COLD until a manual Source-tab rebuild — which makes the first agent turn
+            // flaky (start_monitor_session can't prove the single owning project). Warm it
+            // here, but ONLY once Kestrel is up and ONLY in the background (a large solution
+            // can take a while to index), behind the IndexRebuildStatus spinner. Startup is
+            // never blocked; no solution attached => this never runs.
+            IndexRebuildStatus rebuildStatus = app.Services.GetRequiredService<IndexRebuildStatus>();
+            app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
+            {
+                using (rebuildStatus.Begin())
+                {
+                    try
+                    {
+                        await startupWorkspace.ProvisionAsync();
+                    }
+                    catch (Exception exception)
+                    {
+                        app.Services.GetRequiredService<IMonitorLogger>().Write(
+                            MonitorLogLevel.Warning,
+                            "Host",
+                            "startup-index-rebuild-failed",
+                            exception.Message);
+                    }
+                }
+            }));
         }
 
         app.MapStaticAssets();
@@ -118,6 +146,54 @@ internal static class Program
                 ? Path.Combine(MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings), "uploads")
                 : null
         }));
+        // --- test-only review HTTP surface -------------------------------------
+        // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY
+        // path that writes watched source. These endpoints expose the SAME
+        // IReviewWorkflow.ListPending/Accept the dialog's buttons call, so the sidecar
+        // flow smoke can drive an end-to-end accept over HTTP without a human at the UI.
+        // They bypass the human merge window, so they are OFF by default and only mapped
+        // when CWB_ENABLE_REVIEW_API=1 — the fixture launch opts in; production never does.
+        if (string.Equals(Environment.GetEnvironmentVariable("CWB_ENABLE_REVIEW_API"), "1", StringComparison.Ordinal))
+        {
+            app.MapGet("/review/pending", (IReviewWorkflow review) => Results.Ok(review.ListPending()));
+            app.MapPost("/review/accept", (AcceptReviewRequest request, IReviewWorkflow review) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.StagedRecordId))
+                {
+                    return Results.BadRequest(new { error = "stagedRecordId is required." });
+                }
+
+                ReviewActionResult result = review.Accept(request.StagedRecordId, request.ForceApprove);
+                bool accepted = result.Message.StartsWith("Accepted", StringComparison.Ordinal);
+                return Results.Ok(new { accepted, message = result.Message, agentSummary = result.AgentSummary });
+            });
+            app.MapPost("/review/reject", (AcceptReviewRequest request, IReviewWorkflow review) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.StagedRecordId))
+                {
+                    return Results.BadRequest(new { error = "stagedRecordId is required." });
+                }
+
+                ReviewActionResult result = review.Reject(request.StagedRecordId);
+                return Results.Ok(new { rejected = true, message = result.Message });
+            });
+            // Build the workspace index on demand. Startup only provisions the skeleton
+            // (index build is normally deferred to a UI select), so a config-launched
+            // fixture starts with a COLD index — which makes start_monitor_session flaky
+            // (it can't prove the single owning project). The smoke calls this once up
+            // front so every agent turn runs against a warm index.
+            app.MapPost("/review/warmup", async (WorkspaceManager workspace) =>
+            {
+                if (!workspace.HasWorkspace)
+                {
+                    return Results.BadRequest(new { error = "no workspace configured." });
+                }
+
+                await workspace.ProvisionAsync();
+                return Results.Ok(new { warmed = true, watchedSolutionPath = workspace.WatchedSolutionPath });
+            });
+        }
+
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.Run();
     }
@@ -135,3 +211,6 @@ internal static class Program
         return null;
     }
 }
+
+// Body for POST /review/accept (test-only surface, see CWB_ENABLE_REVIEW_API).
+internal sealed record AcceptReviewRequest(string StagedRecordId, bool ForceApprove = false);

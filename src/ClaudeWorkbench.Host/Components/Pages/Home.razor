@@ -50,7 +50,14 @@ else
                     <strong>@Session.WorkspacePath</strong>
                 </div>
                 <div class="workspace-state">
-                    @if (Session.Status.Working)
+                    @if (IndexStatus.IsRebuilding)
+                    {
+                        <span class="workspace-state-text workspace-state-text-live" title="Building the solution index — the agent can reason over the code once this finishes.">
+                            <span class="workspace-state-spinner" aria-hidden="true"></span>
+                            <span>Indexing</span>
+                        </span>
+                    }
+                    else if (Session.Status.Working)
                     {
                         <span class="workspace-state-text workspace-state-text-live">
                             <span class="workspace-state-spinner" aria-hidden="true"></span>
