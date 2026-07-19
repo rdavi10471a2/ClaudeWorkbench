@@ -259,11 +259,10 @@
 .staged-review-diff-shell {
     background: #ffffff;
     border-top: 1px solid #d7e1ea;
-    display: grid;
+    display: flex;
     flex: 1 1 auto;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     min-height: 0;
-    overflow: auto;
+    overflow: hidden;
 }
 
 .staged-review-diff-header {

@@ -1,0 +1,23 @@
+<div class="diff-view">
+    <div class="diff-view-scroll">
+        <div class="diff-view-col-head left">@LeftLabel</div>
+        <div class="diff-view-col-head right">@RightLabel</div>
+        @for (int index = 0; index < LineCount; index++)
+        {
+            var left = LeftLine(index);
+            var right = RightLine(index);
+            <div class="diff-view-line left @LineClass(left)">
+                <span class="diff-view-ln">@Num(left)</span>
+                <code>@Text(left)</code>
+            </div>
+            <div class="diff-view-line right @LineClass(right)">
+                <span class="diff-view-ln">@Num(right)</span>
+                <code>@Text(right)</code>
+            </div>
+        }
+        @if (LineCount == 0)
+        {
+            <div class="diff-view-empty">No differences.</div>
+        }
+    </div>
+</div>

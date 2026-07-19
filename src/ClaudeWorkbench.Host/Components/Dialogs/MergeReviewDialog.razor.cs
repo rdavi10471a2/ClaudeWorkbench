@@ -1,8 +1,5 @@
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Console.Models;
-using DiffPlex;
-using DiffPlex.DiffBuilder;
-using DiffPlex.DiffBuilder.Model;
 using Microsoft.AspNetCore.Components;
 using Radzen;
 
@@ -31,14 +28,12 @@ public partial class MergeReviewDialog : IAsyncDisposable
 
     private IReadOnlyList<ReviewQueueItem> pendingItems = [];
     private ReviewRecordModel? selectedModel;
-    private SideBySideDiffModel? diffModel;
     private string? selectedRecordId;
     private string? errorMessage;
     private bool actionBusy;
     private CancellationTokenSource? sessionMonitorCts;
     private Task? sessionMonitorTask;
 
-    private int LineCount => Math.Max(diffModel?.NewText.Lines.Count ?? 0, diffModel?.OldText.Lines.Count ?? 0);
     private bool UseSessionFlow => !string.IsNullOrWhiteSpace(SessionId);
     private string DialogTitle => UseSessionFlow ? "Merge Review" : "Merge Review Queue";
     private string DialogSubtitle => UseSessionFlow
@@ -84,8 +79,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
             selectedRecordId = null;
             errorMessage = ex.Message;
         }
-
-        BuildDiff();
     }
 
     private Task AcceptSelectedAsync()
@@ -235,7 +228,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
             {
                 selectedModel = Review.LoadNextForSession(SessionId!);
                 selectedRecordId = selectedModel.IsSessionComplete ? null : selectedModel.StagedRecordId;
-                BuildDiff();
                 return;
             }
 
@@ -248,13 +240,11 @@ public partial class MergeReviewDialog : IAsyncDisposable
             {
                 selectedModel = null;
                 selectedRecordId = null;
-                BuildDiff();
                 return;
             }
 
             selectedModel = Review.Load(recordIdToLoad);
             selectedRecordId = recordIdToLoad;
-            BuildDiff();
         }
         catch (Exception ex)
         {
@@ -262,71 +252,12 @@ public partial class MergeReviewDialog : IAsyncDisposable
             selectedModel = null;
             selectedRecordId = null;
             errorMessage = ex.Message;
-            BuildDiff();
         }
-    }
-
-    private void BuildDiff()
-    {
-        SideBySideDiffBuilder builder = new(new Differ());
-        diffModel = builder.BuildDiffModel(selectedModel?.CurrentText ?? string.Empty, selectedModel?.ProposedText ?? string.Empty);
-    }
-
-    private DiffPiece? GetProposedLine(int index)
-    {
-        if (diffModel is null || index >= diffModel.NewText.Lines.Count)
-        {
-            return null;
-        }
-
-        return diffModel.NewText.Lines[index];
-    }
-
-    private DiffPiece? GetCurrentLine(int index)
-    {
-        if (diffModel is null || index >= diffModel.OldText.Lines.Count)
-        {
-            return null;
-        }
-
-        return diffModel.OldText.Lines[index];
     }
 
     private static string NormalizeLabel(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? "pending" : value;
-    }
-
-    private static string GetLineNumber(DiffPiece? piece)
-    {
-        if (piece is null || piece.Position is null)
-        {
-            return string.Empty;
-        }
-
-        return piece.Position.Value.ToString();
-    }
-
-    private static string GetLineText(DiffPiece? piece)
-    {
-        return piece?.Text ?? string.Empty;
-    }
-
-    private static string GetLineClass(DiffPiece? piece)
-    {
-        if (piece is null)
-        {
-            return "imaginary";
-        }
-
-        return piece.Type switch
-        {
-            ChangeType.Inserted => "inserted",
-            ChangeType.Deleted => "deleted",
-            ChangeType.Modified => "modified",
-            ChangeType.Imaginary => "imaginary",
-            _ => "unchanged"
-        };
     }
 
     public ValueTask DisposeAsync()

@@ -1,5 +1,4 @@
 @using ClaudeWorkbench.Host.Console.Models
-@using DiffPlex.DiffBuilder.Model
 
 <div class="staged-review-dialog">
     @if (actionBusy)
@@ -111,27 +110,11 @@
                 </div>
 
                 <section class="staged-review-diff-shell" aria-label="Side by side staged review">
-                    <div class="staged-review-diff-header">
-                        <strong>Proposed Candidate</strong>
-                    </div>
-                    <div class="staged-review-diff-header">
-                        <strong>Current Source</strong>
-                    </div>
-
-                    @for (int index = 0; index < LineCount; index++)
-                    {
-                        DiffPiece? proposedLine = GetProposedLine(index);
-                        DiffPiece? currentLine = GetCurrentLine(index);
-
-                        <div class="staged-review-diff-line proposed @GetLineClass(proposedLine)">
-                            <span class="staged-review-line-number">@GetLineNumber(proposedLine)</span>
-                            <code>@GetLineText(proposedLine)</code>
-                        </div>
-                        <div class="staged-review-diff-line current @GetLineClass(currentLine)">
-                            <span class="staged-review-line-number">@GetLineNumber(currentLine)</span>
-                            <code>@GetLineText(currentLine)</code>
-                        </div>
-                    }
+                    <DiffView OldText="@(selectedModel.CurrentText)"
+                              NewText="@(selectedModel.ProposedText)"
+                              OldLabel="Current Source"
+                              NewLabel="Proposed Candidate"
+                              NewOnLeft="true" />
                 </section>
 
                 <div class="staged-review-detail-actions">

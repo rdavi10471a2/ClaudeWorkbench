@@ -43,6 +43,48 @@ export function attachSourceSplitter(layout, sidebar, detail, splitter) {
     });
 }
 
+export function attachGitSplitter(layout, sidebar, detail, splitter) {
+    if (!layout || !sidebar || !detail || !splitter) {
+        return;
+    }
+
+    let startX = 0;
+    let startSidebarWidth = 0;
+    let startDetailWidth = 0;
+
+    const minSidebar = 280;
+    const minDetail = 380;
+
+    function onPointerMove(event) {
+        const delta = event.clientX - startX;
+        const nextSidebar = Math.max(minSidebar, startSidebarWidth + delta);
+        const nextDetail = Math.max(minDetail, startDetailWidth - delta);
+        sidebar.style.flex = `0 0 ${nextSidebar}px`;
+        detail.style.flex = `1 1 auto`;
+        sidebar.style.width = `${nextSidebar}px`;
+    }
+
+    function onPointerUp() {
+        splitter.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+    }
+
+    splitter.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        startX = event.clientX;
+        startSidebarWidth = sidebar.getBoundingClientRect().width;
+        startDetailWidth = detail.getBoundingClientRect().width;
+        splitter.classList.add("dragging");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp);
+    });
+}
+
 export function attachMainSplitter(layout, connection, workPanel, splitter) {
     if (!layout || !connection || !workPanel || !splitter || splitter.dataset.resizeAttached === "true") {
         return;
