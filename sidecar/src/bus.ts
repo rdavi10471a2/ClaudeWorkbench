@@ -45,6 +45,14 @@ export class EventBus {
   }
 
   private write(res: Response, event: StampedEvent): void {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
+    // Guard every fan-out write: a dead/half-open subscriber (a closed browser tab,
+    // a second window that went away) must NOT throw out of emit() and tear down the
+    // in-flight turn. Drop the bad client and carry on. Deleting from the Set we are
+    // iterating in emit() is safe in JS.
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {
+      this.clients.delete(res);
+    }
   }
 }

@@ -363,9 +363,16 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
         bus.emit({ type: "error", message: detail });
       }
     } finally {
-      activeQuery = null;
-      activeInput = null;
-      activeTurn = null;
+      // Only clear the shared thread state if it STILL belongs to this query. A new
+      // thread (new-thread + a fresh prompt) may have already replaced activeQuery
+      // before this loop's finally runs; without this guard the old loop would null
+      // out the new turn's activeTurn/activeQuery and the new turn would look finished
+      // (~2s) while its work continued untracked.
+      if (activeQuery === q) {
+        activeQuery = null;
+        activeInput = null;
+        activeTurn = null;
+      }
     }
   })();
 }
