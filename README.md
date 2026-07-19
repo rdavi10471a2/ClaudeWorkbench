@@ -145,7 +145,7 @@ The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test s
 - [x] **File upload** — streaming input mode; per-workspace `uploads` folder provisioned + granted via `additionalDirectories`; composer attach/drop UI (text, code, and images/PDFs via the agent's Read)
 - [x] **Context/usage meters** — dropdown off the SDK `Query` handle (`getContextUsage` + experimental `usage`): context fill + auto-compact headroom, weekly/5-hour utilization, plan
 - [x] **Model + reasoning-level selector** — settings-dialog dropdowns → per-thread `model` + `effort` on the sidecar query options
-- [x] **Tasks kanban board** — ported from CodexAppServerDemo (Radzen; right-click state moves; single-Active invariant) as the first tab, over the existing `board.sqlite`
+- [x] **Tasks kanban board** — ported from CodexAppServerDemo (Radzen; right-click state moves; single-Active invariant), over the existing `board.sqlite`. **UI tab currently disabled** (unpublished WIP) pending the thread↔task workflow; board + MCP tools remain, role card is free-flowing (opt-in)
 - [x] **Task MCP loop** — `get_current_task` (task + user/agent notes content), `list_tasks`, `update_agent_notes` (agent task-memory to `planning/task-memory`, never watched source)
 - [x] **Single-start** — host launches + supervises the sidecar; injected **governed role card** as `systemPrompt` so the agent knows its read-only + staging role from turn one
 - [ ] **Thread ↔ task workflow** (design pending): on New Thread, prompt *save-as-task / keep-as-discussion / discard*; auto-name threads `discussion-<datetime>`; add a `task_id` link so a task groups its threads; thread-provenance on agent notes
