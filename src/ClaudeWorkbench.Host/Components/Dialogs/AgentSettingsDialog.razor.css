@@ -76,6 +76,22 @@
     margin-top: 2px;
 }
 
+.settings-select-row {
+    grid-template-columns: minmax(0, 1fr);
+    cursor: default;
+}
+
+.settings-select {
+    margin-top: 4px;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d3dde7;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #16202c;
+    font-size: .85rem;
+}
+
 .settings-text {
     display: grid;
     gap: 3px;

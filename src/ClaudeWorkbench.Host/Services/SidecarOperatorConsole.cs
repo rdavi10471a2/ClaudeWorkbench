@@ -69,6 +69,8 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
             strictMcpConfig = policy.StrictMcpConfig,
             enabledTools = policy.EnabledOptionalTools.ToArray(),
             autoApprove,
+            model = policy.Model,
+            effort = policy.Effort,
         };
         await client.PromptAsync(prompt, toolPolicy);
     }

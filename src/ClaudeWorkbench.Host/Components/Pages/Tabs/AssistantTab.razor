@@ -88,6 +88,10 @@
                         @if (usageOpen)
                         {
                             <div class="usage-dropdown">
+                                <div class="usage-head">
+                                    <span>Usage</span>
+                                    <button type="button" class="usage-close" @onclick="@(() => usageOpen = false)" aria-label="Close usage">&times;</button>
+                                </div>
                                 @if (usage is null || !usage.Available)
                                 {
                                     <div class="usage-empty">Usage appears once a turn has run in this thread.</div>

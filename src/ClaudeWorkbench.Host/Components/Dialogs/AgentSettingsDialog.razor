@@ -28,6 +28,35 @@
                 </label>
 
                 <div class="settings-section-title">
+                    Model &amp; reasoning
+                    <span>applies to new threads (start a New Thread for a change to take effect)</span>
+                </div>
+
+                <div class="settings-row settings-select-row">
+                    <div class="settings-text">
+                        <strong>Model</strong>
+                        <select class="settings-select" @bind="draft.Model">
+                            @foreach (AgentModelOption option in AgentModelOptions.All)
+                            {
+                                <option value="@option.Value">@option.Label</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-row settings-select-row">
+                    <div class="settings-text">
+                        <strong>Reasoning level</strong>
+                        <select class="settings-select" @bind="draft.Effort">
+                            @foreach (string level in ReasoningLevels.All)
+                            {
+                                <option value="@level">@(string.IsNullOrEmpty(level) ? "Default" : level)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-section-title">
                     Optional tools
                     <span>off by default &mdash; each one widens what the agent can do outside the governed gate</span>
                 </div>

@@ -143,6 +143,8 @@ interface ToolPolicy {
   strictMcpConfig: boolean;
   enabledTools: string[];
   autoApprove: boolean;
+  model: string;
+  effort: string;
 }
 
 const DEFAULT_TOOL_POLICY: ToolPolicy = {
@@ -150,7 +152,11 @@ const DEFAULT_TOOL_POLICY: ToolPolicy = {
   strictMcpConfig: true,
   enabledTools: [],
   autoApprove: false,
+  model: "",
+  effort: "",
 };
+
+const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
 // Recomputed at the start of each turn from that turn's policy; canUseTool reads it.
 let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOOLS]);
@@ -326,6 +332,9 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
     permissionMode: "default",
     // Governed role card injected up front (default claude_code prompt + our rules).
     systemPrompt: { type: "preset", preset: "claude_code", append: buildGovernanceCard() },
+    // Operator-selected model + reasoning effort (empty => inherit the default).
+    ...(policy.model ? { model: policy.model } : {}),
+    ...(EFFORT_LEVELS.has(policy.effort) ? { effort: policy.effort as Options["effort"] } : {}),
     cwd: workspaceCwd,
     // Operator uploads sit outside cwd; grant read there so the agent can Read them.
     ...(uploadsDir ? { additionalDirectories: [uploadsDir] } : {}),
@@ -518,6 +527,8 @@ app.post("/prompt", (req, res) => {
     strictMcpConfig: raw.strictMcpConfig !== false,
     enabledTools: Array.isArray(raw.enabledTools) ? raw.enabledTools.map(String) : [],
     autoApprove: raw.autoApprove === true,
+    model: typeof raw.model === "string" ? raw.model : "",
+    effort: typeof raw.effort === "string" ? raw.effort : "",
   };
   const turnId = randomUUID();
   activeTurn = turnId;

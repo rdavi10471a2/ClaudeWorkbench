@@ -318,6 +318,39 @@
     color: #16202c;
 }
 
+.usage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -2px -2px 2px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: #526a82;
+}
+
+.usage-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid #d3dde7;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #46586b;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.usage-close:hover {
+    background: #eef2f7;
+    color: #16202c;
+}
+
 .usage-block {
     display: grid;
     gap: 4px;
