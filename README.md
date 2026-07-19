@@ -138,6 +138,15 @@ The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test s
 - [ ] **Thread ↔ task workflow** (design pending): on New Thread, prompt *save-as-task / keep-as-discussion / discard*; auto-name threads `discussion-<datetime>`; add a `task_id` link so a task groups its threads; thread-provenance on agent notes
 - [ ] Bring in AIMonitor's `docs/claude-skills/` cards as injected skill-cards (guidance is MCP-served today via `get_staging_guide` + the role card)
 
+## Related projects
+
+Other open-source servers also expose Roslyn / C# semantics to AI agents over MCP — worth a look for comparison:
+
+- **[Roslyn CodeLens](https://github.com/MarcelRoozekrans/roslyn-codelens-mcp)** (`MarcelRoozekrans/roslyn-codelens-mcp`) — a Roslyn-based MCP server providing semantic code intelligence for .NET codebases (type hierarchies, call sites, DI registrations, reflection usage) for Claude Code.
+- **[RoslynMCP](https://github.com/carquiza/RoslynMCP)** (`carquiza/RoslynMCP`) — an MCP server providing C# code-analysis capabilities (wildcard symbol search, reference tracking, dependency and complexity analysis) using Microsoft Roslyn.
+
+ClaudeWorkbench overlaps on the Roslyn-over-MCP idea but differs in intent: it is not only read/analysis but a **governed edit loop** — staged local *Working* candidates, a human accept/reject **merge gate** (DiffPlex), and post-accept reindex — with the Roslyn semantic index as one part of that workflow rather than the whole product.
+
 ## Provenance
 
 Lineage: [AIMonitor](https://github.com/rdavi10471a2/AIMonitor) (engine) + CodexAppServerDemo (Blazor control-surface pattern) → ClaudeWorkbench (Claude backend). The engine here is a faithful extraction; identical code compiles and the ported tests pass.
