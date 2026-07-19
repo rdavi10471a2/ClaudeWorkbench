@@ -31,15 +31,6 @@ public partial class TaskWorkspace : ComponentBase
     public EventCallback<TaskDetailsSaveRequest> OnSaveDetails { get; set; }
 
     [Parameter]
-    public EventCallback<string> OnSaveNotes { get; set; }
-
-    [Parameter]
-    public EventCallback<TaskFileAddRequest> OnAddFile { get; set; }
-
-    [Parameter]
-    public EventCallback<string> OnAddComment { get; set; }
-
-    [Parameter]
     public EventCallback OnToggleNavigator { get; set; }
 
     [Parameter]
@@ -80,16 +71,6 @@ public partial class TaskWorkspace : ComponentBase
             ? Task.StateCode
             : selectedStateCode;
         await OnSaveDetails.InvokeAsync(new TaskDetailsSaveRequest(Task.Id, taskName, taskDescription, null, stateCode, notesMarkdown));
-    }
-
-    private async Task SaveNotes()
-    {
-        if (Task is null)
-        {
-            return;
-        }
-
-        await OnSaveNotes.InvokeAsync(notesMarkdown);
     }
 
     private Task ToggleNavigator()

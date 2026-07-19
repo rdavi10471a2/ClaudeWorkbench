@@ -19,9 +19,5 @@ public interface IWorkflowTaskBoardViewService
 
     TaskBoardTaskViewModel RestoreTask(string taskId);
 
-    void AddFile(string taskId, string relativePath, string? intent, string? fileRole);
-
-    void AddComment(string taskId, string message);
-
     string ReadArchivedDiscussionContent(string archivedDiscussionId);
 }

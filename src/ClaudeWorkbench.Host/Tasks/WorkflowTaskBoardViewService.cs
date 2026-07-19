@@ -114,16 +114,6 @@ public sealed class WorkflowTaskBoardViewService : IWorkflowTaskBoardViewService
         return ToTaskViewModel(row, snapshot.Files);
     }
 
-    public void AddFile(string taskId, string relativePath, string? intent, string? fileRole)
-    {
-        CreateRepository().AddFile(taskId, relativePath, intent, fileRole);
-    }
-
-    public void AddComment(string taskId, string message)
-    {
-        CreateRepository().AddComment(taskId, message);
-    }
-
     public string ReadArchivedDiscussionContent(string archivedDiscussionId)
     {
         WorkflowTaskBoardRepository repository = CreateRepository();

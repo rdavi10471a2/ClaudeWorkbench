@@ -183,48 +183,6 @@ public partial class TasksTab : ComponentBase, IAsyncDisposable
         await Task.CompletedTask;
     }
 
-    private async Task SaveNotes(string notesMarkdown)
-    {
-        if (model.SelectedTask is null)
-        {
-            return;
-        }
-
-        string taskId = model.SelectedTask.Id;
-        Execute(() =>
-        {
-            TaskBoardViewService.UpdateNotes(taskId, notesMarkdown);
-            Load(taskId);
-        });
-        await Task.CompletedTask;
-    }
-
-    private async Task AddFile(TaskFileAddRequest request)
-    {
-        Execute(() =>
-        {
-            TaskBoardViewService.AddFile(request.TaskId, request.RelativePath, request.Intent, request.FileRole);
-            Load(request.TaskId);
-        });
-        await Task.CompletedTask;
-    }
-
-    private async Task AddComment(string message)
-    {
-        if (model.SelectedTask is null)
-        {
-            return;
-        }
-
-        string taskId = model.SelectedTask.Id;
-        Execute(() =>
-        {
-            TaskBoardViewService.AddComment(taskId, message);
-            Load(taskId);
-        });
-        await Task.CompletedTask;
-    }
-
     private async Task CopyArchivedDiscussion(string archivedDiscussionId)
     {
         if (taskResizeModule is null)
