@@ -52,7 +52,8 @@ internal static class Program
             })
             .WithHttpTransport()
             .WithTools<AIMonitorTools>()
-            .WithTools<Tasks.TaskMcpTools>();
+            .WithTools<Tasks.TaskMcpTools>()
+            .WithTools<GitMcpTools>();
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
@@ -84,6 +85,12 @@ internal static class Program
         builder.Services.AddSingleton<Tasks.TaskBoardRepositoryFactory>();
         builder.Services.AddScoped<Tasks.IWorkflowTaskBoardViewService, Tasks.WorkflowTaskBoardViewService>();
         builder.Services.AddSingleton<Source.SourceWorkspace>();
+
+        // Operator-driven git backing for the watched solution (host-side; the agent
+        // never runs git). GitService is a stateless CLI wrapper; GitWorkspaceService
+        // binds it to the current watched workspace for the Git panel.
+        builder.Services.AddSingleton<GitService>();
+        builder.Services.AddSingleton<GitWorkspaceService>();
 
         builder.Services.AddRadzenComponents();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();

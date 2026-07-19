@@ -24,6 +24,13 @@ const GATED_TOOLS = new Set<string>([
   "stage_candidate_for_review",
   "launch_staged_diff",
   "record_diff_decision",
+  // git mutations — pause at the operator gate. Push is outward-facing; commit and
+  // branch changes alter repo/working-tree state. Reads (git_status/git_diff/
+  // git_log/git_list_branches) are not listed, so they auto-allow.
+  "git_commit",
+  "git_push",
+  "git_create_branch",
+  "git_switch_branch",
 ]);
 
 export function baseName(toolName: string): string {

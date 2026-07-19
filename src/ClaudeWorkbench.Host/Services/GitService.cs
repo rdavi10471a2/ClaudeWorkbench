@@ -5,16 +5,13 @@ using System.Text.RegularExpressions;
 namespace ClaudeWorkbench.Host.Services;
 
 // Host-side, operator-authorized git access to the watched solution. The agent
-// NEVER runs git — commit and push are deliberate operator actions in the UI, the
-// same posture as the accept-write in EngineReviewWorkflow. This is a thin, testable
-// wrapper over the git CLI; the working directory is always the watched folder (or
-// any path inside its repo — git walks up to the enclosing .git).
-//
-// Policy for now (operator-driven): accepts write bytes to the working tree; the
-// operator clicks Commit to bundle the current working-tree changes into one commit,
-// and clicks Push to send them to the remote. Nothing here pushes automatically.
+// reaches this only through gated MCP tools; the operator reaches it through the Git
+// panel. Either way this is a thin wrapper that launches the `git` executable as a
+// child process (no shell, no HTTP) and captures its output. Args are passed as an
+// argv array, so there is no shell-injection surface.
 public sealed partial class GitService
 {
+    private const char Unit = ''; // ASCII unit separator, for safe log field splitting.
     private readonly string gitExecutable;
 
     public GitService(string gitExecutable = "git")
@@ -55,7 +52,6 @@ public sealed partial class GitService
         }
         catch (Exception exception)
         {
-            // git not on PATH / bad executable — surface as a failed result, not a throw.
             return new GitResult(-1, string.Empty, exception.Message);
         }
 
@@ -68,7 +64,6 @@ public sealed partial class GitService
             stderr.ToString().TrimEnd('\r', '\n'));
     }
 
-    // True when `directory` is inside a git work tree.
     public async Task<bool> IsRepositoryAsync(string directory, CancellationToken cancellationToken = default)
     {
         GitResult result = await RunAsync(directory, ["rev-parse", "--is-inside-work-tree"], cancellationToken)
@@ -76,7 +71,6 @@ public sealed partial class GitService
         return result.Ok && result.StdOut.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
     }
 
-    // Absolute path of the enclosing repository root, or null if not a repo.
     public async Task<string?> GetRepositoryRootAsync(string directory, CancellationToken cancellationToken = default)
     {
         GitResult result = await RunAsync(directory, ["rev-parse", "--show-toplevel"], cancellationToken)
@@ -84,25 +78,31 @@ public sealed partial class GitService
         return result.Ok ? result.StdOut.Trim() : null;
     }
 
-    // True when at least one remote is configured.
     public async Task<bool> HasRemoteAsync(string directory, CancellationToken cancellationToken = default)
     {
         GitResult result = await RunAsync(directory, ["remote"], cancellationToken).ConfigureAwait(false);
         return result.Ok && result.StdOut.Trim().Length > 0;
     }
 
-    // Initialize a new repository at `directory` on the given default branch. Used
-    // by the "prompt to add git" path when the watched solution is not yet a repo.
     public Task<GitResult> InitAsync(string directory, string defaultBranch = "main", CancellationToken cancellationToken = default)
         => RunAsync(directory, ["init", "-b", defaultBranch], cancellationToken);
 
-    // Branch, upstream, ahead/behind, remote presence, and the changed-file set.
     public async Task<GitStatus> GetStatusAsync(string directory, CancellationToken cancellationToken = default)
     {
         GitResult status = await RunAsync(
             directory,
             ["status", "--porcelain=v1", "--branch"],
             cancellationToken).ConfigureAwait(false);
+        // ExitCode -1 is our sentinel for "the git process could not be started"
+        // (e.g. git not installed / not on PATH), distinct from git running and
+        // reporting "not a repository" (exit 128).
+        if (status.ExitCode == -1)
+        {
+            return GitStatus.Unavailable(string.IsNullOrWhiteSpace(status.StdErr)
+                ? "The git executable could not be started. Is git installed and on PATH?"
+                : status.StdErr);
+        }
+
         if (!status.Ok)
         {
             return GitStatus.NotARepository;
@@ -112,39 +112,134 @@ public sealed partial class GitService
         return ParseStatus(status.StdOut, hasRemote);
     }
 
-    // Operator-batched commit: stage everything in the working tree (including new
-    // and deleted files) and commit with the given message. Fails cleanly if there
-    // is nothing to commit or the message is empty.
-    public async Task<GitResult> CommitAsync(string directory, string message, CancellationToken cancellationToken = default)
+    // --- staging -----------------------------------------------------------
+    public Task<GitResult> StageAsync(string directory, string path, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["add", "--", path], cancellationToken);
+
+    public Task<GitResult> StageAllAsync(string directory, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["add", "-A"], cancellationToken);
+
+    public Task<GitResult> UnstageAsync(string directory, string path, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["restore", "--staged", "--", path], cancellationToken);
+
+    // Discard working-tree changes. Untracked files are removed (clean); tracked
+    // files are restored from the index/HEAD. Destructive — caller confirms.
+    public Task<GitResult> DiscardAsync(string directory, string path, bool untracked, CancellationToken cancellationToken = default)
+        => untracked
+            ? RunAsync(directory, ["clean", "-f", "--", path], cancellationToken)
+            : RunAsync(directory, ["restore", "--worktree", "--", path], cancellationToken);
+
+    // --- diff --------------------------------------------------------------
+    // Unified diff text for one path. Staged = index-vs-HEAD; otherwise
+    // worktree-vs-index; untracked = the whole file as additions (via --no-index).
+    public async Task<string> DiffTextAsync(
+        string directory,
+        string path,
+        bool staged,
+        bool untracked,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<string> args = untracked
+            ? ["diff", "--no-index", "--", "/dev/null", path]
+            : staged
+                ? ["diff", "--cached", "--", path]
+                : ["diff", "--", path];
+
+        GitResult result = await RunAsync(directory, args, cancellationToken).ConfigureAwait(false);
+        // --no-index exits 1 when the files differ; that is expected and StdOut is valid.
+        if (!string.IsNullOrEmpty(result.StdOut))
+        {
+            return result.StdOut;
+        }
+
+        return result.Ok || untracked ? result.StdOut : result.StdErr;
+    }
+
+    // Raw content of a path at a git revision spec ("HEAD:foo.cs" = committed,
+    // ":foo.cs" = staged index). Returns empty when the object does not exist
+    // (e.g. a brand-new file has no HEAD version). Used to build a side-by-side diff.
+    public async Task<string> ShowAsync(string directory, string spec, CancellationToken cancellationToken = default)
+    {
+        GitResult result = await RunAsync(directory, ["show", spec], cancellationToken).ConfigureAwait(false);
+        return result.Ok ? result.StdOut : string.Empty;
+    }
+
+    // --- commit / push / sync ---------------------------------------------
+    public async Task<GitResult> CommitAsync(string directory, string message, bool stageAll, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
             return new GitResult(-1, string.Empty, "Commit message must not be empty.");
         }
 
-        GitResult stage = await RunAsync(directory, ["add", "-A"], cancellationToken).ConfigureAwait(false);
-        if (!stage.Ok)
+        if (stageAll)
         {
-            return stage;
+            GitResult stage = await StageAllAsync(directory, cancellationToken).ConfigureAwait(false);
+            if (!stage.Ok)
+            {
+                return stage;
+            }
         }
 
         return await RunAsync(directory, ["commit", "-m", message], cancellationToken).ConfigureAwait(false);
     }
 
-    // Explicit, user-driven push. When remote and branch are supplied the upstream is
-    // set (-u), which is what a branch's first push needs; otherwise a plain push.
     public Task<GitResult> PushAsync(
         string directory,
         string? remote = null,
         string? branch = null,
         CancellationToken cancellationToken = default)
+        => !string.IsNullOrWhiteSpace(remote) && !string.IsNullOrWhiteSpace(branch)
+            ? RunAsync(directory, ["push", "-u", remote, branch], cancellationToken)
+            : RunAsync(directory, ["push"], cancellationToken);
+
+    public Task<GitResult> FetchAsync(string directory, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["fetch", "--prune"], cancellationToken);
+
+    public Task<GitResult> PullAsync(string directory, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["pull", "--ff-only"], cancellationToken);
+
+    // --- branches ----------------------------------------------------------
+    public async Task<IReadOnlyList<string>> ListBranchesAsync(string directory, CancellationToken cancellationToken = default)
     {
-        if (!string.IsNullOrWhiteSpace(remote) && !string.IsNullOrWhiteSpace(branch))
+        GitResult result = await RunAsync(directory, ["branch", "--format=%(refname:short)"], cancellationToken)
+            .ConfigureAwait(false);
+        return result.Ok
+            ? result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : [];
+    }
+
+    // Create a branch and switch to it.
+    public Task<GitResult> CreateBranchAsync(string directory, string name, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["switch", "-c", name], cancellationToken);
+
+    public Task<GitResult> SwitchBranchAsync(string directory, string name, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["switch", name], cancellationToken);
+
+    // --- log ---------------------------------------------------------------
+    public async Task<IReadOnlyList<GitCommit>> LogAsync(string directory, int count = 20, CancellationToken cancellationToken = default)
+    {
+        int take = Math.Clamp(count, 1, 200);
+        GitResult result = await RunAsync(
+            directory,
+            ["log", $"-n{take}", $"--pretty=format:%h{Unit}%s{Unit}%an{Unit}%ar"],
+            cancellationToken).ConfigureAwait(false);
+        if (!result.Ok)
         {
-            return RunAsync(directory, ["push", "-u", remote, branch], cancellationToken);
+            return [];
         }
 
-        return RunAsync(directory, ["push"], cancellationToken);
+        List<GitCommit> commits = [];
+        foreach (string line in result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] parts = line.Split(Unit);
+            if (parts.Length >= 4)
+            {
+                commits.Add(new GitCommit(parts[0], parts[1], parts[2], parts[3]));
+            }
+        }
+
+        return commits;
     }
 
     private static GitStatus ParseStatus(string porcelain, bool hasRemote)
@@ -183,7 +278,6 @@ public sealed partial class GitService
                     info = info[..ab.Index].TrimEnd();
                 }
 
-                // "No commits yet on main" (fresh repo) has no upstream.
                 const string noCommits = "No commits yet on ";
                 if (info.StartsWith(noCommits, StringComparison.Ordinal))
                 {
@@ -203,10 +297,11 @@ public sealed partial class GitService
                 continue;
             }
 
-            // Change line: two-char XY status + space + path (renames use " -> ").
+            // "XY path" — X = index (staged) status, Y = work-tree (unstaged) status.
             if (line.Length >= 3)
             {
-                string code = line[..2];
+                char index = line[0];
+                char workTree = line[1];
                 string path = line[3..];
                 int arrow = path.IndexOf(" -> ", StringComparison.Ordinal);
                 if (arrow >= 0)
@@ -214,7 +309,7 @@ public sealed partial class GitService
                     path = path[(arrow + 4)..];
                 }
 
-                changes.Add(new GitChange(code, path));
+                changes.Add(new GitChange(index, workTree, path.Trim('"')));
             }
         }
 
@@ -231,8 +326,24 @@ public sealed record GitResult(int ExitCode, string StdOut, string StdErr)
     public bool Ok => ExitCode == 0;
 }
 
-// One changed path in the working tree, with its porcelain XY status code.
-public sealed record GitChange(string Code, string Path);
+// One changed path in porcelain terms: Index = staged status, WorkTree = unstaged.
+// A file can be both (e.g. "MM"): staged edit plus a further unstaged edit.
+public sealed record GitChange(char Index, char WorkTree, string Path)
+{
+    public bool IsStaged => Index != ' ' && Index != '?';
+
+    public bool IsUnstaged => WorkTree != ' ';
+
+    public bool IsUntracked => Index == '?' && WorkTree == '?';
+
+    // Single-letter label for a group view (staged shows Index; else WorkTree).
+    public char StagedCode => Index == ' ' ? '?' : Index;
+
+    public char UnstagedCode => IsUntracked ? 'U' : WorkTree;
+}
+
+// One row of `git log` for the history view.
+public sealed record GitCommit(string Hash, string Subject, string Author, string RelativeDate);
 
 // A snapshot of the watched repo's state for the operator's Git panel.
 public sealed record GitStatus(
@@ -242,11 +353,21 @@ public sealed record GitStatus(
     int Ahead,
     int Behind,
     bool HasRemote,
-    IReadOnlyList<GitChange> Changes)
+    IReadOnlyList<GitChange> Changes,
+    bool GitAvailable = true,
+    string? Error = null)
 {
-    public static GitStatus NotARepository { get; } =
-        new(false, null, null, 0, 0, false, []);
+    public static GitStatus NotARepository { get; } = new(false, null, null, 0, 0, false, []);
 
-    // True when the working tree has staged or unstaged changes to commit.
+    // git could not be launched at all (not installed / not on PATH).
+    public static GitStatus Unavailable(string error) =>
+        new(false, null, null, 0, 0, false, [], GitAvailable: false, Error: error);
+
+    public IReadOnlyList<GitChange> Staged => Changes.Where(change => change.IsStaged).ToList();
+
+    public IReadOnlyList<GitChange> Unstaged => Changes.Where(change => change.IsUnstaged).ToList();
+
+    public bool HasStaged => Changes.Any(change => change.IsStaged);
+
     public bool HasChanges => Changes.Count > 0;
 }
