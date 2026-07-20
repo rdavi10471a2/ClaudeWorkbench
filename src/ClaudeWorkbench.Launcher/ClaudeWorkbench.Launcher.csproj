@@ -9,6 +9,11 @@
     <RootNamespace>ClaudeWorkbench.Launcher</RootNamespace>
     <AssemblyName>ClaudeWorkbench.Launcher</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Same Coding Services mark the web UI uses. Generated from
+         src/ClaudeWorkbench.Host/wwwroot/images/cs_logo_light_bg.png; small sizes are 32-bit DIB
+         entries rather than PNG-compressed ones, because System.Drawing.Icon (what WinForms uses
+         for Form.Icon) renders PNG-in-ICO entries as colour noise. -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
 </Project>

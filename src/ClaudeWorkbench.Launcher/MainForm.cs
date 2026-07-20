@@ -16,6 +16,19 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "ClaudeWorkbench Launcher";
+
+        // ApplicationIcon puts the mark on the .exe (Explorer, taskbar, the desktop shortcut), but
+        // Form.Icon does not inherit it — left alone the window keeps the default WinForms icon.
+        // Reading it back off our own executable avoids embedding the same .ico a second time.
+        try
+        {
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        }
+        catch
+        {
+            // Cosmetic only; a missing window icon must never stop the launcher opening.
+        }
+
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1060, 480);
         MinimumSize = new Size(760, 340);
