@@ -171,6 +171,18 @@ if (Test-Path $sampleSource) {
     # Never ship the sample's own build output.
     Get-ChildItem $sampleOut -Directory -Recurse -Include 'bin', 'obj' -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    # Golden backup: a pristine, NEVER-watched mirror of the sample, in a sibling
+    # samples-golden\ root. The watched copy under samples\ gets edited by test runs (and
+    # clobbered on the next publish), so resetting the fixture needs an untouched source to
+    # copy back from. The Launcher's "Reset Sample" button copies samples-golden\ over
+    # samples\ to restore the fixture to first-publish state.
+    $goldenOut = Join-Path $Destination 'samples-golden\CalculatorSample'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $goldenOut) | Out-Null
+    if (Test-Path $goldenOut) { Remove-Item $goldenOut -Recurse -Force }
+    Copy-Item $sampleSource $goldenOut -Recurse -Force
+    Get-ChildItem $goldenOut -Directory -Recurse -Include 'bin', 'obj' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # --- 4. Shortcuts ---------------------------------------------------------------------

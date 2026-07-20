@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 
 namespace ClaudeWorkbench.Launcher;
 
@@ -73,6 +74,11 @@ public sealed class MainForm : Form
         toolbar.Controls.Add(Button("Settings", (_, _) => OnSettings()));
         toolbar.Controls.Add(Button("Help", (_, _) => OnHelp()));
 
+        // Test convenience: restore the shared samples\ workspaces to the pristine copy publish
+        // lays down in samples-golden\, discarding whatever the fixture runs edited. Global (samples
+        // is an install-level folder), so it lives here rather than on any instance row.
+        toolbar.Controls.Add(Button("Reset samples", (_, _) => OnResetSamples()));
+
         // Auth is a machine-wide concern (the CLIs cache their login under the user profile), not a
         // per-workspace one, so these sit on the launcher toolbar rather than in any instance. Each
         // opens a terminal on the CLI's own interactive login — see AuthLauncher for why a terminal.
@@ -88,6 +94,83 @@ public sealed class MainForm : Form
         Button button = new() { Text = text, AutoSize = true, Height = 30, Margin = new Padding(4) };
         button.Click += onClick;
         return button;
+    }
+
+    // Restore the GLOBAL samples\ tree from the pristine samples-golden\ mirror publish writes,
+    // discarding any edits the fixture runs made (added files included). The install root is two
+    // folders up from the host exe (<root>\host\ClaudeWorkbench.Host.exe).
+    private void OnResetSamples()
+    {
+        string? hostExe = state.HostExePath;
+        if (string.IsNullOrWhiteSpace(hostExe)
+            || Path.GetDirectoryName(hostExe) is not string hostDir
+            || Path.GetDirectoryName(hostDir) is not string root)
+        {
+            MessageBox.Show(this, "Can't locate the install root from the host exe path (set it in Settings).",
+                "Reset samples", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string golden = Path.Combine(root, "samples-golden");
+        string samples = Path.Combine(root, "samples");
+        if (!Directory.Exists(golden))
+        {
+            MessageBox.Show(this, $"No golden backup found at:\n{golden}\n\nRun scripts\\publish-live.ps1 to create it.",
+                "Reset samples", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (MessageBox.Show(this,
+                "Restore ALL sample workspaces to their pristine first-publish state?\n\n"
+                + "This discards every change under samples\\ (including files the agent added). "
+                + "Stop any running sample instances first, or the copy will fail on locked files.",
+                "Reset samples", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            RestoreFromGolden(golden, samples);
+            MessageBox.Show(this, "Samples restored from the golden backup.",
+                "Reset samples", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Reset failed (is a sample instance still running and holding files?):\n\n{exception.Message}",
+                "Reset samples", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    // Make each sample under samples\ match samples-golden\ exactly: delete then re-copy, so
+    // agent-added files are removed rather than left behind by an overwrite-only copy.
+    private static void RestoreFromGolden(string golden, string samples)
+    {
+        Directory.CreateDirectory(samples);
+        foreach (string goldenSample in Directory.GetDirectories(golden))
+        {
+            string target = Path.Combine(samples, Path.GetFileName(goldenSample));
+            if (Directory.Exists(target))
+            {
+                Directory.Delete(target, recursive: true);
+            }
+
+            CopyTree(goldenSample, target);
+        }
+    }
+
+    private static void CopyTree(string source, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (string file in Directory.GetFiles(source))
+        {
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
+        }
+
+        foreach (string dir in Directory.GetDirectories(source))
+        {
+            CopyTree(dir, Path.Combine(dest, Path.GetFileName(dir)));
+        }
     }
 
     // An auth button drops a small menu: sign in, or check status. Both first confirm the CLI is
