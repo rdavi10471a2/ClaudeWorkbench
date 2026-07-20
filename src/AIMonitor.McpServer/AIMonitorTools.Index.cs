@@ -155,6 +155,40 @@ public sealed partial class AIMonitorTools
         return references.Select(ToMcpReferenceRow).ToArray();
     }
 
+    // The inverse of find_indexed_references: that one is symbol-keyed ("where is THIS used"),
+    // this one is file-keyed ("what does this file reference"). Answering it needed the retired
+    // AIMonitor.Cli until now — the engine method existed with no tool in front of it, so the
+    // index stored rows nothing on the live surface could read.
+    [McpServerTool]
+    [Description("Return the persisted indexed references that occur INSIDE one file — the inverse of find_indexed_references, which is symbol-keyed. Use this to see what a file depends on before editing it.")]
+    public object FindReferencesInFile(
+        [Description("File path, absolute or relative to the watched solution folder.")] string path,
+        [Description("Maximum reference rows to return.")] int maxResults = 500,
+        [Description("Response shape: lean or rich. Lean is optimized for MCP token cost; rich preserves every persisted reference row field.")] string responseShape = "lean")
+    {
+        runtimeState.Touch();
+        IndexedReferenceRow[] references = queryService
+            .ListReferencesInFile(ResolveWatchedPath(path))
+            .Take(maxResults)
+            .ToArray();
+
+        if (responseShape.Equals("rich", StringComparison.OrdinalIgnoreCase))
+        {
+            return references;
+        }
+
+        return references.Select(ToMcpReferenceRow).ToArray();
+    }
+
+    [McpServerTool]
+    [Description("Return the NuGet PackageReference rows captured for the watched solution at index time, with the project that declares each one.")]
+    public object ListPackageReferences(
+        [Description("Maximum package rows to return.")] int maxResults = 500)
+    {
+        runtimeState.Touch();
+        return queryService.ListPackageReferences().Take(maxResults).ToArray();
+    }
+
     [McpServerTool]
     [Description("Return persisted indexed invocation/object-creation call sites for one stable C# method or constructor symbol key, including caller identity.")]
     public object FindIndexedCallers(

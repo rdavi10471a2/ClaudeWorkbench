@@ -255,4 +255,64 @@ public sealed class McpReadIndexSurfaceTests
         Assert.False(callers.IsError == true, McpSurfaceClient.Text(callers));
         Assert.True(McpSurfaceClient.JsonBool(McpSurfaceClient.Text(callers), "isError"));
     }
+
+    // find_references_in_file is the INVERSE of find_indexed_references: file-keyed rather than
+    // symbol-keyed. Both tools below existed only behind the retired AIMonitor.Cli — the engine
+    // methods were there, with nothing on the live surface able to reach them.
+    [Fact]
+    [Trait("Suite", "McpSurface")]
+    public async Task Find_references_in_file_returns_every_reference_inside_one_file()
+    {
+        McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
+        await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
+
+        // Watched-relative path: the tool resolves against the watched folder, not the cwd.
+        CallToolResult lean = await client.CallToolAsync(
+            "find_references_in_file",
+            new Dictionary<string, object?>
+            {
+                ["path"] = "Program.cs"
+            });
+        Assert.False(lean.IsError == true, McpSurfaceClient.Text(lean));
+        string leanJson = McpSurfaceClient.Text(lean);
+
+        // Both seeded references live in Program.cs and must come back — the symbol-keyed tool
+        // could only return one of these per call.
+        Assert.Contains("\"targetStableKey\":\"symbol:target\"", leanJson, StringComparison.Ordinal);
+        Assert.Contains("\"targetStableKey\":\"symbol:program\"", leanJson, StringComparison.Ordinal);
+        Assert.Contains("InvocationExpression", leanJson, StringComparison.Ordinal);
+        Assert.Contains("partial_declaration", leanJson, StringComparison.Ordinal);
+
+        // Same lean/rich contract as the symbol-keyed tool: lean drops fileContentHash.
+        Assert.DoesNotContain("fileContentHash", leanJson, StringComparison.OrdinalIgnoreCase);
+
+        CallToolResult rich = await client.CallToolAsync(
+            "find_references_in_file",
+            new Dictionary<string, object?>
+            {
+                ["path"] = "Program.cs",
+                ["responseShape"] = "rich"
+            });
+        Assert.False(rich.IsError == true, McpSurfaceClient.Text(rich));
+        Assert.Contains("fileContentHash", McpSurfaceClient.Text(rich), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    [Trait("Suite", "McpSurface")]
+    public async Task List_package_references_returns_the_indexed_nuget_rows()
+    {
+        McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
+        await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
+
+        CallToolResult packages = await client.CallToolAsync(
+            "list_package_references",
+            new Dictionary<string, object?>());
+        Assert.False(packages.IsError == true, McpSurfaceClient.Text(packages));
+
+        string json = McpSurfaceClient.Text(packages);
+        Assert.Contains("Microsoft.Data.Sqlite", json, StringComparison.Ordinal);
+        Assert.Contains("10.0.0", json, StringComparison.Ordinal);
+        // The declaring project travels with the row — a package alone is not actionable.
+        Assert.Contains("Example.csproj", json, StringComparison.OrdinalIgnoreCase);
+    }
 }

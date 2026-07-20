@@ -91,7 +91,9 @@ internal sealed class McpSurfaceFixture
                     ],
                     [],
                     [],
-                    [],
+                    // One package reference so list_package_references has a real row to return.
+                    // Nothing else asserts on package rows, so this is additive.
+                    [new MSBuildPackageReferenceSnapshot("Microsoft.Data.Sqlite", "10.0.0")],
                     [],
                     [],
                     ["DEBUG"])
