@@ -43,34 +43,24 @@ public sealed class EngineEditLifecycleTests
         const string lf = "namespace Example\n{\n    internal static class Program { }\n}\n";
         await File.WriteAllTextAsync(fixture.ProgramFilePath, crlf);
 
-        WorkflowEditService shared = NewEditService(fixture); // MUTATION: single reused instance
-        EditSessionStatus refresh = shared.Refresh(fixture.ProgramFilePath);
+        EditSessionStatus refresh = NewEditService(fixture).Refresh(fixture.ProgramFilePath);
         Assert.True(File.Exists(refresh.WorkingFilePath));
         await File.WriteAllTextAsync(refresh.WorkingFilePath, lf);
 
-        StagedEditRecord staged = shared.Stage(fixture.ProgramFilePath);
+        StagedEditRecord staged = NewEditService(fixture).Stage(fixture.ProgramFilePath);
         Assert.Equal(0, CountBareLf(crlf));
         Assert.True(CountBareLf(lf) > 0);
 
-        // MUTATION: review stamp through the SAME instance (warm cache), not InAppReviewSimulator.
-        StagedEditRecord forReview = shared.GetStagedRecord(staged.StagedRecordId);
-        shared.PrepareReviewFileForLaunch(staged.StagedRecordId);
-        PreMergeValidationResult overlay = new PreMergeValidationService().ValidateStagedOverlay(forReview, [forReview]);
-        shared.RecordPreMergeValidation(staged.StagedRecordId, overlay, forceApproved: false);
-        shared.RecordDiffLaunch(staged.StagedRecordId, launched: true, "in-app merge review");
+        MarkReviewedInApp(fixture, staged.StagedRecordId);
 
         // The operator's merge review wrote the reviewed result back with CRLF endings.
         await File.WriteAllTextAsync(fixture.ProgramFilePath, crlf);
 
-        MonitorSettings mutationSettings = LoadSettings(fixture);
-        ReviewDecisionWithIndexRefreshResult decision = new StagedDecisionWorkflow().Record(
-            mutationSettings,
-            new JsonLinesMonitorLogger(MonitorLogPaths.GetDefaultLogPath(mutationSettings)),
-            shared, // MUTATION: same instance again
+        ReviewDecisionWithIndexRefreshResult decision = RecordDecision(
+            fixture,
             staged.StagedRecordId,
             "accepted",
-            staged.StagedHash,
-            "AIMonitor.Integration.Tests");
+            staged.StagedHash);
 
         Assert.Equal("accepted-normalized", decision.Classification);
         Assert.NotNull(decision.IndexRefresh);
