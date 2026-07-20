@@ -12,6 +12,19 @@ active at a time.
   Switching **rewrites the config the host was started with** (see below) and rebuilds the
   engine services against the new solution.
 
+> **It must be a solution file.** The picker lists **only** `.sln` and `.slnx` — you cannot
+> select a bare `.csproj` through the UI, and that is deliberate: the solution is what defines
+> the workspace, so the index covers every project in it rather than one project's view of the
+> world.
+>
+> The engine itself will accept a `.csproj` if you set `Monitor:WatchedSolutionPath` to one by
+> hand (`SolutionIndexBuilder` branches on the extension and calls `OpenProjectAsync`), and it
+> does index — but it is an unsupported back door, not a feature. A single project cannot see
+> the projects that depend on *it*, so anything that reasons across the solution — find-all-
+> references, "what breaks if I change this signature" — is answering from a partial graph. That
+> is exactly the question the agent asks before a refactor, and a confidently wrong answer there
+> is worse than no index.
+
 ## What happens when you select one
 
 1. The choice is saved back to the config the host was started with — `config/appsettings.json`
