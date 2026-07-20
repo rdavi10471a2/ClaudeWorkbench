@@ -73,6 +73,12 @@ public sealed class MainForm : Form
         toolbar.Controls.Add(Button("Settings", (_, _) => OnSettings()));
         toolbar.Controls.Add(Button("Help", (_, _) => OnHelp()));
 
+        // Auth is a machine-wide concern (the CLIs cache their login under the user profile), not a
+        // per-workspace one, so these sit on the launcher toolbar rather than in any instance. Each
+        // opens a terminal on the CLI's own interactive login — see AuthLauncher for why a terminal.
+        toolbar.Controls.Add(AuthButton("Claude sign-in", AuthLauncher.Claude));
+        toolbar.Controls.Add(AuthButton("GitHub sign-in", AuthLauncher.GitHub));
+
         Controls.Add(grid);
         Controls.Add(toolbar);
     }
@@ -82,6 +88,54 @@ public sealed class MainForm : Form
         Button button = new() { Text = text, AutoSize = true, Height = 30, Margin = new Padding(4) };
         button.Click += onClick;
         return button;
+    }
+
+    // An auth button drops a small menu: sign in, or check status. Both first confirm the CLI is
+    // installed, so a missing tool produces a clear dialog instead of a console that flashes
+    // "command not found" and vanishes.
+    private Button AuthButton(string text, AuthLauncher.Provider provider)
+    {
+        Button button = new() { Text = text, AutoSize = true, Height = 30, Margin = new Padding(4) };
+
+        ContextMenuStrip menu = new();
+        menu.Items.Add($"Sign in to {provider.DisplayName}…", null, (_, _) => RunAuth(provider, AuthLauncher.LaunchLogin));
+        menu.Items.Add($"Check {provider.DisplayName} status", null, (_, _) => RunAuth(provider, AuthLauncher.LaunchStatus));
+        menu.Items.Add(new ToolStripSeparator());
+        // Sign out clears the CLI's cached credential (~/.claude for Claude). This is the only way
+        // to force a genuinely fresh login: `login` on an already-authenticated CLI can short-circuit.
+        menu.Items.Add($"Sign out of {provider.DisplayName}", null, (_, _) => RunAuth(provider, AuthLauncher.LaunchLogout));
+
+        // Show the menu directly under the button, so the click that opens it reads as the button's.
+        button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
+        return button;
+    }
+
+    private void RunAuth(AuthLauncher.Provider provider, Action<AuthLauncher.Provider> launch)
+    {
+        if (AuthLauncher.ResolveExecutable(provider) is null)
+        {
+            MessageBox.Show(
+                this,
+                provider.InstallHint,
+                $"{provider.DisplayName} CLI not found",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            launch(provider);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                $"Could not open a terminal for {provider.DisplayName} sign-in.\r\n\r\n{exception.Message}",
+                "Sign-in failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private InstanceController ControllerFor(WorkspaceEntry workspace)

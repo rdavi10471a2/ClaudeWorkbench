@@ -15,6 +15,21 @@ public sealed class HelpForm : Form
         "  • Remove — takes the workspace off the list.\r\n" +
         "  • Settings — host exe path, sidecar folder, instances folder, and which browser to open.\r\n" +
         "\r\n" +
+        "Sign in (Claude / GitHub)\r\n" +
+        "  • Claude sign-in / GitHub sign-in — open a terminal on the CLI's own login flow.\r\n" +
+        "    Each button offers \"Sign in…\", \"Check status\", and \"Sign out\".\r\n" +
+        "  • To force a fresh login, Sign out first: `login` on an already-signed-in CLI can\r\n" +
+        "    short-circuit. Signing out of the Claude Desktop app or closing an editor does NOT\r\n" +
+        "    sign the CLI out — its credential lives in ~\\.claude, separately.\r\n" +
+        "  • These are interactive: the terminal shows a URL and code, opens a browser, and waits —\r\n" +
+        "    complete it there, then close the window. The result stays on screen (the window is\r\n" +
+        "    kept open) so you can read \"Login successful\" or any error.\r\n" +
+        "  • Sign-in is machine-wide, not per-workspace. Claude caches its login under ~\\.claude and\r\n" +
+        "    the sidecar inherits it; gh caches under the user profile and the Git panel uses it.\r\n" +
+        "    You only need to do each once per machine (until the credential expires).\r\n" +
+        "  • If a CLI isn't installed the button says so, with the install command, instead of\r\n" +
+        "    flashing a terminal.\r\n" +
+        "\r\n" +
         "Lifecycle (kill one, kill all)\r\n" +
         "  • Closing the browser window stops that instance's backend on its own, within a few seconds.\r\n" +
         "  • Stop — or closing the Launcher — terminates that instance's host + sidecar + browser together.\r\n" +

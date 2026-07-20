@@ -152,7 +152,7 @@ committed sample config uses relative paths and works in any checkout.
 |---|---|
 | **.NET 10 SDK** | Two separate reasons. The publish is framework-dependent, so it needs the *runtime* to start — but indexing also calls `MSBuildLocator.RegisterDefaults()`, which needs **MSBuild and the Roslyn toolset that ship with the SDK**. Publishing `--self-contained` removes the runtime requirement but **not** this one: without the SDK the app starts and then fails to index a solution. This is the requirement for running ClaudeWorkbench itself — **not** for the solution you watch; see below. |
 | **Node.js** on PATH | The sidecar runs the Claude Agent SDK, which is Node-only. |
-| **A Claude login** | A subscription login cached in `~\.claude` runs it with no API key; `ANTHROPIC_API_KEY` is only needed to ship to other people. See [Settings & Usage](settings-and-usage.md#auth). |
+| **A Claude login** | A subscription login cached in `~\.claude` runs it with no API key; `ANTHROPIC_API_KEY` is only needed to ship to other people. Sign in from the Launcher's **Claude sign-in** button, or run `claude auth login`. See [Settings & Usage](settings-and-usage.md#signing-in-from-the-launcher). |
 | **Free ports from 6100 / 6110** | Each instance takes a host+sidecar pair; the Launcher picks free ones per instance. |
 | **Chrome or Edge** (recommended) | Opened as a clean `--app` window that closes as a unit. "Default browser" works but can't be force-closed from the Launcher. |
 
