@@ -23,7 +23,6 @@ public partial class GitTab : IAsyncDisposable
     private ElementReference gitSplitter;
     private IJSObjectReference? resizeModule;
     private bool leftCollapsed;
-    private bool splitterAttached;
 
     private GitStatus? status;
     private IReadOnlyList<string> branches = [];
@@ -54,17 +53,17 @@ public partial class GitTab : IAsyncDisposable
         }
 
         resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
-        if (!splitterAttached)
-        {
-            await resizeModule.InvokeVoidAsync("attachGitSplitter", gitBody, gitLeft, gitRight, gitSplitter);
-            splitterAttached = true;
-        }
+
+        // No C# "already attached" flag. The splitter element itself carries the guard
+        // (dataset.resizeAttached), so collapsing and restoring the left panel re-attaches when the
+        // element is genuinely new and no-ops when it is not. Two guards tracking one fact is how
+        // the splitter ends up silently dead after a toggle.
+        await resizeModule.InvokeVoidAsync("attachGitSplitter", gitBody, gitLeft, gitRight, gitSplitter);
     }
 
     private void ToggleLeft()
     {
         leftCollapsed = !leftCollapsed;
-        splitterAttached = false; // re-attach the splitter when the panel returns
     }
 
     private async Task ReloadAsync()

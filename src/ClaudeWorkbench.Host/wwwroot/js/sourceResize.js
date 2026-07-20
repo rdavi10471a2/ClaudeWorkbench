@@ -1,107 +1,67 @@
-export function attachSourceSplitter(layout, sidebar, detail, splitter) {
-    if (!layout || !sidebar || !detail || !splitter) {
+// ---------------------------------------------------------------------------------------------
+// Column splitters
+//
+// ONE rule, and every past bug here came from breaking it: SIZE THE LEADING PANE ONLY.
+//
+// The trailing pane must stay `flex: 1 1 auto; min-width: 0` so it consumes exactly what is left.
+// The moment you also pin the trailing pane to a pixel width, the two panes stop being related to
+// the container: drag the divider right, or shrink the window, and leading + trailing exceed the
+// layout width. The overflow goes off the right edge — and because the layout is `overflow: hidden`,
+// it is silently clipped rather than scrolled. That took the transcript's vertical scrollbar
+// off-screen with it, which is why "the chat lost its scrollbar" and "the right side runs off the
+// screen" were one bug, not two.
+//
+// So the leading width is clamped against what the container can actually give:
+//     max leading = layout width - splitter width - minTrailing
+// which means the divider stops before it can push the trailing pane out, instead of being free to
+// run past the edge.
+//
+// The same clamp is re-applied when the layout resizes (ResizeObserver, not a window listener —
+// it is owned by the element, so it dies with the element instead of accumulating one dead global
+// handler per tab switch). Shrinking the window therefore pulls the divider back in rather than
+// shoving the trailing pane off-screen.
+function attachColumnSplitter(layout, leading, trailing, splitter, minLeading, minTrailing) {
+    if (!layout || !leading || !trailing || !splitter) {
         return;
     }
 
-    let startX = 0;
-    let startSidebarWidth = 0;
-    let startDetailWidth = 0;
-
-    const minSidebar = 260;
-    const minDetail = 460;
-
-    function onPointerMove(event) {
-        const delta = event.clientX - startX;
-        const nextSidebar = Math.max(minSidebar, startSidebarWidth + delta);
-        const nextDetail = Math.max(minDetail, startDetailWidth - delta);
-        sidebar.style.flex = `0 0 ${nextSidebar}px`;
-        detail.style.flex = `0 0 ${nextDetail}px`;
-        sidebar.style.flexBasis = `${nextSidebar}px`;
-        detail.style.flexBasis = `${nextDetail}px`;
-        sidebar.style.width = `${nextSidebar}px`;
-        detail.style.width = `${nextDetail}px`;
-    }
-
-    function onPointerUp() {
-        splitter.classList.remove("dragging");
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }
-
-    splitter.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        startX = event.clientX;
-        startSidebarWidth = sidebar.getBoundingClientRect().width;
-        startDetailWidth = detail.getBoundingClientRect().width;
-        splitter.classList.add("dragging");
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    });
-}
-
-export function attachGitSplitter(layout, sidebar, detail, splitter) {
-    if (!layout || !sidebar || !detail || !splitter) {
-        return;
-    }
-
-    let startX = 0;
-    let startSidebarWidth = 0;
-    let startDetailWidth = 0;
-
-    const minSidebar = 280;
-    const minDetail = 380;
-
-    function onPointerMove(event) {
-        const delta = event.clientX - startX;
-        const nextSidebar = Math.max(minSidebar, startSidebarWidth + delta);
-        const nextDetail = Math.max(minDetail, startDetailWidth - delta);
-        sidebar.style.flex = `0 0 ${nextSidebar}px`;
-        detail.style.flex = `1 1 auto`;
-        sidebar.style.width = `${nextSidebar}px`;
-    }
-
-    function onPointerUp() {
-        splitter.classList.remove("dragging");
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }
-
-    splitter.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        startX = event.clientX;
-        startSidebarWidth = sidebar.getBoundingClientRect().width;
-        startDetailWidth = detail.getBoundingClientRect().width;
-        splitter.classList.add("dragging");
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    });
-}
-
-export function attachMainSplitter(layout, connection, workPanel, splitter) {
-    if (!layout || !connection || !workPanel || !splitter || splitter.dataset.resizeAttached === "true") {
+    // Keyed on the element, not on a C# bool in the caller: the element is what actually carries
+    // the listener, so a re-created layout gets a fresh splitter and re-attaches correctly, while
+    // a re-render of the same element does not stack a second pointerdown handler.
+    if (splitter.dataset.resizeAttached === "true") {
         return;
     }
 
     splitter.dataset.resizeAttached = "true";
 
     let startX = 0;
-    let startConnectionWidth = 0;
-    const minConnection = 260;
-    const maxConnection = 620;
+    let startLeadingWidth = 0;
+
+    function clamp(width) {
+        const splitterWidth = splitter.getBoundingClientRect().width || 12;
+        const available = layout.clientWidth - splitterWidth;
+
+        // A container too small to honour both minimums cannot be satisfied; keep the leading pane
+        // at its minimum and let the trailing pane take the remainder. Panes declare their own
+        // internal overflow, so the content scrolls instead of the layout overflowing.
+        const maxLeading = Math.max(minLeading, available - minTrailing);
+        return Math.min(maxLeading, Math.max(minLeading, width));
+    }
+
+    function apply(width) {
+        const next = clamp(width);
+        leading.style.flex = `0 0 ${next}px`;
+        leading.style.width = `${next}px`;
+
+        // Explicitly (re)assert the trailing contract. Cheap, and it repairs any pinned width left
+        // behind by an older build or a previously shared splitter implementation.
+        trailing.style.flex = "1 1 auto";
+        trailing.style.width = "";
+        trailing.style.minWidth = "0";
+    }
 
     function onPointerMove(event) {
-        const delta = event.clientX - startX;
-        const nextConnection = Math.min(maxConnection, Math.max(minConnection, startConnectionWidth + delta));
-        connection.style.flexBasis = `${nextConnection}px`;
-        connection.style.width = `${nextConnection}px`;
+        apply(startLeadingWidth + (event.clientX - startX));
     }
 
     function onPointerUp() {
@@ -115,231 +75,45 @@ export function attachMainSplitter(layout, connection, workPanel, splitter) {
     splitter.addEventListener("pointerdown", event => {
         event.preventDefault();
         startX = event.clientX;
-        startConnectionWidth = connection.getBoundingClientRect().width;
+        startLeadingWidth = leading.getBoundingClientRect().width;
         splitter.classList.add("dragging");
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
         window.addEventListener("pointermove", onPointerMove);
         window.addEventListener("pointerup", onPointerUp);
     });
-}
 
-export function attachTaskSplitter(layout, navigator, workspace, splitter) {
-    if (!layout || !navigator || !workspace || !splitter || splitter.dataset.resizeAttached === "true") {
-        return;
-    }
-
-    splitter.dataset.resizeAttached = "true";
-
-    let startX = 0;
-    let startNavigatorWidth = 0;
-    const minNavigator = 280;
-    const maxNavigator = 680;
-
-    function onPointerMove(event) {
-        const delta = event.clientX - startX;
-        const nextNavigator = Math.min(maxNavigator, Math.max(minNavigator, startNavigatorWidth + delta));
-        navigator.style.flexBasis = `${nextNavigator}px`;
-        navigator.style.width = `${nextNavigator}px`;
-    }
-
-    function onPointerUp() {
-        splitter.classList.remove("dragging");
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }
-
-    splitter.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        startX = event.clientX;
-        startNavigatorWidth = navigator.getBoundingClientRect().width;
-        splitter.classList.add("dragging");
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    });
-}
-
-export function attachAssistantSplitter(layout, transcript, composer, splitter) {
-    if (!layout || !transcript || !composer || !splitter || splitter.dataset.resizeAttached === "true") {
-        return;
-    }
-
-    splitter.dataset.resizeAttached = "true";
-    splitter.dataset.userSized = splitter.dataset.userSized || "false";
-
-    let startY = 0;
-    let startComposerHeight = 0;
-    let layoutHeight = 0;
-    let splitterHeight = 12;
-
-    const minTranscript = 120;
-    const minComposer = 156;
-    const maxComposerDefault = 188;
-
-    function applyAssistantLayout(defaultComposerHeight) {
-        layoutHeight = layout.getBoundingClientRect().height;
-        splitterHeight = Math.max(8, splitter.getBoundingClientRect().height || 12);
-        if (!layoutHeight || layoutHeight <= splitterHeight + minTranscript + minComposer) {
-            return;
-        }
-
-        const maxComposer = Math.max(minComposer, layoutHeight - splitterHeight - minTranscript);
-        const nextComposer = Math.min(maxComposer, Math.max(minComposer, defaultComposerHeight));
-        const nextTranscript = Math.max(minTranscript, layoutHeight - splitterHeight - nextComposer);
-        layout.style.gridTemplateRows = `${nextTranscript}px ${splitterHeight}px ${nextComposer}px`;
-    }
-
-    function applyDefaultLayout() {
-        const nextLayoutHeight = layout.getBoundingClientRect().height;
-        if (!nextLayoutHeight) {
-            return;
-        }
-
-        const proportionalComposer = Math.round(nextLayoutHeight * 0.18);
-        const desiredComposer = Math.min(maxComposerDefault, Math.max(minComposer, proportionalComposer));
-        applyAssistantLayout(desiredComposer);
-    }
-
-    function onPointerMove(event) {
-        const delta = event.clientY - startY;
-        const maxComposer = Math.max(minComposer, layoutHeight - splitterHeight - minTranscript);
-        const nextComposer = Math.min(maxComposer, Math.max(minComposer, startComposerHeight - delta));
-        const nextTranscript = Math.max(minTranscript, layoutHeight - splitterHeight - nextComposer);
-        layout.style.gridTemplateRows = `${nextTranscript}px ${splitterHeight}px ${nextComposer}px`;
-    }
-
-    function onPointerUp() {
-        splitter.classList.remove("dragging");
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }
-
-    splitter.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        startY = event.clientY;
-        layoutHeight = layout.getBoundingClientRect().height;
-        splitterHeight = Math.max(8, splitter.getBoundingClientRect().height || 12);
-        startComposerHeight = composer.getBoundingClientRect().height;
-        splitter.dataset.userSized = "true";
-        splitter.classList.add("dragging");
-        document.body.style.cursor = "row-resize";
-        document.body.style.userSelect = "none";
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    });
-
-    const resizeHandler = () => {
-        if (splitter.dataset.userSized === "true") {
-            const currentComposerHeight = composer.getBoundingClientRect().height;
-            if (currentComposerHeight > 0) {
-                applyAssistantLayout(currentComposerHeight);
+    if (typeof ResizeObserver === "function") {
+        const observer = new ResizeObserver(() => {
+            const current = leading.getBoundingClientRect().width;
+            if (current > 0) {
+                apply(current);
             }
+        });
 
-            return;
-        }
-
-        applyDefaultLayout();
-    };
-
-    if (!layout.__codingServicesAssistantResizeHandler) {
-        layout.__codingServicesAssistantResizeHandler = resizeHandler;
-        window.addEventListener("resize", resizeHandler);
+        observer.observe(layout);
+        splitter.__columnSplitterObserver = observer;
     }
-
-    applyDefaultLayout();
 }
 
-export function attachStreamSplitter(layout, history, stream, splitter) {
-    if (!layout || !history || !stream || !splitter || splitter.dataset.resizeAttached === "true") {
-        return;
-    }
-
-    splitter.dataset.resizeAttached = "true";
-
-    let startX = 0;
-    let startHistoryWidth = 0;
-    let startStreamWidth = 0;
-
-    const minHistory = 420;
-    const minStream = 260;
-
-    function onPointerMove(event) {
-        const delta = event.clientX - startX;
-        const nextHistory = Math.max(minHistory, startHistoryWidth + delta);
-        const nextStream = Math.max(minStream, startStreamWidth - delta);
-        layout.style.gridTemplateColumns = `${nextHistory}px 12px ${nextStream}px`;
-    }
-
-    function onPointerUp() {
-        splitter.classList.remove("dragging");
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }
-
-    splitter.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        startX = event.clientX;
-        startHistoryWidth = history.getBoundingClientRect().width;
-        startStreamWidth = stream.getBoundingClientRect().width;
-        splitter.classList.add("dragging");
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    });
+// Source tab: file tree on the left, file detail on the right.
+export function attachSourceSplitter(layout, sidebar, detail, splitter) {
+    attachColumnSplitter(layout, sidebar, detail, splitter, 260, 460);
 }
 
-export function attachAgentSplitter(panel, stream, actions, splitter) {
-    if (!panel || !stream || !actions || !splitter || splitter.dataset.resizeAttached === "true") {
-        return;
-    }
+// Git tab: changed-files list on the left, diff on the right.
+export function attachGitSplitter(layout, sidebar, detail, splitter) {
+    attachColumnSplitter(layout, sidebar, detail, splitter, 280, 380);
+}
 
-    splitter.dataset.resizeAttached = "true";
-
-    let startY = 0;
-    let startStreamHeight = 0;
-    let startActionsHeight = 0;
-
-    const minStream = 160;
-    const minActions = 120;
-
-    function onPointerMove(event) {
-        const delta = event.clientY - startY;
-        const nextStream = Math.max(minStream, startStreamHeight + delta);
-        const nextActions = Math.max(minActions, startActionsHeight - delta);
-        stream.style.flexBasis = `${nextStream}px`;
-        stream.style.height = `${nextStream}px`;
-        actions.style.flexBasis = `${nextActions}px`;
-        actions.style.height = `${nextActions}px`;
-    }
-
-    function onPointerUp() {
-        splitter.classList.remove("dragging");
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-    }
-
-    splitter.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        startY = event.clientY;
-        startStreamHeight = stream.getBoundingClientRect().height;
-        startActionsHeight = actions.getBoundingClientRect().height;
-        splitter.classList.add("dragging");
-        document.body.style.cursor = "row-resize";
-        document.body.style.userSelect = "none";
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
-    });
+// Workbench tab: composer on the left, chat history on the right.
+//
+// This previously called attachSourceSplitter directly. Borrowing another tab's splitter is what
+// dragged the Source tab's "pin both panes" behaviour into the chat layout; the minimums were also
+// the Source tab's, so the chat history reserved 460px it did not need. It gets its own entry point
+// with its own minimums now, even though the mechanism is shared.
+export function attachAssistantSplitter(layout, composer, transcript, splitter) {
+    attachColumnSplitter(layout, composer, transcript, splitter, 320, 360);
 }
 
 export function attachComposerAutoScroll(textarea) {
@@ -353,15 +127,6 @@ export function attachComposerAutoScroll(textarea) {
     });
 }
 
-export function scrollComposerToBottom(textarea) {
-    if (!textarea) {
-        return;
-    }
-
-    window.requestAnimationFrame(() => {
-        textarea.scrollTop = textarea.scrollHeight;
-    });
-}
 
 export function scrollElementToBottom(element) {
     if (!element) {
@@ -402,31 +167,6 @@ export async function copyTextToClipboard(text) {
     document.body.removeChild(textarea);
 }
 
-export function attachTranscriptCopyButtons(transcriptElement) {
-    if (!transcriptElement || transcriptElement.__codingServicesCopyAttached) {
-        return;
-    }
-
-    transcriptElement.__codingServicesCopyAttached = true;
-    transcriptElement.addEventListener("click", async event => {
-        const button = event.target && event.target.closest
-            ? event.target.closest(".message-copy")
-            : null;
-        if (!button || !transcriptElement.contains(button)) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        const text = button.getAttribute("data-copy-text") || "";
-        await copyTextToClipboard(text);
-        const originalText = button.textContent;
-        button.textContent = "Copied";
-        window.setTimeout(() => {
-            button.textContent = originalText || "Copy";
-        }, 1200);
-    });
-}
 
 export function openHtmlDocument(html, title) {
     const popup = window.open("", "_blank");
@@ -441,18 +181,6 @@ export function openHtmlDocument(html, title) {
     popup.document.close();
 }
 
-export function openUrlInNewTab(url) {
-    if (!url) {
-        return;
-    }
-
-    const popup = window.open(url, "_blank");
-    if (!popup) {
-        return;
-    }
-
-    popup.opener = null;
-}
 
 export function setBeforeUnloadGuard(enabled, message) {
     if (enabled) {

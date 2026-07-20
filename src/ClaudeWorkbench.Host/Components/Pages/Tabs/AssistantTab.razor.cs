@@ -260,7 +260,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         if (firstRender)
         {
             await resizeModule.InvokeVoidAsync(
-                "attachSourceSplitter",
+                "attachAssistantSplitter",
                 assistantLayout,
                 chatComposer,
                 transcriptPanel,

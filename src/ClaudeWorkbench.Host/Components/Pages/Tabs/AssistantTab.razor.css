@@ -579,7 +579,17 @@
     .chat-composer {
         grid-column: 1;
         grid-row: 2;
-        flex: initial;
         min-width: 0;
+    }
+
+    /* The splitter writes inline `width`/`flex` while the layout is a two-column flexbox. Stacked,
+       those inline pixel widths are stale and would force a pane wider than the single grid column,
+       overflowing horizontally again. A stylesheet !important is the only thing that outranks an
+       inline style, so the stacked layout reclaims the width here rather than asking the JS to
+       track the breakpoint. */
+    .transcript-panel,
+    .chat-composer {
+        flex: initial !important;
+        width: auto !important;
     }
 }
