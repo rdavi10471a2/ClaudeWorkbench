@@ -11,9 +11,9 @@ Revert point before any of this: **`b8a1966`**. Each phase is its own commit.
 | 0.1 — add the two missing MCP tools (+tests) | ✅ done | `b8a1966` |
 | 0.2 — ADR-0003 dated note | ✅ done | `35e10af` |
 | 0.3 — preserve redaction/telemetry (Appendix A) | ✅ done | `35e10af` |
-| 1 — language corpus → `dotnet test` | in progress | |
+| 1 — language corpus → `dotnet test` | ✅ done | `e434748` (swept) |
 | 2 — salvage 3 scenarios from `ToolSmokeTests` | in progress | |
-| 3 — re-home the CLI-unique tests | in progress | |
+| 3 — re-home the CLI-unique tests | ⚠️ code done, mutation-check outstanding | `e434748` (swept) |
 | 5.1a — salvage the Razor code-behind sweep | ✅ done | see below |
 | 4 — delete `AIMonitor.Cli` | blocked on 3 | |
 | 5 — delete the smoke runners | blocked on 1, 2, 5.1a | |
