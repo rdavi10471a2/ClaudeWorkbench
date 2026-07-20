@@ -163,6 +163,11 @@ public sealed class MSBuildWorkspaceLoader
             }
 
             registrationAttempted = true;
+
+            // Before the first workspace exists, so Roslyn's BuildHost child is born inside the job
+            // and cannot outlive this process. See WorkspaceChildProcessJob for why that matters.
+            WorkspaceChildProcessJob.EnsureCurrentProcessIsJobbed();
+
             if (!MSBuildLocator.IsRegistered)
             {
                 MSBuildLocator.RegisterDefaults();
