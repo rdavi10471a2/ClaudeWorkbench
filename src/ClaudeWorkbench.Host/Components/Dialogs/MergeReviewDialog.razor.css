@@ -1,6 +1,12 @@
+/* Flex column, NOT a fixed-row grid. The dialog has a variable number of blocks above the
+   diff — header, an error line, a validation banner — so `grid-template-rows: auto auto
+   minmax(0,1fr)` put the flexible row on whichever block happened to be third. With the
+   validation banner showing (common now that compile errors surface there) the banner got
+   the stretch and the diff pane fell to an auto row, so it stopped reflowing when the
+   dialog was resized. Flex + `flex: 1` on the layout is robust to how many blocks precede it. */
 .staged-review-dialog {
-    display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     height: 100%;
     width: 100%;
@@ -170,6 +176,8 @@
     display: grid;
     gap: 12px;
     grid-template-columns: 260px minmax(0, 1fr);
+    /* Take all remaining height, whatever precedes it, so the diff follows the dialog size. */
+    flex: 1 1 auto;
     min-height: 0;
 }
 

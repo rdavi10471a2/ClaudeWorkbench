@@ -13,12 +13,12 @@
     overflow: hidden;
 }
 
-/* Columns hold their 50/50 split until a line is too long, then grow to the widest line
-   so the whole grid scrolls sideways as one unit — line numbers and the column divider
-   stay aligned. Code lines do NOT wrap (see .diff-view-line code). */
+/* The two panes stay a fixed 50/50 and never grow: the dialog cannot be widened, so a
+   column that expands to the longest line just pushes the other side out of view. Long
+   lines scroll individually instead — see .diff-view-line code. */
 .diff-view-scroll {
     display: grid;
-    grid-template-columns: minmax(50%, max-content) minmax(50%, max-content);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-content: start;
     overflow: auto;
     flex: 1;
@@ -69,11 +69,13 @@
 
 /* Never wrap: a wrapped line silently breaks the row-for-row alignment between the two
    panes (one side grows taller than its counterpart) and makes long lines unreadable.
-   Long lines run off and the grid scrolls horizontally instead. */
+   Each line scrolls on its own instead, so reading a long line on one side does not drag
+   the other side out of view — which matters because the dialog is not resizable. */
 .diff-view-line code {
     color: #172033;
     display: block;
     overflow-wrap: normal;
+    overflow-x: auto;
     padding: 0.25rem 0.65rem;
     white-space: pre;
 }
