@@ -67,6 +67,32 @@ public sealed class WorkspaceManager
 
     public WorkflowEditPaths EditPaths => Require().EditPaths;
 
+    // The one live edit session for this workspace/run. Owned here (not minted freely by
+    // the agent) so a run has exactly ONE session: start_monitor_session gets-or-creates
+    // this and every edit/stage rides it, which keeps the operator's review a single
+    // queue in one dialog (ADR-0005). Reset to null on a workspace switch, since sessions
+    // are per-workspace. Cleared implicitly by SwitchTo rebuilding WorkspaceServices.
+    public string? ActiveEditSessionId
+    {
+        get
+        {
+            lock (sync)
+            {
+                return current?.ActiveEditSessionId;
+            }
+        }
+        set
+        {
+            lock (sync)
+            {
+                if (current is not null)
+                {
+                    current.ActiveEditSessionId = value;
+                }
+            }
+        }
+    }
+
     // Point the monitor at a different watched solution, rebuilding its engine
     // services against the new workspace. Persistence of the choice is the host's job.
     public void SwitchTo(string watchedSolutionPath)
@@ -118,6 +144,10 @@ public sealed class WorkspaceManager
         public required RoslynEditService RoslynEditService { get; init; }
 
         public required WorkflowEditPaths EditPaths { get; init; }
+
+        // Mutable: the workspace's one live edit session, set when the run's session is
+        // created and left in place until it resolves (a new run then replaces it).
+        public string? ActiveEditSessionId { get; set; }
 
         public static WorkspaceServices Build(MonitorSettings settings)
         {

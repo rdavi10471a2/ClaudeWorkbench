@@ -1231,44 +1231,28 @@ public sealed class McpServerSmokeTests
         Assert.Contains(helperStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
         Assert.Contains(programStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
 
-        string outsiderFilePath = Path.Combine(Path.GetDirectoryName(fixture.ProgramFilePath)!, "Outsider.cs");
-        await File.WriteAllTextAsync(
-            outsiderFilePath,
-            "namespace Example { internal static class Outsider { } }");
-        CallToolResult outsiderSession = await client.CallToolAsync(
+        // One session per run: a second start_monitor_session while this session is still
+        // live returns the SAME session and merges into its one plan — it never forks a
+        // second session — so the operator's review stays a single queue that writes as a
+        // unit. Re-declaring an already-planned file is a no-op merge, so the accept flow
+        // below is unaffected. (This replaces an older "session isolation" check that
+        // expected a second live session; one-session-per-run makes that impossible.)
+        CallToolResult reuseSession = await client.CallToolAsync(
             "start_monitor_session",
             new Dictionary<string, object?>
             {
-                ["purpose"] = "session isolation",
+                ["purpose"] = "one session per run",
                 ["filesPlanned"] = new object[]
                 {
                     new Dictionary<string, object?>
                     {
-                        ["sourceFilePath"] = outsiderFilePath,
+                        ["sourceFilePath"] = helperFilePath,
                         ["owningProjectPath"] = fixture.WatchedSolutionPath
                     }
                 }
             });
-        string outsiderSessionId = ExtractJsonString(ExtractToolText(outsiderSession), "sessionId");
-        CallToolResult outsiderSubmit = await client.CallToolAsync(
-            "submit_file",
-            new Dictionary<string, object?>
-            {
-                ["path"] = outsiderFilePath,
-                ["content"] = "namespace Example { internal static class Outsider { public static string Value => \"outside\"; } }",
-                ["sessionId"] = outsiderSessionId
-            });
-        Assert.False(outsiderSubmit.IsError == true);
-        CallToolResult outsiderStage = await client.CallToolAsync(
-            "stage_candidate_for_review",
-            new Dictionary<string, object?>
-            {
-                ["path"] = outsiderFilePath,
-                ["ledgerSummary"] = "mcp session outsider",
-                ["sessionId"] = outsiderSessionId
-            });
-        Assert.False(outsiderStage.IsError == true);
-        string outsiderStagedRecordId = ExtractJsonString(ExtractToolText(outsiderStage), "stagedRecordId");
+        Assert.False(reuseSession.IsError == true);
+        Assert.Equal(sessionId, ExtractJsonString(ExtractToolText(reuseSession), "sessionId"));
 
         sessionRecords = await client.CallToolAsync(
             "list_session_staged_records",
@@ -1279,7 +1263,6 @@ public sealed class McpServerSmokeTests
         sessionRecordsJson = ExtractToolText(sessionRecords);
         Assert.Contains(helperStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
         Assert.Contains(programStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
-        Assert.DoesNotContain(outsiderStagedRecordId, sessionRecordsJson, StringComparison.Ordinal);
 
         client = await ReconnectAfterInAppReviewAsync(client, fixture, helperStagedRecordId, programStagedRecordId);
 
