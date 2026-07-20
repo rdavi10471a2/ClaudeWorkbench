@@ -21,7 +21,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AIMonitor.Core\AIMonitor.Core.csproj" />
-    <ProjectReference Include="..\..\..\src\AIMonitor.Cli\AIMonitor.Cli.csproj" />
     <ProjectReference Include="..\..\..\src\AIMonitor.Data\AIMonitor.Data.csproj" />
     <ProjectReference Include="..\..\..\src\AIMonitor.McpServer\AIMonitor.McpServer.csproj" />
     <ProjectReference Include="..\..\..\src\AIMonitor.Workflow\AIMonitor.Workflow.csproj" />

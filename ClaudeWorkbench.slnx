@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="src/AIMonitor.Cli/AIMonitor.Cli.csproj" />
   <Project Path="src/AIMonitor.Core/AIMonitor.Core.csproj" />
   <Project Path="src/AIMonitor.Data/AIMonitor.Data.csproj" />
   <Project Path="src/AIMonitor.Indexing/AIMonitor.Indexing.csproj" />
