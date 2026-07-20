@@ -49,3 +49,15 @@ route, as recorded above.
 
 See: [merge review guide](../guide/merge-review.md),
 [Architecture §4](../architecture/Architecture.md#4-the-two-gates).
+
+## Update — 2026-07-20
+
+The "**MCP/CLI** path (legacy)" named above no longer exists as two paths. `AIMonitor.Cli` has
+been retired (see [the retirement plan](../plans/retire-legacy-test-harness.md)); the CLI never
+spoke MCP — it constructed engine services directly, which is why an accept through it assumed an
+external tool had already merged the file, exactly as the WinMerge model this ADR retired.
+
+The `WinMergeDiffToolLauncher` / `StagedDiffLaunchWorkflow` launch path recorded as surviving
+"for the MCP/CLI path" was itself deleted earlier, along with the `launch_staged_diff` tool. The
+decision text above is left unchanged: it records what was decided and why, and the reasoning
+still holds.

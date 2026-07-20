@@ -177,3 +177,86 @@ Roughly 20 locations. Two are **dead links** the moment `docs/components/AIMonit
 ## Sequencing note
 
 Phases 1 and 2 are pure additions and can be done any time. Phase 0.1 gates Phase 4. Phase 3 gates Phase 4. Phase 5 is independent of the CLI work. Phase 6 must follow Phase 4 in the same session or the docs contradict the code — the failure mode this project has hit repeatedly.
+
+---
+
+## Appendix A — preserved implementations (Phase 0.3)
+
+`AIMonitor.Cli/Program.cs` is the **only place in the repository** that redacts source code
+before it reaches a log. Nothing consumes these routines today, and they die with the project.
+They are recorded here because if the MCP surface is ever asked to keep code out of
+`adapter.mcp.tool.called` telemetry, this is the prior art.
+
+### Why it exists
+
+The CLI logged every command as `adapter.query.started` / `adapter.query.completed` NDJSON,
+including the command line and a response preview. Two things in there are real source code:
+the values of `--old-text` / `--new-text`, and any `snippet` property in an index response. Both
+were replaced with `[redacted]` before logging. The MCP path has **no equivalent** — worth
+knowing rather than assuming parity.
+
+### Recursive `snippet` redaction
+
+```csharp
+private static string RedactResponseForLogPreview(string responseJson)
+{
+    try
+    {
+        JsonNode? node = JsonNode.Parse(responseJson);
+        RedactSnippetProperties(node);
+        return node?.ToJsonString(JsonOptions) ?? string.Empty;
+    }
+    catch (JsonException)
+    {
+        return "[unavailable]";   // never let a log preview throw
+    }
+}
+
+private static void RedactSnippetProperties(JsonNode? node)
+{
+    if (node is JsonObject jsonObject)
+    {
+        foreach (KeyValuePair<string, JsonNode?> property in jsonObject.ToList())
+        {
+            if (property.Key.Equals("snippet", StringComparison.OrdinalIgnoreCase))
+            {
+                jsonObject[property.Key] = "[redacted]";
+                continue;
+            }
+
+            RedactSnippetProperties(property.Value);
+        }
+
+        return;
+    }
+
+    if (node is JsonArray jsonArray)
+    {
+        foreach (JsonNode? item in jsonArray)
+        {
+            RedactSnippetProperties(item);
+        }
+    }
+}
+```
+
+### Sensitive-option-value redaction
+
+```csharp
+private static bool IsSensitiveTextOption(string option)
+{
+    return option.Equals("--old-text", StringComparison.OrdinalIgnoreCase)
+        || option.Equals("--new-text", StringComparison.OrdinalIgnoreCase);
+}
+```
+
+…applied in `CreateParamsPreview` / `CreateCommandLinePreview`, which walk the argument array and
+substitute `[redacted]` for the value following a sensitive flag.
+
+### The telemetry envelope
+
+`adapterProtocol = "cli-mcp-like"`, source `"AIMonitor.Cli"`, emitted as a started/completed pair
+with: `requestId`, `command`, `toolName`, `commandLine`, `paramsPreview`, `durationMs`, `isError`,
+`contentType`, `contentShape`, `contentCount`, `contentTextPreview`. The name was always aspirational —
+the CLI never spoke MCP; it shaped its logs to *look* like the MCP adapter's so both could be read in
+one stream. Recorded so nobody re-derives the shape from scratch.
