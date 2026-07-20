@@ -9,7 +9,17 @@
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="ClaudeWorkbench.Host.styles.css" />
     <ImportMap />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    @* Two icon links on purpose.
+
+       favicon.ico is listed first and also sits at the site root, because a browser running this in
+       app-window mode asks for /favicon.ico directly and may never read these <link> tags at all --
+       which is why replacing only favicon.png left the app window still showing the old mark.
+
+       The ?v= is a cache-buster. Favicons are cached far more aggressively than pages, and an app
+       window caches its icon per-profile, so a plain Ctrl+F5 does not necessarily refresh it. Bump
+       the version whenever the icon changes. *@
+    <link rel="icon" type="image/x-icon" href="favicon.ico?v=2" sizes="any" />
+    <link rel="icon" type="image/png" href="favicon.png?v=2" />
     <title>ClaudeWorkbench</title>
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
