@@ -273,9 +273,18 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             }
         }
 
-        return new ReviewActionResult(alsoRejected > 0
-            ? $"Rejected. Edit session stopped; {alsoRejected + 1} staged file(s) rejected."
-            : "Rejected.");
+        // The agent MUST be told, or it believes its candidate is still pending review and
+        // waits (or worse, reasons as though the change landed). Accept has always reported
+        // back; reject reported nothing, so a rejection was invisible to the agent.
+        string agentSummary = alsoRejected > 0
+            ? $"Rejected {record.RelativePath}. The edit session was stopped and {alsoRejected + 1} staged file(s) were rejected; none of them were written to watched source. Address the operator's feedback, then start a new session and re-stage."
+            : $"Rejected {record.RelativePath}; it was NOT written to watched source. Address the operator's feedback, then re-stage.";
+
+        return new ReviewActionResult(
+            alsoRejected > 0
+                ? $"Rejected. Edit session stopped; {alsoRejected + 1} staged file(s) rejected."
+                : "Rejected.",
+            agentSummary);
     }
 
     private void EnsureValidatedAndLaunched(StagedEditRecord record)

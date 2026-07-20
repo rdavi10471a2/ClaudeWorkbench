@@ -80,18 +80,30 @@
        this a wheel over a long line scrolls that line instead of bubbling to the pane's
        master scrollbar. */
     overflow-y: hidden;
-    /* The bar itself is hidden — the line still scrolls (shift+wheel, trackpad swipe, or
-       keyboard once focused). A visible bar inside a fixed min-height row consumes the row
-       rather than growing it, which sliced the text in half; and it only appears on the
-       lines that overflow, so those rows would be taller than their counterpart and the two
-       panes would drift out of row-for-row alignment. */
-    scrollbar-width: none;
+    /* The horizontal bar stays VISIBLE: it is the only cue that a line runs off the pane,
+       and the dialog cannot be widened to reveal the rest. It is thin so the row grows by a
+       few pixels rather than being crowded. Earlier this appeared to slice the text in half
+       — that was the VERTICAL bar (see overflow-y above), not this one. */
+    scrollbar-width: thin;
     padding: 0.25rem 0.65rem;
     white-space: pre;
 }
 
 .diff-view-line code::-webkit-scrollbar {
-    display: none;
+    height: 8px;
+}
+
+.diff-view-line code::-webkit-scrollbar-thumb {
+    background: #b6c2cf;
+    border-radius: 4px;
+}
+
+.diff-view-line code::-webkit-scrollbar-thumb:hover {
+    background: #8f9dab;
+}
+
+.diff-view-line code::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .diff-view-line.inserted {

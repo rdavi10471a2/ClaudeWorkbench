@@ -155,6 +155,16 @@ public partial class MergeReviewDialog : IAsyncDisposable
             string recordId = selectedRecordId;
             ReviewActionResult result = await Task.Run(() => Review.Reject(recordId));
             errorMessage = result.Message;
+
+            // Same contract as accept: telling the agent is best-effort transport, but a
+            // failure must be visible. A rejection the agent never hears about leaves it
+            // waiting on a review that already happened.
+            if (!string.IsNullOrWhiteSpace(result.AgentSummary)
+                && !await Sidecar.PostReviewOutcomeAsync(result.AgentSummary))
+            {
+                errorMessage = $"{result.Message} The agent could NOT be notified of the rejection (sidecar unreachable): {result.AgentSummary}";
+            }
+
             await LoadNextStateAsync();
         }
         catch (Exception ex)
