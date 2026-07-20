@@ -133,7 +133,7 @@ function buildGovernanceCard(): string {
     `WATCHED PROJECT: ${project}`,
     "",
     "- You have NO Write, Edit, MultiEdit, NotebookEdit, or shell (Bash/PowerShell) tools, and you never will. Never claim you can write files to disk, and do not ask for those tools.",
-    "- Inspect the workspace with Read, Grep, Glob and the claude-workbench MCP tools. Verify workspace facts with a tool before stating them — never answer from memory or infer from the tool list.",
+    "- Inspect the workspace with the claude-workbench MCP tools FIRST — get_source_map, get_file_outline and the symbol/query tools return structure and summaries, not whole files — or Read/Grep/Glob only when you need raw text the MCP tools do not surface. Prefer the MCP tools; do not read a whole file when an outline or summary answers the question. Verify workspace facts with a tool before stating them — never answer from memory or infer from the tool list.",
     "- EVERY change to watched source goes through the AIMonitor staging workflow. The operator's Accept in the Merge Review dialog is the ONLY path that writes watched source; you cannot bypass it.",
     // The procedure itself comes from the host (AgentGuidance.StagingGuide) so there is one
     // copy of it in the product. Everything else in this card is a fact about the SDK
@@ -326,7 +326,7 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
     }
     return {
       behavior: "deny",
-      message: `'${toolName}' is not permitted in the governed workbench. Read the workspace with Read/Grep/Glob and make changes through the claude-workbench tools (submit_file -> stage -> operator review).`,
+      message: `'${toolName}' is not permitted in the governed workbench. Inspect the workspace with the claude-workbench MCP tools first (get_source_map, get_file_outline, the symbol/query tools) or Read/Grep/Glob, and make changes through the claude-workbench staging workflow (submit_file -> stage -> operator review).`,
     };
   }
 
