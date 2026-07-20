@@ -12,6 +12,7 @@ How to operate ClaudeWorkbench. (For how it works inside, see
 7. [Settings & Usage](settings-and-usage.md) — model/reasoning, auto-approve, usage meters, auth
 8. [Troubleshooting](troubleshooting.md) — common issues and fixes
 9. [Deploying](deploying.md) — the Launcher, publishing a live install, how paths resolve
+10. [Testing](testing.md) — what is covered, grouped by capability, and the known gaps
 
 **The one rule to remember:** the agent proposes and stages; **you** accept; only the
 accept writes real source.

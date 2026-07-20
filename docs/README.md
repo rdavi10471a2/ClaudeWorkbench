@@ -81,7 +81,7 @@ Operating the app instead of hacking on it? Jump to the **[user guide](guide/)**
 | [ClaudeWorkbench.Launcher](components/ClaudeWorkbench.Launcher.md) | Multi-instance control panel: one host+sidecar+browser per workspace, Job Object lifetime |
 
 ### 📖 [guide/](guide/) — operating the workbench (user help)
-- [getting-started](guide/getting-started.md) · [the-governed-loop](guide/the-governed-loop.md) · [workspaces](guide/workspaces.md) · [merge-review](guide/merge-review.md) · [git-panel](guide/git-panel.md) · [tasks-board](guide/tasks-board.md) · [settings-and-usage](guide/settings-and-usage.md) · [troubleshooting](guide/troubleshooting.md) · [deploying](guide/deploying.md)
+- [getting-started](guide/getting-started.md) · [the-governed-loop](guide/the-governed-loop.md) · [workspaces](guide/workspaces.md) · [merge-review](guide/merge-review.md) · [git-panel](guide/git-panel.md) · [tasks-board](guide/tasks-board.md) · [settings-and-usage](guide/settings-and-usage.md) · [troubleshooting](guide/troubleshooting.md) · [deploying](guide/deploying.md) · [testing](guide/testing.md)
 
 ### 🧭 [decisions/](decisions/) — why (ADRs)
 - Key architectural decisions, numbered.

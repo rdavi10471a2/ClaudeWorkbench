@@ -162,39 +162,37 @@ dotnet test  ClaudeWorkbench.slnx
 ```
 
 The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test state:
+**224 tests — 218 pass · 6 skipped · 0 failed.**
 
-| Layer | Tests |
+Grouped by what is covered rather than by project, because the project layout says where code
+lives, not what is tested. Full breakdown, suite by suite: **[docs/guide/testing.md](docs/guide/testing.md)**.
+
+| Capability | Tests |
 |---|---|
-| Core · Logging | 6 · 3 |
-| MSBuild · Indexing | 7 · 6 |
-| Workflow (incl. ClaudeSmokes over `samples/`) | 46 |
-| Data (incl. the 42-case language corpus) | 72 pass · 6 skipped |
-| ClaudeWorkbench.Host | 15 |
-| Integration | 63 |
-| **Total** | **218 pass · 6 skipped · 0 failed** |
+| Semantic index & language coverage (incl. the 42-case language corpus) | 74 · 5 skipped |
+| MCP tool surface (out-of-process, real JSON-RPC) | 50 |
+| Edit workflow & staging | 35 |
+| Host & infrastructure (git panel, settings, logging) | 25 |
+| Review gates & decisions (incl. ADR-0005 session atomicity) | 22 |
+| Sample-driven authoring over `samples/watched-solutions/` | 18 |
+| **Total** | **224** |
 
-- **Six `[Fact(Skip)]`, all in Data.** Five are language-corpus cases the corpus harness cannot
-  express, because it synthesises a single project and those cases need more than one; each is
-  skipped individually with that reason so the gap stays countable rather than disappearing. The
-  sixth is the `razor-generated:*` reference-row assertion, which is environment-dependent —
-  those rows only index when the host Roslyn matches the SDK's Razor source generator. The
-  `razor:*` code-behind path stays covered. (Document-don't-pin.)
-- **Integration has no skips.** The one that remained pointed at an MCP stdio bridge and proxy
-  hub that have never existed in this repo, and deferred to a runner that could not run.
-- **No `AIMonitor.Runtime` row.** That project held the external diff-tool launcher; retiring
-  WinMerge emptied it, so the project and its two tests were deleted — they covered only the
-  removed machinery. The CLI tests that also drove it were *converted* (and later re-homed into
-  `EngineEditLifecycleTests` when the CLI itself went) to assert
-  `PreMergeValidationService` directly rather than dropped, since the validation half survives.
-- **Integration runs ~8m30s** on an otherwise idle machine (real MSBuild/Roslyn loads and real
+- **Everything runs under `dotnet test`.** No console runners, no flags to remember. Three such
+  runners and `AIMonitor.Cli` were retired ([plan](docs/plans/retire-legacy-test-harness.md)):
+  none of them could fail a build, so none of them was coverage. What they genuinely covered was
+  moved into the suites above *first*.
+- **The MCP surface has no unit-test project on purpose.** It is a thin wrapper over engine
+  services that are already unit-tested; what breaks in it — tool registration, JSON-RPC
+  serialization, watched-relative path resolution, the operator gate — is only observable across
+  a process boundary. So its 50 tests boot a real server and speak the real protocol.
+- **Six skips, all in the index category, both deliberate and countable.** Five are language-corpus
+  cases the harness cannot express (it synthesises a single project; those need more than one).
+  The sixth is the `razor-generated:*` rows, which only index when the host Roslyn matches the
+  SDK's Razor source generator — environment-dependent, so documented rather than pinned.
+- **Integration runs ~9-13m** depending on load (real MSBuild/Roslyn loads and a real
   `dotnet build` per gate test). It degrades sharply under contention — budget accordingly.
-- **No smoke-runner row, and no `AIMonitor.Cli` row.** Three console `Main` runners and the CLI
-  were retired ([plan](docs/plans/retire-legacy-test-harness.md)). They were never part of
-  `dotnet test`: each exited 0 unless a flag was passed, so none of them could fail a build. What
-  they covered that nothing else did was moved into the suites above first — the 42-case language
-  corpus (now `[Theory]` cases in Data, assertions unconditional), the Razor code-behind sweep,
-  the fixture index matrix, the overlay state machine, the rename-discovery flow, and 11
-  engine-lifecycle facts.
+- **Known gaps are listed** at the end of the testing guide rather than left implied — ADR-0006 is
+  enforced in the Node sidecar and is not covered by `dotnet test`.
 
 ## Roadmap
 
