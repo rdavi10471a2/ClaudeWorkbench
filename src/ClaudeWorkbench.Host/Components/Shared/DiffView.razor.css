@@ -76,8 +76,22 @@
     display: block;
     overflow-wrap: normal;
     overflow-x: auto;
+    /* Explicitly NOT scrollable vertically. A scrollable box captures the wheel, so without
+       this a wheel over a long line scrolls that line instead of bubbling to the pane's
+       master scrollbar. */
+    overflow-y: hidden;
+    /* The bar itself is hidden — the line still scrolls (shift+wheel, trackpad swipe, or
+       keyboard once focused). A visible bar inside a fixed min-height row consumes the row
+       rather than growing it, which sliced the text in half; and it only appears on the
+       lines that overflow, so those rows would be taller than their counterpart and the two
+       panes would drift out of row-for-row alignment. */
+    scrollbar-width: none;
     padding: 0.25rem 0.65rem;
     white-space: pre;
+}
+
+.diff-view-line code::-webkit-scrollbar {
+    display: none;
 }
 
 .diff-view-line.inserted {
