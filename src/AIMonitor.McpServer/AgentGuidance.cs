@@ -33,7 +33,7 @@ public static class AgentGuidance
         builder.AppendLine("2. Call `start_monitor_session(filesPlanned: [...])` before editing. Include every watched file the session intends to mutate, even for one-file edits, and include `owningProjectPath` when the index cannot prove a single owner.");
         builder.AppendLine("3. Pass that same `sessionId` to `refresh_file`, `new_file`, every mutation tool, and `stage_candidate_for_review`.");
         builder.AppendLine("4. For existing files, call `refresh_file`. For future watched files, call `new_file`.");
-        builder.AppendLine("5. Edit only the monitor-owned Working candidate with `submit_file`, text/span tools, or Roslyn typed edit tools. For C# symbol edits, call `get_source_map` (selector mode) first.");
+        builder.AppendLine("5. Edit the monitor-owned Working candidate with the typed tools (`submit_symbol`, `add_method`, `add_property`, `replace_span_in_file`, `replace_text_in_file`, `submit_file`). For C# symbol edits, call `get_source_map` (selector mode) first.");
         builder.AppendLine("6. Stage every planned file with `stage_candidate_for_review(path, sessionId)`, then STOP.");
         builder.AppendLine("7. The operator reviews the staged diff in the ClaudeWorkbench Merge Review dialog and accepts or rejects each file. Do NOT call `record_diff_decision` — review, the accept-time write to watched source, and the decision record are host/operator actions in this environment.");
         builder.AppendLine("8. After the operator accepts, that file has been written to the watched solution. Call `refresh_file` before editing the same file again.");
