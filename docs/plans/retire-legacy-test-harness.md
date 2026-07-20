@@ -12,12 +12,26 @@ Revert point before any of this: **`b8a1966`**. Each phase is its own commit.
 | 0.2 — ADR-0003 dated note | ✅ done | `35e10af` |
 | 0.3 — preserve redaction/telemetry (Appendix A) | ✅ done | `35e10af` |
 | 1 — language corpus → `dotnet test` | ✅ done | `e434748` (swept) |
-| 2 — salvage 3 scenarios from `ToolSmokeTests` | in progress | |
-| 3 — re-home the CLI-unique tests | ⚠️ code done, mutation-check outstanding | `e434748` (swept) |
-| 5.1a — salvage the Razor code-behind sweep | ✅ done | see below |
-| 4 — delete `AIMonitor.Cli` | blocked on 3 | |
-| 5 — delete the smoke runners | blocked on 1, 2, 5.1a | |
-| 6 — documentation sweep | blocked on 4 | |
+| 2 — salvage 3 scenarios from `ToolSmokeTests` | ✅ done | `e434748` (swept), `9160541` |
+| 3 — re-home the CLI-unique tests | ✅ done, mutation-check run | `e434748` (swept), `5fab01c` |
+| 5.1a — salvage the Razor code-behind sweep | ✅ done | `e434748` |
+| 4 — delete `AIMonitor.Cli` | ✅ done | `cfa9a1b` |
+| 5 — delete the smoke runners | ✅ done | this commit |
+| 6 — documentation sweep | ✅ done | this commit |
+
+**Final state: 218 pass · 6 skipped · 0 failed**, solution builds with 0 errors.
+
+Two notes for anyone reading the history rather than the result:
+
+- **`e434748` contains more than its message says.** Three agents were working in parallel and one
+  ran `git add -A`, sweeping Phase 1's and Phase 2's files into a commit titled for Phase 5.1a.
+  Worse, it captured `EngineEditLifecycleTests.cs` *mid-mutation* — Phase 3's rehydration check was
+  interrupted before it could restore the file, so the shared-instance variant was what landed.
+  `5fab01c` ran that check to completion and restored the fresh-instance seam.
+- **The Phase 3 mutation-check found what it was built to find.** The shared-instance variant
+  **passed** (2/2). That is the point: every guard was satisfiable from the warm in-memory cache,
+  so the test was green while asserting nothing about disk rehydration. This is why
+  `NewEditService` is called at every seam and why no test holds a service across steps.
 
 ## Why
 
@@ -180,7 +194,7 @@ Roughly 20 locations. Two are **dead links** the moment `docs/components/AIMonit
 |---|---|---|
 | Engine entry points | 3 (MCP, host, CLI) | 2 (MCP, host) |
 | Legacy console lines retired | — | ~2,800 of ~3,350 smoke + 709 CLI + 1,392 CLI tests |
-| Integration tests | 66 pass · 1 skip | ~45 + re-homed + salvaged |
+| Integration tests | 66 pass · 1 skip | 63 pass · 0 skip (21 CLI tests out, re-homed + salvaged in) |
 | Language-corpus cases | 42, manual, exits 0 on failure | 42 in `dotnet test`, assert by default |
 | Coverage pointed at production paths | partial | complete |
 

@@ -9,9 +9,6 @@
   <Project Path="src/ClaudeWorkbench.Host/ClaudeWorkbench.Host.csproj" />
   <Project Path="src/ClaudeWorkbench.Launcher/ClaudeWorkbench.Launcher.csproj" />
   <Project Path="tests/integration/AIMonitor.Integration.Tests/AIMonitor.Integration.Tests.csproj" />
-  <Project Path="tests/smoke/AIMonitor.LanguageCorpusSmokeTests/AIMonitor.LanguageCorpusSmokeTests.csproj" />
-  <Project Path="tests/smoke/AIMonitor.SmokeTests/AIMonitor.SmokeTests.csproj" />
-  <Project Path="tests/smoke/AIMonitor.ToolSmokeTests/AIMonitor.ToolSmokeTests.csproj" />
   <Project Path="tests/unit/AIMonitor.Core.Tests/AIMonitor.Core.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Data.Tests/AIMonitor.Data.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Indexing.Tests/AIMonitor.Indexing.Tests.csproj" />

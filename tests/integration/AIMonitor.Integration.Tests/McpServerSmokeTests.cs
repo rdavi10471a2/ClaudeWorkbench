@@ -363,26 +363,10 @@ public sealed class McpServerSmokeTests
         Assert.False(ExtractJsonBool(refreshJson, "isStale"));
     }
 
-    [Fact(Skip = "MCP stdio bridge connects to the WinForms-owned MCP proxy hub; cover it with ToolSmokeTests live workflows.")]
-    public async Task Mcp_bridge_forwards_stdio_to_server_and_records_request_response_telemetry()
-    {
-        McpFixture fixture = CreateFixture();
-        await using McpClient client = await CreateBridgeClientAsync(fixture);
-
-        CallToolResult status = await client.CallToolAsync("get_monitor_status");
-        Assert.False(status.IsError == true);
-        Assert.Contains("projectCount", ExtractToolText(status), StringComparison.Ordinal);
-
-        string logPath = Path.Combine(fixture.RuntimeRoot, "logs", "aimonitor.ndjson");
-        Assert.True(File.Exists(logPath));
-        string logText = await File.ReadAllTextAsync(logPath);
-        Assert.Contains("AIMonitor.McpProxyHub", logText, StringComparison.Ordinal);
-        Assert.Contains("adapter.mcp.request.started", logText, StringComparison.Ordinal);
-        Assert.Contains("adapter.mcp.request.completed", logText, StringComparison.Ordinal);
-        Assert.Contains("get_monitor_status", logText, StringComparison.Ordinal);
-        Assert.Contains("AIMonitor.McpServer", logText, StringComparison.Ordinal);
-        Assert.Contains("adapter.mcp.tool.called", logText, StringComparison.Ordinal);
-    }
+    // Removed with the ToolSmokeTests runner it deferred to (Phase 5.3). The test drove an MCP
+    // stdio bridge over a "WinForms-owned MCP proxy hub"; neither the bridge project nor the hub
+    // has ever existed in this repo or its history, so the skip pointed at coverage that could
+    // not be written. The live transport is Streamable HTTP, covered by the fixtures above.
 
     [Fact]
     public async Task Mcp_refresh_and_stage_use_monitor_working_copy()
@@ -1747,28 +1731,6 @@ public sealed class McpServerSmokeTests
             Name = "ai-monitor",
             Command = "dotnet",
             Arguments = [serverDll, "--repo-root", fixture.RepositoryRoot, "--config", fixture.SettingsPath],
-            WorkingDirectory = fixture.RepositoryRoot
-        };
-
-        return await McpClient.CreateAsync(new StdioClientTransport(options));
-    }
-
-    private static async Task<McpClient> CreateBridgeClientAsync(McpFixture fixture)
-    {
-        string bridgeDll = Path.Combine(
-            fixture.RepositoryRoot,
-            "src",
-            "AIMonitor.McpStdioBridge",
-            "bin",
-            GetBuildConfiguration(),
-            "net10.0",
-            "AIMonitor.McpStdioBridge.dll");
-
-        StdioClientTransportOptions options = new()
-        {
-            Name = "ai-monitor-bridge",
-            Command = "dotnet",
-            Arguments = [bridgeDll, "--repo-root", fixture.RepositoryRoot, "--config", fixture.SettingsPath],
             WorkingDirectory = fixture.RepositoryRoot
         };
 

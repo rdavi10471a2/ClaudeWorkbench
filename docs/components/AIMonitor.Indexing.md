@@ -2,7 +2,7 @@
 
 > Orchestrates building and refreshing the solution index after governed AI edits: it drives MSBuild loading + semantic extraction into the SQLite index, and owns the post-accept refresh (scoped vs full) plus the staged-decision workflow.
 
-**Project:** `src/AIMonitor.Indexing/AIMonitor.Indexing.csproj` · **Depends on:** `AIMonitor.Core`, `AIMonitor.Data`, `AIMonitor.Logging`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `Microsoft.CodeAnalysis.CSharp.Workspaces` · **Depended on by:** `ClaudeWorkbench.Host` (EngineReviewWorkflow), `AIMonitor.McpServer` (AIMonitorTools.Review), `AIMonitor.Cli`, `tests/smoke/AIMonitor.ToolSmokeTests`, `tests/unit/AIMonitor.Indexing.Tests`
+**Project:** `src/AIMonitor.Indexing/AIMonitor.Indexing.csproj` · **Depends on:** `AIMonitor.Core`, `AIMonitor.Data`, `AIMonitor.Logging`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `Microsoft.CodeAnalysis.CSharp.Workspaces` · **Depended on by:** `ClaudeWorkbench.Host` (EngineReviewWorkflow), `AIMonitor.McpServer` (AIMonitorTools.Review), `tests/unit/AIMonitor.Indexing.Tests`
 
 ## Purpose
 

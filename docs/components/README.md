@@ -15,7 +15,6 @@ reading, tests — and is written from the actual source.
 | [AIMonitor.Indexing](AIMonitor.Indexing.md) | orchestration | Rebuild/refresh; post-accept refresh (scoped vs full) |
 | [AIMonitor.Workflow](AIMonitor.Workflow.md) | **safety core** | Edit sessions, staging, the two gates, hash integrity |
 | [AIMonitor.McpServer](AIMonitor.McpServer.md) | surface | The governed MCP tool surface (~60 tools) |
-| [AIMonitor.Cli](AIMonitor.Cli.md) | tooling | Engine-side console runner (not in the app runtime path) |
 
 ## The app (two processes)
 

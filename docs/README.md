@@ -76,7 +76,6 @@ Operating the app instead of hacking on it? Jump to the **[user guide](guide/)**
 | [AIMonitor.Indexing](components/AIMonitor.Indexing.md) | Rebuild/refresh orchestration; post-accept refresh |
 | [AIMonitor.Workflow](components/AIMonitor.Workflow.md) | **Edit sessions, staging, the two gates, hash integrity** |
 | [AIMonitor.McpServer](components/AIMonitor.McpServer.md) | The governed MCP tool surface (~60 tools) |
-| [AIMonitor.Cli](components/AIMonitor.Cli.md) | Engine-side console runner (not in the app runtime path) |
 | [ClaudeWorkbench.Host](components/ClaudeWorkbench.Host.md) | **The Blazor host: UI + MCP HTTP + sidecar + the sole source writer** |
 | [Sidecar](components/Sidecar.md) | **Node: Claude Agent SDK, MCP client, the operator gate** |
 | [ClaudeWorkbench.Launcher](components/ClaudeWorkbench.Launcher.md) | Multi-instance control panel: one host+sidecar+browser per workspace, Job Object lifetime |

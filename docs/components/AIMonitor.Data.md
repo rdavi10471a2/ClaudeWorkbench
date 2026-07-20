@@ -2,7 +2,7 @@
 
 > SQLite persistence for the Roslyn-extracted solution index — the "downstream truth" written after an accepted edit and read back to answer structural queries.
 
-**Project:** `src/AIMonitor.Data/AIMonitor.Data.csproj` · **Depends on:** `AIMonitor.Core` (settings/paths, `StableIdentifier`), `AIMonitor.MSBuild` (snapshot DTOs + `MSBuildWorkspaceLoader`), `Microsoft.Data.Sqlite` 10.0.8 · **Depended on by:** `AIMonitor.Cli`, `AIMonitor.Indexing`, `AIMonitor.McpServer`, `ClaudeWorkbench.Host`, plus the integration/smoke/unit test suites
+**Project:** `src/AIMonitor.Data/AIMonitor.Data.csproj` · **Depends on:** `AIMonitor.Core` (settings/paths, `StableIdentifier`), `AIMonitor.MSBuild` (snapshot DTOs + `MSBuildWorkspaceLoader`), `Microsoft.Data.Sqlite` 10.0.8 · **Depended on by:** `AIMonitor.Indexing`, `AIMonitor.McpServer`, `ClaudeWorkbench.Host`, plus the integration/unit test suites (the language corpus fixtures live in `tests/unit/AIMonitor.Data.Tests/Corpus`)
 
 ## Purpose
 

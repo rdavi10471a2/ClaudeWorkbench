@@ -257,7 +257,6 @@ flowchart TD
     Indexing[AIMonitor.Indexing<br/>rebuild/refresh orchestration]
     Workflow[AIMonitor.Workflow<br/>edit sessions · staging · gates]
     Mcp[AIMonitor.McpServer<br/>the governed MCP tool surface]
-    Cli[AIMonitor.Cli<br/>engine-side console runner]
     Host[ClaudeWorkbench.Host<br/>Blazor + MCP HTTP + sidecar]
 
     MSBuild --> Data
@@ -269,7 +268,6 @@ flowchart TD
     Workflow --> Mcp
     Indexing --> Mcp
     Data --> Mcp
-    Mcp --> Cli
     Mcp --> Host
     Workflow --> Host
     Indexing --> Host

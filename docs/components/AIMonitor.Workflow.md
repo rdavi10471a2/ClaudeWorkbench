@@ -2,7 +2,7 @@
 
 > The governed-edit engine: it owns the monitor's Working mirror, stages candidate edits as immutable hashed records, and enforces the two review gates that stand between an AI-authored change and the watched source.
 
-**Project:** `src/AIMonitor.Workflow/AIMonitor.Workflow.csproj` · **Depends on:** `AIMonitor.Core`, `Microsoft.CodeAnalysis.CSharp.Workspaces` (Roslyn 5.3.0) · **Depended on by:** `AIMonitor.McpServer`, `AIMonitor.Indexing`, `ClaudeWorkbench.Host`, `AIMonitor.Cli`
+**Project:** `src/AIMonitor.Workflow/AIMonitor.Workflow.csproj` · **Depends on:** `AIMonitor.Core`, `Microsoft.CodeAnalysis.CSharp.Workspaces` (Roslyn 5.3.0) · **Depended on by:** `AIMonitor.McpServer`, `AIMonitor.Indexing`, `ClaudeWorkbench.Host`
 
 ## Purpose
 
@@ -143,7 +143,7 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 - Actually merging the accepted staged file into the watched source (the runtime/host review workflow applies the merge; this module classifies the result).
 - Presenting the review UI (`ClaudeWorkbench.Host`'s in-app Merge Review — this module only records `RecordDiffLaunch`). There is no external diff tool; that path was retired.
 - Solution indexing and the post-accept index rebuild (`AIMonitor.Indexing`; this module only flips the `IndexStale` flag).
-- MCP tool contracts / CLI parsing (`AIMonitor.McpServer`, `AIMonitor.Cli`).
+- MCP tool contracts (`AIMonitor.McpServer`).
 - `MonitorSettings`, workspace root layout, and the safe-path helpers it consumes from `AIMonitor.Core`.
 
 ## Gotchas & invariants

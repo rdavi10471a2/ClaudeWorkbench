@@ -69,16 +69,13 @@ src/
   AIMonitor.Workflow/    edit sessions, staging, review gates
   AIMonitor.Indexing/    Roslyn semantic extraction → index
   AIMonitor.McpServer/   MCP tool surface (governed discovery + mutation + review) — stdio console host
-  AIMonitor.Cli/         engine-side console runner — TEST-ONLY, and it calls the engine
-                         DIRECTLY, not through MCP (see docs/components/AIMonitor.Cli.md)
   ClaudeWorkbench.Host/  in-proc ASP.NET host: same tool surface over Streamable HTTP (:6100) + /health
   ClaudeWorkbench.Launcher/  WinForms control panel: one process per workspace, Job Object lifetime
 scripts/                 publish-live.ps1 — Release build of host+sidecar+launcher into one folder
                          (also runs automatically after any Release build of the solution)
 tests/
-  unit/                  xUnit per-layer tests
-  integration/           end-to-end over the CLI + engine
-  smoke/                 console smoke runners (built, run via CLI/manually — not dotnet test)
+  unit/                  xUnit per-layer tests (incl. the language corpus, Data.Tests/Corpus)
+  integration/           end-to-end over the MCP surface + engine
 samples/watched-solutions/   fixtures the ClaudeSmokes/integration tests operate on
 docs/                    developer + user docs — start at docs/README.md
   architecture/            C4 architecture, the governed loop, the two gates
@@ -169,22 +166,35 @@ The engine builds with **0 errors** and no WinForms/proxy/bridge. Current test s
 | Layer | Tests |
 |---|---|
 | Core · Logging | 6 · 3 |
-| MSBuild · Indexing | 6 · 6 |
+| MSBuild · Indexing | 7 · 6 |
 | Workflow (incl. ClaudeSmokes over `samples/`) | 46 |
-| Data | 27 pass · 1 skipped |
+| Data (incl. the 42-case language corpus) | 72 pass · 6 skipped |
 | ClaudeWorkbench.Host | 15 |
-| Integration | 66 pass · 1 skipped |
-| **Total** | **175 pass · 2 skipped · 0 failed** |
+| Integration | 63 |
+| **Total** | **218 pass · 6 skipped · 0 failed** |
 
-- **One `[Fact(Skip)]`** (Data): the `razor-generated:*` reference-row assertion is environment-dependent — those rows only index when the host Roslyn matches the SDK's Razor source generator. The `razor:*` code-behind path stays covered. (Document-don't-pin.)
-- **Skipped in Integration**: one by-design skip carried over from AIMonitor.
+- **Six `[Fact(Skip)]`, all in Data.** Five are language-corpus cases the corpus harness cannot
+  express, because it synthesises a single project and those cases need more than one; each is
+  skipped individually with that reason so the gap stays countable rather than disappearing. The
+  sixth is the `razor-generated:*` reference-row assertion, which is environment-dependent —
+  those rows only index when the host Roslyn matches the SDK's Razor source generator. The
+  `razor:*` code-behind path stays covered. (Document-don't-pin.)
+- **Integration has no skips.** The one that remained pointed at an MCP stdio bridge and proxy
+  hub that have never existed in this repo, and deferred to a runner that could not run.
 - **No `AIMonitor.Runtime` row.** That project held the external diff-tool launcher; retiring
   WinMerge emptied it, so the project and its two tests were deleted — they covered only the
-  removed machinery. The CLI tests that also drove it were *converted* to assert
+  removed machinery. The CLI tests that also drove it were *converted* (and later re-homed into
+  `EngineEditLifecycleTests` when the CLI itself went) to assert
   `PreMergeValidationService` directly rather than dropped, since the validation half survives.
 - **Integration runs ~8m30s** on an otherwise idle machine (real MSBuild/Roslyn loads and real
   `dotnet build` per gate test). It degrades sharply under contention — budget accordingly.
-- **Smoke runners** (`ToolSmokeTests`, `LanguageCorpusSmokeTests`, `SmokeTests`) are console `Main` programs — they build but are executed via the CLI/manually, not `dotnet test`.
+- **No smoke-runner row, and no `AIMonitor.Cli` row.** Three console `Main` runners and the CLI
+  were retired ([plan](docs/plans/retire-legacy-test-harness.md)). They were never part of
+  `dotnet test`: each exited 0 unless a flag was passed, so none of them could fail a build. What
+  they covered that nothing else did was moved into the suites above first — the 42-case language
+  corpus (now `[Theory]` cases in Data, assertions unconditional), the Razor code-behind sweep,
+  the fixture index matrix, the overlay state machine, the rename-discovery flow, and 11
+  engine-lifecycle facts.
 
 ## Roadmap
 

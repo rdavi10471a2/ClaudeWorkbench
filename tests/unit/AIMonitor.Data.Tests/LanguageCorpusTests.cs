@@ -248,7 +248,10 @@ public sealed class LanguageCorpusFixture : IAsyncLifetime
     public static LanguageCorpusCase[] LoadCorpusCases()
     {
         string repositoryRoot = ResolveRepositoryRoot(AppContext.BaseDirectory);
-        string corpusRoot = Path.Combine(repositoryRoot, "tests", "smoke", "AIMonitor.LanguageCorpusSmokeTests", "Corpus");
+        // The corpus moved here from tests/smoke/AIMonitor.LanguageCorpusSmokeTests when that
+        // console runner was deleted (Phase 5). The fixture data is the valuable part and is
+        // unchanged; only its owner changed.
+        string corpusRoot = Path.Combine(repositoryRoot, "tests", "unit", "AIMonitor.Data.Tests", "Corpus");
         List<LanguageCorpusCase> cases = [];
         foreach (string expectedPath in Directory.EnumerateFiles(corpusRoot, "expected.json", SearchOption.AllDirectories)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))

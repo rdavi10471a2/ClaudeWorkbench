@@ -2,7 +2,7 @@
 
 > Thin, structured logging sink for the AIMonitor engine: an `IMonitorLogger` abstraction, a JSON-lines file sink, and an in-proc sink that is also an event source for a live UI view.
 
-**Project:** `src/AIMonitor.Logging/AIMonitor.Logging.csproj` · **Depends on:** `AIMonitor.Core` (for `MonitorSettings`) and the .NET BCL (`System.Text.Json`, `System.IO`) · **Depended on by:** `ClaudeWorkbench.Host`, `AIMonitor.McpServer`, `AIMonitor.Indexing`, `AIMonitor.Cli` (plus the `AIMonitor.Logging.Tests` and `AIMonitor.ToolSmokeTests` test/smoke projects)
+**Project:** `src/AIMonitor.Logging/AIMonitor.Logging.csproj` · **Depends on:** `AIMonitor.Core` (for `MonitorSettings`) and the .NET BCL (`System.Text.Json`, `System.IO`) · **Depended on by:** `ClaudeWorkbench.Host`, `AIMonitor.McpServer`, `AIMonitor.Indexing` (plus the `AIMonitor.Logging.Tests` project)
 
 ## Purpose
 AIMonitor.Logging is the logging seam extracted from the AIMonitor engine so every component writes structured events through one small interface instead of ad-hoc console output. Each event is serialized as one JSON object per line (NDJSON) and appended to a single runtime log file. The module ships two `IMonitorLogger` implementations: a plain file-only sink (`JsonLinesMonitorLogger`) and a sink that additionally raises an in-process event after every write (`MonitorLogService`) so a Blazor view can tail the log live without re-reading the file.

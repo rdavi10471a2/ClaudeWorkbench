@@ -177,7 +177,8 @@ The legacy case is the surprising one. The expectation was that
 `MSBuildLocator.RegisterDefaults()` resolves the **SDK's** MSBuild, which would refuse a project
 expecting Visual Studio's — but the SDK's MSBuild evaluates an old-format project fine, and
 Roslyn produced a real semantic model from it (`NamedType`/`Method` symbols, not just parsed
-text). Both fixtures were indexed through `AIMonitor.Cli index rebuild`.
+text). Both fixtures were indexed through the engine's index-rebuild path (`SolutionIndexRebuildService`,
+the same code the `refresh_solution_index` tool calls).
 
 > **What that does and does not prove.** Both fixtures are deliberately simple: framework
 > references only, no NuGet restore, no `.targets` imports from a VS-only SDK, no WCF/WebForms/

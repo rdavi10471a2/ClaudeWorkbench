@@ -2,7 +2,7 @@
 
 > The foundational settings, path-resolution, and stable-identifier layer for the AIMonitor engine — resolves where the watched solution and runtime live before any other subsystem runs.
 
-**Project:** `src/AIMonitor.Core/AIMonitor.Core.csproj` · **Depends on:** none (leaf — no `ProjectReference`, targets `net10.0` with implicit usings + nullable enabled) · **Depended on by:** `AIMonitor.Cli`, `AIMonitor.Data`, `AIMonitor.Indexing`, `AIMonitor.Logging`, `AIMonitor.McpServer`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `ClaudeWorkbench.Host` (and the integration/smoke/unit test projects)
+**Project:** `src/AIMonitor.Core/AIMonitor.Core.csproj` · **Depends on:** none (leaf — no `ProjectReference`, targets `net10.0` with implicit usings + nullable enabled) · **Depended on by:** `AIMonitor.Data`, `AIMonitor.Indexing`, `AIMonitor.Logging`, `AIMonitor.McpServer`, `AIMonitor.MSBuild`, `AIMonitor.Workflow`, `ClaudeWorkbench.Host` (and the integration/unit test projects)
 
 ## Purpose
 AIMonitor.Core answers one question for every other module: *"Given a repository root, where is the watched solution, where is the runtime workspace, and what stable name identifies this configuration?"* It loads and saves the `Monitor` section of `config/appsettings.json`, normalizes every configured path to a rooted absolute path, and derives deterministic per-solution workspace folders and content-addressable identifiers. It holds no engine logic, no I/O beyond settings/probe files, and no UI — it is deliberately a thin, pure foundation.
