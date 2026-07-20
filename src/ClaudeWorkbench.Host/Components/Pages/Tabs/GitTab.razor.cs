@@ -4,10 +4,18 @@ using Microsoft.JSInterop;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Tabs;
 
-// Operator Git panel for the watched solution (VS Code-style source control): branch
-// switch/create, fetch/pull/push, staged/unstaged groups with per-file stage/unstage/
-// discard, a unified-diff viewer, and recent history. Talks only to
-// GitWorkspaceService; the same backend the gated GitMcpTools use.
+// Operator Git page — a READ-ONLY review of what has been done, plus a small, clearly
+// separated bar of operator-only write actions.
+//
+// Review (the focus): the uncommitted working-tree changes and the commit history are
+// both read-only and click-through — selecting a working file or a file within a commit
+// opens it in the shared DiffView (the same side-by-side surface the merge dialog uses,
+// reused unchanged). Bringing the agent's work INTO source is the merge workflow's job,
+// not this page's; this page is the rear-view mirror over the result.
+//
+// Writes (branch / commit / push / merge-to-main) are the operator's alone. They call
+// GitWorkspaceService directly — never MCP — and the outward/irreversible ones confirm
+// first. The agent has read-only git via MCP and cannot write the repo at all.
 public partial class GitTab : IAsyncDisposable
 {
     [Inject]
@@ -16,7 +24,7 @@ public partial class GitTab : IAsyncDisposable
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
-    // Collapsible / resizable left panel (changes + commit) vs the diff on the right.
+    // Collapsible / resizable left review panel vs the diff on the right.
     private ElementReference gitBody;
     private ElementReference gitLeft;
     private ElementReference gitRight;
@@ -27,20 +35,35 @@ public partial class GitTab : IAsyncDisposable
     private GitStatus? status;
     private IReadOnlyList<string> branches = [];
     private IReadOnlyList<GitCommit> history = [];
-    private string commitMessage = string.Empty;
     private bool busy;
     private string? resultMessage;
     private bool resultIsError;
-    private bool showHistory;
 
-    // Diff viewer state.
-    private string? selectedPath;
-    private bool selectedStaged;
+    // --- selection / diff state -------------------------------------------
+    // Exactly one of these selections is active at a time; picking one clears the other.
+    // A working-tree file (working-vs-HEAD diff)...
+    private string? selectedWorkingPath;
+    // ...or a file within a commit (parent-vs-commit diff).
+    private string? selectedCommit;
+    private string? selectedCommitPath;
+
+    // The commit whose file list is expanded inline in the history.
+    private string? expandedCommit;
+    private IReadOnlyList<GitCommitFile> expandedFiles = [];
+
+    // What the DiffView on the right is currently showing.
     private GitDiffContent? diffContent;
+    private string diffTitle = string.Empty;
+    private string diffOldLabel = string.Empty;
+    private string diffNewLabel = string.Empty;
 
-    // Inline new-branch form.
+    // Inline write forms.
     private bool newBranchOpen;
     private string newBranchName = string.Empty;
+    private bool commitOpen;
+    private string commitMessage = string.Empty;
+
+    private const string MainBranch = "main";
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -54,17 +77,14 @@ public partial class GitTab : IAsyncDisposable
 
         resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
 
-        // No C# "already attached" flag. The splitter element itself carries the guard
-        // (dataset.resizeAttached), so collapsing and restoring the left panel re-attaches when the
-        // element is genuinely new and no-ops when it is not. Two guards tracking one fact is how
-        // the splitter ends up silently dead after a toggle.
+        // The splitter element itself carries the "already attached" guard (dataset flag),
+        // so collapsing and restoring re-attaches only when the element is genuinely new.
         await resizeModule.InvokeVoidAsync("attachGitSplitter", gitBody, gitLeft, gitRight, gitSplitter);
     }
 
-    private void ToggleLeft()
-    {
-        leftCollapsed = !leftCollapsed;
-    }
+    private void ToggleLeft() => leftCollapsed = !leftCollapsed;
+
+    private bool OnMain => string.Equals(status?.Branch, MainBranch, StringComparison.Ordinal);
 
     private async Task ReloadAsync()
     {
@@ -76,32 +96,36 @@ public partial class GitTab : IAsyncDisposable
             if (status.IsRepository)
             {
                 branches = await Git.ListBranchesAsync();
-                history = await Git.LogAsync(15);
-                if (string.IsNullOrWhiteSpace(commitMessage) && status.HasChanges)
-                {
-                    commitMessage = GitWorkspaceService.DraftCommitMessage(status);
-                }
+                history = await Git.LogAsync(30);
 
-                // Keep an open diff current, or drop it if the file is no longer changed.
-                if (selectedPath is not null)
+                // Keep an open working-tree diff current, or drop it if the file is no
+                // longer changed. Commit diffs are immutable, so they need no refresh.
+                if (selectedWorkingPath is not null)
                 {
                     GitChange? still = status.Changes.FirstOrDefault(change =>
-                        string.Equals(change.Path, selectedPath, StringComparison.Ordinal));
+                        string.Equals(change.Path, selectedWorkingPath, StringComparison.Ordinal));
                     if (still is null)
                     {
-                        selectedPath = null;
-                        diffContent = null;
+                        ClearDiff();
                     }
                     else
                     {
-                        diffContent = await Git.GetDiffContentAsync(still.Path, selectedStaged, still.IsUntracked);
+                        diffContent = await Git.GetDiffContentAsync(still.Path, staged: false, still.IsUntracked);
                     }
+                }
+
+                // Drop an expanded commit that fell out of the reloaded history window.
+                if (expandedCommit is not null && !history.Any(c => string.Equals(c.Hash, expandedCommit, StringComparison.Ordinal)))
+                {
+                    expandedCommit = null;
+                    expandedFiles = [];
                 }
             }
             else
             {
                 branches = [];
                 history = [];
+                ClearDiff();
             }
         }
         finally
@@ -111,69 +135,74 @@ public partial class GitTab : IAsyncDisposable
         }
     }
 
-    private async Task SelectFileAsync(GitChange change, bool staged)
+    // --- read-only review selection ---------------------------------------
+    private async Task SelectWorkingFileAsync(GitChange change)
     {
-        selectedPath = change.Path;
-        selectedStaged = staged;
-        diffContent = await Git.GetDiffContentAsync(change.Path, staged, change.IsUntracked);
+        selectedWorkingPath = change.Path;
+        selectedCommit = null;
+        selectedCommitPath = null;
+        diffContent = await Git.GetDiffContentAsync(change.Path, staged: false, change.IsUntracked);
+        diffTitle = change.Path;
+        diffOldLabel = "HEAD";
+        diffNewLabel = "Working tree";
         StateHasChanged();
     }
 
-    private Task StageFile(GitChange change) => RunAsync(() => Git.StageAsync(change.Path), $"Staged {change.Path}.");
-
-    private Task UnstageFile(GitChange change) => RunAsync(() => Git.UnstageAsync(change.Path), $"Unstaged {change.Path}.");
-
-    private async Task DiscardFile(GitChange change)
+    private async Task ToggleCommitAsync(GitCommit commit)
     {
-        bool confirmed = await JS.InvokeAsync<bool>(
-            "confirm",
-            $"Discard changes to {change.Path}? This cannot be undone.");
-        if (!confirmed)
+        if (string.Equals(expandedCommit, commit.Hash, StringComparison.Ordinal))
         {
+            expandedCommit = null;
+            expandedFiles = [];
             return;
         }
 
-        await RunAsync(() => Git.DiscardAsync(change.Path, change.IsUntracked), $"Discarded {change.Path}.");
-        if (string.Equals(selectedPath, change.Path, StringComparison.Ordinal))
-        {
-            selectedPath = null;
-            diffContent = null;
-        }
+        expandedCommit = commit.Hash;
+        expandedFiles = await Git.CommitFilesAsync(commit.Hash);
+        StateHasChanged();
     }
 
-    private Task StageAllAsync() => RunAsync(() => Git.StageAllAsync(), "Staged all changes.");
-
-    private async Task CommitAsync()
+    private async Task SelectCommitFileAsync(GitCommit commit, GitCommitFile file)
     {
-        if (string.IsNullOrWhiteSpace(commitMessage))
-        {
-            return;
-        }
-
-        string message = commitMessage;
-        bool committed = await RunAsync(() => Git.CommitAsync(message), "Committed.");
-        if (committed)
-        {
-            commitMessage = string.Empty;
-            selectedPath = null;
-            diffContent = null;
-        }
+        selectedCommit = commit.Hash;
+        selectedCommitPath = file.Path;
+        selectedWorkingPath = null;
+        diffContent = await Git.GetCommitDiffContentAsync(commit.Hash, file.Path);
+        diffTitle = file.Path;
+        diffOldLabel = $"{Short(commit.Hash)}~1";
+        diffNewLabel = Short(commit.Hash);
+        StateHasChanged();
     }
 
-    private Task PushAsync() => RunAsync(() => Git.PushAsync(), "Pushed to the remote.");
+    private bool IsWorkingSelected(GitChange change) =>
+        selectedWorkingPath is not null && string.Equals(selectedWorkingPath, change.Path, StringComparison.Ordinal);
 
-    private Task FetchAsync() => RunAsync(() => Git.FetchAsync(), "Fetched from the remote.");
+    private bool IsCommitFileSelected(GitCommit commit, GitCommitFile file) =>
+        string.Equals(selectedCommit, commit.Hash, StringComparison.Ordinal)
+        && string.Equals(selectedCommitPath, file.Path, StringComparison.Ordinal);
 
-    private Task PullAsync() => RunAsync(() => Git.PullAsync(), "Pulled from the remote.");
+    private void ClearDiff()
+    {
+        selectedWorkingPath = null;
+        selectedCommit = null;
+        selectedCommitPath = null;
+        diffContent = null;
+    }
 
-    private Task InitAsync() => RunAsync(() => Git.InitAsync(), "Initialized git repository.");
+    private static string Short(string hash) => hash.Length > 8 ? hash[..8] : hash;
 
+    // --- operator write actions (direct GitWorkspaceService, never MCP) ----
     private async Task OnBranchSelected(ChangeEventArgs args)
     {
         string? target = args.Value?.ToString();
         if (string.IsNullOrWhiteSpace(target) || string.Equals(target, status?.Branch, StringComparison.Ordinal))
         {
             return;
+        }
+
+        if (!await ConfirmAsync($"Switch to branch '{target}'? This changes the working-tree files."))
+        {
+            return; // Re-render restores the select to the current branch.
         }
 
         await RunAsync(() => Git.SwitchBranchAsync(target), $"Switched to {target}.");
@@ -194,6 +223,70 @@ public partial class GitTab : IAsyncDisposable
             newBranchOpen = false;
         }
     }
+
+    private async Task CommitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(commitMessage))
+        {
+            return;
+        }
+
+        string message = commitMessage;
+        bool committed = await RunAsync(() => Git.CommitAsync(message), "Committed.");
+        if (committed)
+        {
+            commitMessage = string.Empty;
+            commitOpen = false;
+            ClearDiff();
+        }
+    }
+
+    private void OpenCommit()
+    {
+        commitOpen = true;
+        if (string.IsNullOrWhiteSpace(commitMessage) && status is not null && status.HasChanges)
+        {
+            commitMessage = GitWorkspaceService.DraftCommitMessage(status);
+        }
+    }
+
+    private async Task PushAsync()
+    {
+        if (!await ConfirmAsync("Push the current branch's commits to the remote?"))
+        {
+            return;
+        }
+
+        await RunAsync(() => Git.PushAsync(), "Pushed to the remote.");
+    }
+
+    private Task FetchAsync() => RunAsync(() => Git.FetchAsync(), "Fetched from the remote.");
+
+    private async Task PullAsync()
+    {
+        if (!await ConfirmAsync("Pull (fast-forward only) from the remote?"))
+        {
+            return;
+        }
+
+        await RunAsync(() => Git.PullAsync(), "Pulled from the remote.");
+    }
+
+    private async Task MergeToMainAsync()
+    {
+        string current = status?.Branch ?? "this branch";
+        if (!await ConfirmAsync($"Merge '{current}' into {MainBranch}? A clean working tree is required; on conflict the merge is aborted and you stay on '{current}'."))
+        {
+            return;
+        }
+
+        await RunAsync(() => Git.MergeCurrentIntoMainAsync(MainBranch), $"Merged into {MainBranch}.");
+    }
+
+    private Task InitAsync() => RunAsync(() => Git.InitAsync(), "Initialized git repository.");
+
+    private async Task<bool> ConfirmAsync(string message) =>
+        await JS.InvokeAsync<bool>("confirm", message);
 
     private async Task<bool> RunAsync(Func<Task<GitResult>> action, string successMessage)
     {

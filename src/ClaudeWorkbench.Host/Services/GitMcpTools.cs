@@ -3,11 +3,13 @@ using ModelContextProtocol.Server;
 
 namespace ClaudeWorkbench.Host.Services;
 
-// Governed git surface for the agent. The agent NEVER runs a shell; it calls these
-// specific verbs, each a fixed argv to the git executable. Reads (status/diff/log/
-// branches) auto-allow at the sidecar gate; the mutations (commit/push/create_branch/
-// switch_branch) pause at the operator gate for approval — so "type a prompt to do
-// git" works while every outward/irreversible action still needs the operator's OK.
+// Read-only git surface for the agent. The agent NEVER runs a shell and NEVER writes
+// git: it calls these specific read verbs (status/diff/log/branches), each a fixed
+// argv to the git executable, and they all auto-allow at the sidecar gate. Every git
+// WRITE (commit, push, branch, merge) is deliberately absent here — those live only in
+// the operator's Git page (direct GitWorkspaceService calls, gated by the human at the
+// UI). Keeping writes out of MCP entirely means auto-approve has nothing to bypass:
+// the agent can *see* the repo to reason about it, but only the operator changes it.
 // Backed by the same GitWorkspaceService as the operator Git panel.
 [McpServerToolType]
 public sealed class GitMcpTools
@@ -99,67 +101,14 @@ public sealed class GitMcpTools
     [Description("List local branches in the watched solution's repository. Read-only.")]
     public Task<IReadOnlyList<string>> GitListBranches() => git.ListBranchesAsync();
 
-    [McpServerTool]
-    [Description("Commit the watched solution's changes with a message. Commits the staged set if anything is staged, otherwise stages all changes and commits them. GOVERNED: this pauses at the operator's approval gate before running.")]
-    public async Task<GitActionResult> GitCommit(
-        [Description("The commit message.")] string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return new GitActionResult(false, "A commit message is required.");
-        }
-
-        return ToActionResult(await git.CommitAsync(message).ConfigureAwait(false), "Committed.");
-    }
-
-    [McpServerTool]
-    [Description("Push the current branch's commits to the remote (sets upstream on a branch's first push). GOVERNED: this pauses at the operator's approval gate before running. Nothing reaches the remote without operator approval.")]
-    public async Task<GitActionResult> GitPush()
-        => ToActionResult(await git.PushAsync().ConfigureAwait(false), "Pushed to the remote.");
-
-    [McpServerTool]
-    [Description("Create a new branch in the watched solution and switch to it. GOVERNED: this pauses at the operator's approval gate before running.")]
-    public async Task<GitActionResult> GitCreateBranch(
-        [Description("The new branch name.")] string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return new GitActionResult(false, "A branch name is required.");
-        }
-
-        return ToActionResult(await git.CreateBranchAsync(name).ConfigureAwait(false), $"Created and switched to branch '{name}'.");
-    }
-
-    [McpServerTool]
-    [Description("Switch the watched solution to an existing branch. GOVERNED: this pauses at the operator's approval gate before running (it changes the working-tree files).")]
-    public async Task<GitActionResult> GitSwitchBranch(
-        [Description("The branch to switch to.")] string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return new GitActionResult(false, "A branch name is required.");
-        }
-
-        return ToActionResult(await git.SwitchBranchAsync(name).ConfigureAwait(false), $"Switched to branch '{name}'.");
-    }
-
-    private static GitActionResult ToActionResult(GitResult result, string successMessage)
-    {
-        if (result.Ok)
-        {
-            return new GitActionResult(true, string.IsNullOrWhiteSpace(result.StdOut) ? successMessage : $"{successMessage} {result.StdOut}");
-        }
-
-        string detail = !string.IsNullOrWhiteSpace(result.StdErr) ? result.StdErr : result.StdOut;
-        return new GitActionResult(false, string.IsNullOrWhiteSpace(detail) ? "git command failed." : detail);
-    }
+    // No git write tools (commit/push/branch/merge) are exposed to the agent by design.
+    // Those actions belong to the operator alone and live in the Git page's UI, which
+    // calls GitWorkspaceService directly. See the class remarks above.
 }
 
 public sealed record GitFileChange(string Path, string Status, bool Staged, bool Unstaged, bool Untracked);
 
 public sealed record GitCommitInfo(string Hash, string Subject, string Author, string RelativeDate);
-
-public sealed record GitActionResult(bool Success, string Message);
 
 public sealed record GitStatusResult(
     bool IsRepository,

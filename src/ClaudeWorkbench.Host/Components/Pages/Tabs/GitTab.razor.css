@@ -105,19 +105,44 @@
 .git-badge.ahead { background: #e6f4ea; color: #137333; }
 .git-badge.behind { background: #fce8e6; color: #a50e0e; }
 .git-badge.noremote { background: #fef7e0; color: #b06000; }
+.git-badge.dirty { background: #fef7e0; color: #b06000; }
+.git-badge.clean { background: #e6f4ea; color: #137333; }
 
-.git-newbranch {
+.git-bar-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 2px;
+    background: var(--rz-border-color, #e0e0e0);
+}
+
+/* --- inline write forms (new branch / commit) --- */
+.git-inline-form {
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    background: var(--rz-base-100, #f5f6f7);
+    border: 1px solid var(--rz-border-color, #e0e0e0);
+    border-radius: 8px;
 }
 
-.git-newbranch-input {
+.git-inline-form.commit {
+    align-items: stretch;
+    flex-direction: column;
+}
+
+.git-inline-input {
     padding: 5px 8px;
     border: 1px solid var(--rz-border-color, #ccc);
     border-radius: 6px;
     min-width: 220px;
     font-family: inherit;
+}
+
+.git-inline-actions {
+    display: flex;
+    gap: 8px;
 }
 
 /* --- body: left list + right diff --- */
@@ -162,13 +187,7 @@
     overflow: hidden;
 }
 
-/* --- commit box --- */
-.git-commit {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
+/* --- commit box (inside the inline commit form) --- */
 .git-commit-message {
     width: 100%;
     resize: vertical;
@@ -177,11 +196,6 @@
     border: 1px solid var(--rz-border-color, #ccc);
     border-radius: 6px;
     box-sizing: border-box;
-}
-
-.git-actions {
-    display: flex;
-    gap: 8px;
 }
 
 /* --- change groups --- */
@@ -242,6 +256,7 @@
 .git-file-code.staged { color: #137333; }
 .git-file-code.unstaged { color: #b06000; }
 .git-file-code.untracked { color: #1a73e8; }
+.git-file-code.deleted { color: #a50e0e; }
 
 .git-file-path {
     flex: 1;
@@ -283,21 +298,40 @@
     padding: 8px 4px;
 }
 
-/* --- history --- */
+/* --- history (click-through commit review) --- */
 .git-history {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    max-height: 220px;
-    overflow: auto;
+    gap: 1px;
 }
 
 .git-commit-row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
-    padding: 3px 4px;
+    padding: 4px 4px;
     font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 5px;
+    user-select: none;
+}
+
+.git-commit-row:hover {
+    background: var(--rz-base-100, #f5f6f7);
+}
+
+.git-commit-row.expanded {
+    background: var(--rz-base-100, #eef2f6);
+    font-weight: 600;
+}
+
+.git-commit-files {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 2px 0 6px 22px;
+    padding-left: 8px;
+    border-left: 2px solid var(--rz-border-color, #e0e0e0);
 }
 
 .git-hash {

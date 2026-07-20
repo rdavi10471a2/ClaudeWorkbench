@@ -3,7 +3,7 @@
 <div class="git-tab">
     @if (!Git.HasWorkspace)
     {
-        <div class="git-empty">Select a watched solution to manage its git repository.</div>
+        <div class="git-empty">Select a watched solution to review its git history.</div>
     }
     else if (status is null)
     {
@@ -38,7 +38,7 @@
         <div class="git-header">
             <div class="git-branchbar">
                 <RadzenIcon Icon="account_tree" />
-                <select class="git-branch-select" value="@status.Branch" @onchange="OnBranchSelected" disabled="@busy">
+                <select class="git-branch-select" value="@status.Branch" @onchange="OnBranchSelected" disabled="@busy" title="Switch branch (confirms — changes the working tree)">
                     @if (status.Branch is not null && !branches.Contains(status.Branch))
                     {
                         <option value="@status.Branch">@status.Branch</option>
@@ -66,23 +66,40 @@
                 {
                     <span class="git-badge noremote" title="No remote configured">no remote</span>
                 }
+                @if (status.HasChanges)
+                {
+                    <span class="git-badge dirty" title="Uncommitted changes in the working tree">@status.Changes.Count uncommitted</span>
+                }
+                else
+                {
+                    <span class="git-badge clean" title="Nothing to commit">clean</span>
+                }
             </div>
+
             <div class="git-syncbar">
                 <RadzenButton Icon="vertical_split"
                               Text="@(leftCollapsed ? "Show Panel" : "Hide Panel")"
                               ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                              Click="@ToggleLeft" Title="Show or hide the changes panel" />
+                              Click="@ToggleLeft" Title="Show or hide the review panel" />
                 <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@busy" Click="@ReloadAsync" />
+                <span class="git-bar-sep" aria-hidden="true"></span>
+                @* Operator-only write actions. These call GitWorkspaceService directly (never
+                   MCP); the outward/irreversible ones confirm first. *@
+                <RadzenButton Icon="edit_note" Text="Commit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                              Disabled="@(busy || !status.HasChanges)" Click="@OpenCommit" Title="Commit the working-tree changes" />
                 <RadzenButton Icon="download" Text="Fetch" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@FetchAsync" />
                 <RadzenButton Icon="south" Text="Pull" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@PullAsync" />
-                <RadzenButton Icon="cloud_upload" Text="Push" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@PushAsync" />
+                <RadzenButton Icon="cloud_upload" Text="Push" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@PushAsync" />
+                <RadzenButton Icon="merge" Text="Merge to main" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                              Disabled="@(busy || OnMain)" Click="@MergeToMainAsync"
+                              Title="@(OnMain ? "Already on main" : "Merge this branch into main (requires a clean tree)")" />
             </div>
         </div>
 
         @if (newBranchOpen)
         {
-            <div class="git-newbranch">
-                <input class="git-newbranch-input" @bind="newBranchName" @bind:event="oninput" placeholder="new-branch-name" />
+            <div class="git-inline-form">
+                <input class="git-inline-input" @bind="newBranchName" @bind:event="oninput" placeholder="new-branch-name" />
                 <RadzenButton Icon="check" Text="Create" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
                               Disabled="@(busy || string.IsNullOrWhiteSpace(newBranchName))" Click="@CreateBranchAsync" />
                 <RadzenButton Icon="close" Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
@@ -90,115 +107,121 @@
             </div>
         }
 
+        @if (commitOpen)
+        {
+            <div class="git-inline-form commit">
+                <textarea class="git-commit-message" @bind="commitMessage" @bind:event="oninput" placeholder="Commit message" rows="2"></textarea>
+                <div class="git-inline-actions">
+                    <RadzenButton Icon="check" Text="Commit all changes" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                                  Disabled="@(busy || !status.HasChanges || string.IsNullOrWhiteSpace(commitMessage))" Click="@CommitAsync"
+                                  Title="Stage everything (if nothing is staged) and commit." />
+                    <RadzenButton Icon="close" Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Click="@(() => commitOpen = false)" />
+                </div>
+            </div>
+        }
+
+        @if (resultMessage is not null)
+        {
+            <div class="git-result @(resultIsError ? "error" : "ok")">@resultMessage</div>
+        }
+
         <div class="git-body" @ref="gitBody">
             @if (!leftCollapsed)
             {
             <div class="git-left" @ref="gitLeft">
-                <div class="git-commit">
-                    <textarea class="git-commit-message" @bind="commitMessage" @bind:event="oninput" placeholder="Commit message" rows="2"></textarea>
-                    <div class="git-actions">
-                        <RadzenButton Icon="check" Text="Commit" ButtonStyle="ButtonStyle.Primary"
-                                      Disabled="@(busy || !status.HasChanges || string.IsNullOrWhiteSpace(commitMessage))"
-                                      Click="@CommitAsync"
-                                      Title="Commit staged changes (or all changes if nothing is staged)." />
-                        @if (status.HasChanges && !status.HasStaged)
+                @* --- Uncommitted changes (read-only review) --- *@
+                <div class="git-group">
+                    <div class="git-group-head">Uncommitted changes <span class="git-count">@status.Changes.Count</span></div>
+                    @if (!status.HasChanges)
+                    {
+                        <div class="git-clean">Working tree clean.</div>
+                    }
+                    else
+                    {
+                        @foreach (GitChange change in status.Changes)
                         {
-                            <RadzenButton Icon="add" Text="Stage All" ButtonStyle="ButtonStyle.Light" Disabled="@busy" Click="@StageAllAsync" />
-                        }
-                    </div>
-                </div>
-
-                @if (status.HasStaged)
-                {
-                    <div class="git-group">
-                        <div class="git-group-head">Staged Changes <span class="git-count">@status.Staged.Count</span></div>
-                        @foreach (GitChange change in status.Staged)
-                        {
-                            <div class="git-file @(string.Equals(selectedPath, change.Path, StringComparison.Ordinal) && selectedStaged ? "selected" : "")"
-                                 @onclick="@(() => SelectFileAsync(change, true))">
-                                <span class="git-file-code staged">@change.StagedCode</span>
-                                <span class="git-file-path" title="@change.Path">@change.Path</span>
-                                <span class="git-file-actions">
-                                    <button class="git-icon-btn" title="Unstage" @onclick:stopPropagation="true" @onclick="@(() => UnstageFile(change))">&minus;</button>
-                                </span>
-                            </div>
-                        }
-                    </div>
-                }
-
-                @if (status.Unstaged.Any())
-                {
-                    <div class="git-group">
-                        <div class="git-group-head">Changes <span class="git-count">@status.Unstaged.Count</span></div>
-                        @foreach (GitChange change in status.Unstaged)
-                        {
-                            <div class="git-file @(string.Equals(selectedPath, change.Path, StringComparison.Ordinal) && !selectedStaged ? "selected" : "")"
-                                 @onclick="@(() => SelectFileAsync(change, false))">
+                            <div class="git-file @(IsWorkingSelected(change) ? "selected" : "")"
+                                 @onclick="@(() => SelectWorkingFileAsync(change))">
                                 <span class="git-file-code @(change.IsUntracked ? "untracked" : "unstaged")">@change.UnstagedCode</span>
                                 <span class="git-file-path" title="@change.Path">@change.Path</span>
-                                <span class="git-file-actions">
-                                    <button class="git-icon-btn" title="Stage" @onclick:stopPropagation="true" @onclick="@(() => StageFile(change))">+</button>
-                                    <button class="git-icon-btn danger" title="Discard" @onclick:stopPropagation="true" @onclick="@(() => DiscardFile(change))">&times;</button>
-                                </span>
                             </div>
                         }
-                    </div>
-                }
-
-                @if (!status.HasChanges)
-                {
-                    <div class="git-clean">Working tree clean — nothing to commit.</div>
-                }
-
-                <div class="git-group">
-                    <div class="git-group-head clickable" @onclick="@(() => showHistory = !showHistory)">
-                        <RadzenIcon Icon="@(showHistory ? "expand_more" : "chevron_right")" /> History
-                    </div>
-                    @if (showHistory)
-                    {
-                        <div class="git-history">
-                            @foreach (GitCommit commit in history)
-                            {
-                                <div class="git-commit-row">
-                                    <code class="git-hash">@commit.Hash</code>
-                                    <span class="git-commit-subject" title="@commit.Subject">@commit.Subject</span>
-                                    <span class="git-commit-meta">@commit.Author · @commit.RelativeDate</span>
-                                </div>
-                            }
-                            @if (history.Count == 0)
-                            {
-                                <div class="git-empty-sub">No commits yet.</div>
-                            }
-                        </div>
                     }
                 </div>
 
-                @if (resultMessage is not null)
-                {
-                    <div class="git-result @(resultIsError ? "error" : "ok")">@resultMessage</div>
-                }
+                @* --- History (click-through commit review) --- *@
+                <div class="git-group">
+                    <div class="git-group-head">History</div>
+                    <div class="git-history">
+                        @foreach (GitCommit commit in history)
+                        {
+                            bool expanded = string.Equals(expandedCommit, commit.Hash, StringComparison.Ordinal);
+                            <div class="git-commit-row @(expanded ? "expanded" : "")" @onclick="@(() => ToggleCommitAsync(commit))">
+                                <RadzenIcon Icon="@(expanded ? "expand_more" : "chevron_right")" />
+                                <code class="git-hash">@Short(commit.Hash)</code>
+                                <span class="git-commit-subject" title="@commit.Subject">@commit.Subject</span>
+                                <span class="git-commit-meta">@commit.Author · @commit.RelativeDate</span>
+                            </div>
+                            @if (expanded)
+                            {
+                                <div class="git-commit-files">
+                                    @if (expandedFiles.Count == 0)
+                                    {
+                                        <div class="git-empty-sub">No file changes in this commit.</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (GitCommitFile file in expandedFiles)
+                                        {
+                                            <div class="git-file @(IsCommitFileSelected(commit, file) ? "selected" : "")"
+                                                 @onclick:stopPropagation="true"
+                                                 @onclick="@(() => SelectCommitFileAsync(commit, file))">
+                                                <span class="git-file-code @CommitStatusClass(file)">@file.Status</span>
+                                                <span class="git-file-path" title="@file.Path">@file.Path</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            }
+                        }
+                        @if (history.Count == 0)
+                        {
+                            <div class="git-empty-sub">No commits yet.</div>
+                        }
+                    </div>
+                </div>
             </div>
             <div class="git-splitter" @ref="gitSplitter" title="Drag to resize" aria-hidden="true"></div>
             }
 
             <div class="git-right" @ref="gitRight">
-                @if (selectedPath is null)
+                @if (diffContent is null)
                 {
-                    <div class="git-diff-empty">Select a file to view its diff.</div>
+                    <div class="git-diff-empty">Select an uncommitted file or a file within a commit to review its diff.</div>
                 }
                 else
                 {
                     <div class="git-diff-toolbar">
-                        <span class="git-diff-title" title="@selectedPath">@selectedPath@(selectedStaged ? " · staged" : "")</span>
+                        <span class="git-diff-title" title="@diffTitle">@diffTitle</span>
                     </div>
                     <div class="git-diff-view">
-                        <DiffView OldText="@(diffContent?.OldText ?? string.Empty)"
-                                  NewText="@(diffContent?.NewText ?? string.Empty)"
-                                  OldLabel="@(selectedStaged ? "HEAD" : "Repository")"
-                                  NewLabel="@(selectedStaged ? "Staged" : "Working tree")" />
+                        <DiffView OldText="@(diffContent.OldText)"
+                                  NewText="@(diffContent.NewText)"
+                                  OldLabel="@diffOldLabel"
+                                  NewLabel="@diffNewLabel" />
                     </div>
                 }
             </div>
         </div>
     }
 </div>
+
+@code {
+    private static string CommitStatusClass(GitCommitFile file) => file.Status switch
+    {
+        'A' => "untracked",
+        'D' => "deleted",
+        _ => "unstaged",
+    };
+}

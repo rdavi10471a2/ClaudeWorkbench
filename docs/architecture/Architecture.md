@@ -235,9 +235,12 @@ flowchart TD
     gatecheck -->|yes| allow3[allow candidate; watched source still gated by merge-review Accept]
 ```
 
-Git is governed the same way: the agent's `git_commit` / `git_push` / `git_create_branch`
-/ `git_switch_branch` MCP tools **pause at the operator gate**; the agent never runs a
-shell. Read: [`../components/Sidecar.md`](../components/Sidecar.md#the-operator-gate-deny-by-default).
+Git is handled differently: the agent has **read-only** git via MCP
+(`git_status` / `git_diff` / `git_log` / `git_list_branches`, all auto-allowed) and **no
+git-write tools at all**. Every git write — commit, push, branch, merge — is an
+operator-only action in the Git page, executed by launching `git` directly (never a
+shell, never MCP). With no git-write tool to call, auto-approve has nothing to bypass.
+Read: [`../guide/git-panel.md`](../guide/git-panel.md).
 
 ---
 

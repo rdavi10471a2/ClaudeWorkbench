@@ -24,13 +24,11 @@ const GATED_TOOLS = new Set<string>([
   "stage_candidate_for_review",
   // launch_staged_diff is gone — the external diff-tool path was retired; review is in-app.
   "record_diff_decision",
-  // git mutations — pause at the operator gate. Push is outward-facing; commit and
-  // branch changes alter repo/working-tree state. Reads (git_status/git_diff/
-  // git_log/git_list_branches) are not listed, so they auto-allow.
-  "git_commit",
-  "git_push",
-  "git_create_branch",
-  "git_switch_branch",
+  // Git writes are intentionally NOT MCP tools: the agent has read-only git access
+  // (git_status/git_diff/git_log/git_list_branches, all auto-allowed because they are
+  // not listed here), and every git write — commit, push, branch, merge — is done by
+  // the operator in the Git page instead. With no git-write tool to call, there is
+  // nothing here to gate and nothing auto-approve could bypass.
 ]);
 
 export function baseName(toolName: string): string {

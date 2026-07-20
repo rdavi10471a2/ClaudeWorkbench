@@ -151,6 +151,93 @@ public sealed class GitWorkspaceService
     public Task<IReadOnlyList<GitCommit>> LogAsync(int count = 20, CancellationToken cancellationToken = default)
         => WithRepoDirectory(directory => git.LogAsync(directory, count, cancellationToken), []);
 
+    // --- read-only history review -----------------------------------------
+    // The files a single commit changed, for the click-through history view.
+    public Task<IReadOnlyList<GitCommitFile>> CommitFilesAsync(string hash, CancellationToken cancellationToken = default)
+        => WithRepoDirectory<IReadOnlyList<GitCommitFile>>(
+            directory => git.CommitFilesAsync(directory, hash, cancellationToken),
+            []);
+
+    // Before/after contents of one file as changed by a commit, for the side-by-side
+    // DiffView: the parent revision on the left, the commit's revision on the right.
+    // ShowAsync yields empty for a missing side, so an added file has an empty left, a
+    // deleted file an empty right, and a root-commit file (no parent) an empty left.
+    public async Task<GitDiffContent> GetCommitDiffContentAsync(string hash, string path, CancellationToken cancellationToken = default)
+    {
+        string? directory = await ResolveDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        if (directory is null)
+        {
+            return GitDiffContent.Empty;
+        }
+
+        string oldText = await git.ShowAsync(directory, $"{hash}^:{path}", cancellationToken).ConfigureAwait(false);
+        string newText = await git.ShowAsync(directory, $"{hash}:{path}", cancellationToken).ConfigureAwait(false);
+        return new GitDiffContent(Normalize(oldText), Normalize(newText));
+    }
+
+    // --- merge back to main (operator-only, gated in the UI) ---------------
+    // Integrate the current branch into main. Guarded: refuses on a dirty tree (so a
+    // half-done edit is never swept into a merge), uses --no-ff for an explicit merge
+    // commit, and on conflict aborts and returns to the feature branch rather than
+    // leaving the tree mid-merge. Ends on main when it succeeds.
+    public async Task<GitResult> MergeCurrentIntoMainAsync(string mainBranch = "main", CancellationToken cancellationToken = default)
+    {
+        string? directory = await ResolveDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        if (directory is null)
+        {
+            return NoWorkspace;
+        }
+
+        GitStatus status = await git.GetStatusAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (!status.IsRepository)
+        {
+            return new GitResult(-1, string.Empty, "The watched solution folder is not a git repository.");
+        }
+
+        string? current = status.Branch;
+        if (string.IsNullOrEmpty(current))
+        {
+            return new GitResult(-1, string.Empty, "No current branch to merge.");
+        }
+
+        if (string.Equals(current, mainBranch, StringComparison.Ordinal))
+        {
+            return new GitResult(-1, string.Empty, $"Already on {mainBranch}. Switch to the feature branch you want to merge in first.");
+        }
+
+        if (status.HasChanges)
+        {
+            return new GitResult(-1, string.Empty, "The working tree has uncommitted changes. Commit or discard them before merging.");
+        }
+
+        IReadOnlyList<string> branches = await git.ListBranchesAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (!branches.Contains(mainBranch))
+        {
+            return new GitResult(-1, string.Empty, $"No '{mainBranch}' branch exists to merge into.");
+        }
+
+        GitResult switchMain = await git.SwitchBranchAsync(directory, mainBranch, cancellationToken).ConfigureAwait(false);
+        if (!switchMain.Ok)
+        {
+            return switchMain;
+        }
+
+        GitResult merge = await git.MergeNoFfAsync(directory, current, cancellationToken).ConfigureAwait(false);
+        if (merge.Ok)
+        {
+            return new GitResult(0, merge.StdOut, $"Merged '{current}' into {mainBranch}.");
+        }
+
+        // Conflict (or other failure): unwind so the operator is never left mid-merge.
+        await git.MergeAbortAsync(directory, cancellationToken).ConfigureAwait(false);
+        await git.SwitchBranchAsync(directory, current, cancellationToken).ConfigureAwait(false);
+        string detail = !string.IsNullOrWhiteSpace(merge.StdErr) ? merge.StdErr : merge.StdOut;
+        return new GitResult(
+            merge.ExitCode,
+            merge.StdOut,
+            $"Merge of '{current}' into {mainBranch} failed and was aborted — you are back on '{current}'. {detail}".Trim());
+    }
+
     // A first-draft commit message from the working-tree changes; the operator (or the
     // agent, via the MCP tool) edits it before committing.
     public static string DraftCommitMessage(GitStatus status)

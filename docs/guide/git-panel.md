@@ -1,50 +1,66 @@
-# The Git Panel
+# The Git Page
 
-Git-back your watched solution so accepted edits become real, pushable checkpoints — and
-optionally let Claude do git **by prompt**, still under your gate.
+A **read-only review** of what has been done to your watched solution — the uncommitted
+working-tree changes and the full commit history, each click-through to a side-by-side
+diff — plus a small set of **operator-only** write actions (branch, commit, push, merge).
 
 Everything here is **host-side and operator-authorized**. The agent never runs a shell;
 git is executed by launching the `git` binary directly with an argument array (no shell,
 so command injection is structurally impossible).
 
-## The panel (manual, operator clicks)
+Bringing the agent's proposed edits *into* your source is the job of
+[merge review](merge-review.md), not this page. This page is the rear-view mirror over
+the result.
 
-Open the **Git** tab. Left panel + a side-by-side diff on the right.
+## Review (the focus — read-only)
 
-- **Branch bar** — the current branch, a dropdown to **switch**, **＋ New** to create one,
-  `→ origin/main`, and `↑`/`↓` ahead/behind badges.
-- **Fetch / Pull / Push** — Push is deliberate and operator-driven.
-- **Staged Changes** / **Changes** groups — hover a file for **stage (＋) / unstage (−) /
-  discard (✕)**.
-- **Click a file** → the diff opens on the right (same `DiffView` renderer as merge review,
-  in the conventional old-left/new-right orientation: **Repository**/**HEAD** on the left,
-  **Working tree**/**Staged** on the right — merge review flips it and puts the proposal
-  on the left).
-- **Commit** — commits the staged set; if nothing is staged it stages everything and
-  commits (there's a **Stage All** button too). The message box is pre-filled with a draft
-  from the changed filenames — edit it.
-- **History** (collapsible) — recent commits.
-- **Hide Panel** — collapse the left panel to give the diff the full width; drag the
-  splitter to resize.
+Open the **Git** tab. Left review panel + a side-by-side diff on the right.
 
-If the watched folder **isn't a git repo**, the panel offers **Initialize Git
-repository** instead. If `git` isn't on PATH, you get a clear "Git is not available"
-warning.
+- **Uncommitted changes** — every changed file in the working tree. **Click a file** → its
+  diff opens on the right (**HEAD** on the left, **Working tree** on the right). No
+  stage/discard controls — this is review, not source-control mechanics.
+- **History** — recent commits, newest first. **Click a commit** to expand its changed
+  files; **click a file** → that commit's diff (**`<hash>~1`** on the left, **`<hash>`** on
+  the right). This is how you review exactly what a commit did.
+- The diff uses the same `DiffView` renderer as merge review (conventional
+  old-left/new-right orientation; merge review flips it to put the proposal on the left).
+- **Hide Panel** collapses the review list to give the diff full width; drag the splitter
+  to resize.
 
-## Prompt-driven git (the agent, gated)
+If the watched folder **isn't a git repo**, the page offers **Initialize Git repository**
+instead. If `git` isn't on PATH, you get a clear "Git is not available" warning.
 
-You can also just *ask*: **"commit the changes and push."** Claude calls the git MCP
-tools, and the mutating ones **pause at your operator gate**:
+## Write actions (operator-only, in the toolbar)
 
-| Tool | Gated? |
+These are the operator's alone. They call the git service **directly** — never through the
+agent, never through MCP — and the outward or irreversible ones **confirm first**:
+
+| Action | Confirms? | Notes |
+|---|---|---|
+| **Commit** | no | Opens a message box; commits the whole working tree (message pre-drafted from the changed filenames). |
+| **＋ New** branch | no | Create and switch to a new branch. |
+| Branch **switch** (dropdown) | yes | Changes the working-tree files. |
+| **Fetch** | no | Updates remote-tracking refs so ahead/behind is accurate; touches nothing of yours. |
+| **Pull** | yes | Fast-forward only. |
+| **Push** | yes | Nothing reaches GitHub without your click. |
+| **Merge to main** | yes | Merges the current branch into `main` (`--no-ff`). Requires a clean tree; on conflict it **aborts and returns you to the feature branch**. Disabled while already on `main`. |
+
+## The agent's git access (read-only)
+
+You can ask Claude about the repo — **"what changed in the last commit?"**, **"show me the
+diff of `Foo.cs`"** — and it answers using read-only git MCP tools:
+
+| Tool | Access |
 |---|---|
-| `git_status`, `git_diff`, `git_log`, `git_list_branches` | No (read-only, auto-allow) |
-| `git_commit`, `git_push`, `git_create_branch`, `git_switch_branch` | **Yes — pause for your approval** |
+| `git_status`, `git_diff`, `git_log`, `git_list_branches` | Read-only (auto-allow) |
 
-So *nothing reaches GitHub without your click*, whether you drive git from the panel or by
-prompt.
+There are **no git write MCP tools**. The agent can *see* the repository to reason about
+it, but it cannot commit, push, branch, or merge — those happen only when *you* click in
+this page. Because there is no git-write tool to call, auto-approve ("approve all") has
+nothing to bypass: git writes are never automated.
 
 ## Typical flow
 
-Accept an edit in [merge review](merge-review.md) → the file shows under **Changes** →
-**Commit** (edit the message) → **Push**. Watch `↑1` clear as the push lands.
+Accept an edit in [merge review](merge-review.md) → the file shows under **Uncommitted
+changes** (review its diff) → **Commit** (edit the message) → **Push**, or **Merge to
+main**. Watch `↑1` clear as the push lands.

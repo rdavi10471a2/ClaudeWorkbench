@@ -21,20 +21,33 @@ public sealed partial class GitService
 
     // Core exec: run git in workingDirectory with args; capture stdout/stderr/exit.
     // Never throws for a non-zero git exit — the caller inspects GitResult.Ok.
-    public async Task<GitResult> RunAsync(
+    public Task<GitResult> RunAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
         CancellationToken cancellationToken = default)
+        => RunExecutableAsync(gitExecutable, workingDirectory, args, cancellationToken);
+
+    // Shared child-process plumbing, parameterized on the executable so the same
+    // no-shell, argv-array, captured-output path serves both `git` and `gh` (the
+    // GitHub auth probe). workingDirectory may be null for repo-independent commands.
+    private static async Task<GitResult> RunExecutableAsync(
+        string fileName,
+        string? workingDirectory,
+        IReadOnlyList<string> args,
+        CancellationToken cancellationToken)
     {
         ProcessStartInfo startInfo = new()
         {
-            FileName = gitExecutable,
-            WorkingDirectory = workingDirectory,
+            FileName = fileName,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
+        if (workingDirectory is not null)
+        {
+            startInfo.WorkingDirectory = workingDirectory;
+        }
         foreach (string arg in args)
         {
             startInfo.ArgumentList.Add(arg);
@@ -86,6 +99,30 @@ public sealed partial class GitService
 
     public Task<GitResult> InitAsync(string directory, string defaultBranch = "main", CancellationToken cancellationToken = default)
         => RunAsync(directory, ["init", "-b", defaultBranch], cancellationToken);
+
+    // GitHub CLI login state, so the command-bar dot reflects authentication and not
+    // just that `gh` exists. Auth is machine-wide (cached under the user profile),
+    // independent of any repo, so this takes no directory. `gh auth status` exits 0
+    // when logged in and non-zero when not; our -1 sentinel means the CLI could not be
+    // started at all. Mirrors the sidecar's Claude probe:
+    //   null  = unknown (gh missing / could not launch) — NOT "signed out"
+    //   true  = logged in
+    //   false = ran, but not authenticated
+    public async Task<bool?> GetGitHubAuthAsync(CancellationToken cancellationToken = default)
+    {
+        GitResult result = await RunExecutableAsync("gh", null, ["auth", "status"], cancellationToken)
+            .ConfigureAwait(false);
+        if (result.ExitCode == -1)
+        {
+            return null;
+        }
+
+        // Exit 0 is authoritative; also treat the CLI's own "Logged in to" line as a
+        // positive in case a future gh version reports 0 differently.
+        return result.Ok
+            || result.StdOut.Contains("Logged in to", StringComparison.OrdinalIgnoreCase)
+            || result.StdErr.Contains("Logged in to", StringComparison.OrdinalIgnoreCase);
+    }
 
     public async Task<GitStatus> GetStatusAsync(string directory, CancellationToken cancellationToken = default)
     {
@@ -199,6 +236,15 @@ public sealed partial class GitService
     public Task<GitResult> PullAsync(string directory, CancellationToken cancellationToken = default)
         => RunAsync(directory, ["pull", "--ff-only"], cancellationToken);
 
+    // --- merge (operator-only, UI-driven) ---------------------------------
+    // A no-ff, no-edit merge so the integration is always an explicit merge commit with
+    // git's default message (no editor to block on). Non-zero exit == conflict.
+    public Task<GitResult> MergeNoFfAsync(string directory, string branch, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["merge", "--no-ff", "--no-edit", branch], cancellationToken);
+
+    public Task<GitResult> MergeAbortAsync(string directory, CancellationToken cancellationToken = default)
+        => RunAsync(directory, ["merge", "--abort"], cancellationToken);
+
     // --- branches ----------------------------------------------------------
     public async Task<IReadOnlyList<string>> ListBranchesAsync(string directory, CancellationToken cancellationToken = default)
     {
@@ -240,6 +286,42 @@ public sealed partial class GitService
         }
 
         return commits;
+    }
+
+    // Files touched by a single commit, with each file's change status, for the
+    // read-only history review. Renames are not detected (no -M), so a rename shows as
+    // a delete + an add — each independently diffable via ShowAsync on the two sides.
+    public async Task<IReadOnlyList<GitCommitFile>> CommitFilesAsync(string directory, string hash, CancellationToken cancellationToken = default)
+    {
+        GitResult result = await RunAsync(
+            directory,
+            ["diff-tree", "--no-commit-id", "--name-status", "-r", hash],
+            cancellationToken).ConfigureAwait(false);
+        if (!result.Ok)
+        {
+            return [];
+        }
+
+        List<GitCommitFile> files = [];
+        foreach (string line in result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // "<status>\t<path>" — status is a single letter (A/M/D/T/...), sometimes
+            // with a similarity score we don't need. Take the first char, the last field.
+            int tab = line.IndexOf('\t');
+            if (tab <= 0)
+            {
+                continue;
+            }
+
+            char status = line[0];
+            string path = line[(tab + 1)..].Trim();
+            if (path.Length > 0)
+            {
+                files.Add(new GitCommitFile(status, path));
+            }
+        }
+
+        return files;
     }
 
     private static GitStatus ParseStatus(string porcelain, bool hasRemote)
@@ -344,6 +426,15 @@ public sealed record GitChange(char Index, char WorkTree, string Path)
 
 // One row of `git log` for the history view.
 public sealed record GitCommit(string Hash, string Subject, string Author, string RelativeDate);
+
+// One file changed by a commit (read-only history review). Status is git's name-status
+// letter: A(dded), M(odified), D(eleted), T(ype change), etc.
+public sealed record GitCommitFile(char Status, string Path)
+{
+    public bool IsAdded => Status == 'A';
+
+    public bool IsDeleted => Status == 'D';
+}
 
 // A snapshot of the watched repo's state for the operator's Git panel.
 public sealed record GitStatus(
