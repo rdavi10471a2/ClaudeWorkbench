@@ -251,6 +251,73 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.False(File.Exists(newFilePath));
     }
 
+    // Salvaged from `AIMonitor.ToolSmokeTests --mcp-live-multi-file-session` (docs/plans/
+    // retire-legacy-test-harness.md, Phase 2.3). The only SEQUENTIAL assertion of the planned-overlay
+    // contract anywhere in the suite.
+    //
+    // Two mutually-dependent NEW files are staged in one planned session. Overlay validation cannot run
+    // until every planned working file exists, so the ORDER of the two submits is the whole test:
+    //
+    //   new_file(A) -> submit(A)   B's working file does not exist yet => overlayValidation is DEFERRED,
+    //                              and must report exactly "planned-overlay-pending".
+    //   new_file(B) -> submit(B)   both working files now exist => the real overlay compile runs and the
+    //                              status must have moved PAST pending.
+    //
+    // Without this, a regression that either never defers (compiling A alone against a type that does not
+    // exist yet) or never resumes (leaving the batch permanently pending) would go unnoticed.
+    [Fact]
+    [Trait("Suite", "McpSurface")]
+    public async Task Planned_overlay_validation_stays_pending_until_every_planned_file_exists()
+    {
+        McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
+        await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
+        string firstFilePath = Path.Combine(fixture.WatchedDirectory, "OverlayOne.cs");
+        string secondFilePath = Path.Combine(fixture.WatchedDirectory, "OverlayTwo.cs");
+
+        CallToolResult session = await client.CallToolAsync(
+            "start_monitor_session",
+            new Dictionary<string, object?>
+            {
+                ["purpose"] = "sequential planned-overlay contract",
+                ["filesPlanned"] = new object[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["sourceFilePath"] = firstFilePath,
+                        ["owningProjectPath"] = fixture.WatchedProjectPath,
+                        ["role"] = "new-file",
+                        ["reason"] = "Provides the value the second file consumes."
+                    },
+                    new Dictionary<string, object?>
+                    {
+                        ["sourceFilePath"] = secondFilePath,
+                        ["owningProjectPath"] = fixture.WatchedProjectPath,
+                        ["role"] = "new-file",
+                        ["reason"] = "Consumes the first file, so it cannot compile until the first exists."
+                    }
+                }
+            });
+        Assert.False(session.IsError == true, McpSurfaceClient.Text(session));
+        string sessionId = McpSurfaceClient.JsonString(McpSurfaceClient.Text(session), "sessionId");
+
+        // First file: references nothing. The second planned working file does not exist yet.
+        string firstSubmitJson = await ComposeNewFileAsync(
+            client,
+            sessionId,
+            firstFilePath,
+            "namespace Example { public static class OverlayOne { public static string Value => \"one\"; } }");
+        Assert.Equal("planned-overlay-pending", OverlayStatus(firstSubmitJson));
+
+        // Second file: consumes the first. Now every planned working file exists, so the deferral lifts
+        // and the real overlay compile runs across the batch.
+        string secondSubmitJson = await ComposeNewFileAsync(
+            client,
+            sessionId,
+            secondFilePath,
+            "namespace Example { public static class OverlayTwo { public static string Value => OverlayOne.Value + \":two\"; } }");
+        Assert.NotEqual("planned-overlay-pending", OverlayStatus(secondSubmitJson));
+    }
+
     // ---- AREA C: safety / negative paths ----
 
     [Fact]
@@ -390,6 +457,49 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.True(decision.IsError == true || McpSurfaceClient.JsonString(McpSurfaceClient.Text(decision), "classification") != "accepted",
             McpSurfaceClient.Text(decision));
         await client.DisposeAsync();
+    }
+
+    // new_file then submit_file, returned as the submit response JSON. The pairing matters: the overlay
+    // deferral is keyed on which planned WORKING files exist, and new_file is what creates them.
+    private static async Task<string> ComposeNewFileAsync(
+        McpClient client,
+        string sessionId,
+        string sourceFilePath,
+        string content)
+    {
+        CallToolResult create = await client.CallToolAsync(
+            "new_file",
+            new Dictionary<string, object?>
+            {
+                ["sourceFilePath"] = sourceFilePath,
+                ["sessionId"] = sessionId
+            });
+        Assert.False(create.IsError == true, McpSurfaceClient.Text(create));
+
+        CallToolResult submit = await client.CallToolAsync(
+            "submit_file",
+            new Dictionary<string, object?>
+            {
+                ["path"] = sourceFilePath,
+                ["content"] = content,
+                ["sessionId"] = sessionId
+            });
+        Assert.False(submit.IsError == true, McpSurfaceClient.Text(submit));
+        return McpSurfaceClient.Text(submit);
+    }
+
+    // Reads overlayValidation.status by exact path. The suite's generic JsonString probe searches
+    // recursively and "status" is a common property name, so this one is walked explicitly.
+    private static string OverlayStatus(string submitJson)
+    {
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(submitJson);
+        Assert.True(
+            document.RootElement.TryGetProperty("overlayValidation", out System.Text.Json.JsonElement overlay),
+            $"submit_file response carried no overlayValidation node: {submitJson}");
+        Assert.True(
+            overlay.TryGetProperty("status", out System.Text.Json.JsonElement status),
+            $"overlayValidation carried no status: {submitJson}");
+        return status.GetString() ?? string.Empty;
     }
 
     private static async Task<(string RecordId, string StagedHash, string StagedFilePath)> StageAsync(

@@ -1,6 +1,23 @@
 # Plan — retire the legacy test harness
 
-**Status:** proposed · **Date:** 2026-07-20 · **Built from:** four read-only audits of `CliIndexQueryTests`, the MCP integration suite, the `AIMonitor.Cli` deletion surface, and the three smoke runners.
+**Status:** in progress · **Date:** 2026-07-20 · **Built from:** four read-only audits of `CliIndexQueryTests`, the MCP integration suite, the `AIMonitor.Cli` deletion surface, and the three smoke runners.
+
+## Progress
+
+Revert point before any of this: **`b8a1966`**. Each phase is its own commit.
+
+| Phase | State | Commit |
+|---|---|---|
+| 0.1 — add the two missing MCP tools (+tests) | ✅ done | `b8a1966` |
+| 0.2 — ADR-0003 dated note | ✅ done | `35e10af` |
+| 0.3 — preserve redaction/telemetry (Appendix A) | ✅ done | `35e10af` |
+| 1 — language corpus → `dotnet test` | in progress | |
+| 2 — salvage 3 scenarios from `ToolSmokeTests` | in progress | |
+| 3 — re-home the CLI-unique tests | in progress | |
+| 5.1a — salvage the Razor code-behind sweep | ✅ done | see below |
+| 4 — delete `AIMonitor.Cli` | blocked on 3 | |
+| 5 — delete the smoke runners | blocked on 1, 2, 5.1a | |
+| 6 — documentation sweep | blocked on 4 | |
 
 ## Why
 
