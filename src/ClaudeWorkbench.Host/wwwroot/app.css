@@ -77,10 +77,13 @@ h1:focus {
 .brand-text { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .brand-tagline { color: #516274; font-size: .72rem; font-weight: 600; letter-spacing: .02em; }
 
-.wb-status { display: inline-flex; align-items: center; gap: 8px; color: #516274; font-size: .85rem; font-weight: 600; }
-.wb-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.wb-status { display: inline-flex; align-items: center; gap: 14px; color: #516274; font-size: .85rem; font-weight: 600; }
+.wb-flag { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.wb-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 .wb-dot.up { background: #24a148; }
+.wb-dot.warn { background: #e8a33d; }
 .wb-dot.down { background: #d1495b; }
+.wb-dot.unknown { background: #9aa7b4; }
 
 /* Assistant */
 .assistant { display: flex; flex-direction: column; height: 100%; gap: 10px; padding-top: 10px; }

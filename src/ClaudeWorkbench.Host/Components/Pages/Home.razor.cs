@@ -37,6 +37,27 @@ public partial class Home : IDisposable
         ? $"{Path.GetFileNameWithoutExtension(Workspace.WatchedSolutionPath)} — ClaudeWorkbench"
         : "ClaudeWorkbench";
 
+    // Command-bar auth cues. The Claude dot carries the sidecar-down message too,
+    // because when the sidecar is down its login state is genuinely unknowable — so
+    // the root cause ("Sidecar unavailable") is the honest thing to show there.
+    private AuthCue ClaudeCue => !Session.Status.Connected
+        ? new("down", "Sidecar unavailable", "The Claude sidecar is not reachable — no turns can run until it is back.")
+        : Session.Auth.Claude switch
+        {
+            true => new("up", "Claude available", "Signed in to the Claude CLI."),
+            false => new("warn", "Claude signed out", "The Claude CLI is signed out. Use the launcher's Claude button to sign in."),
+            _ => new("unknown", "Claude — checking", "Checking Claude login state..."),
+        };
+
+    private AuthCue GitHubCue => Session.Auth.GitHub switch
+    {
+        true => new("up", "GitHub signed in", "Signed in to the GitHub CLI (gh)."),
+        false => new("warn", "GitHub signed out", "The GitHub CLI (gh) is signed out. Use the launcher's GitHub button to sign in."),
+        _ => new("unknown", "GitHub — checking", "Checking GitHub login state..."),
+    };
+
+    private readonly record struct AuthCue(string Css, string Label, string Title);
+
     private bool settingsOpen;
     private bool workspacePickerOpen;
     private bool reviewDialogOpen;

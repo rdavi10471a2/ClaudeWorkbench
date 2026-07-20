@@ -13,18 +13,22 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
     private readonly SidecarClient client;
     private readonly WorkspaceManager workspace;
     private readonly AgentSettingsService agentSettings;
+    private readonly AuthStatusProbe authProbe;
 
     public SidecarOperatorConsole(
         SidecarEventStream stream,
         SidecarClient client,
         WorkspaceManager workspace,
-        AgentSettingsService agentSettings)
+        AgentSettingsService agentSettings,
+        AuthStatusProbe authProbe)
     {
         this.stream = stream;
         this.client = client;
         this.workspace = workspace;
         this.agentSettings = agentSettings;
+        this.authProbe = authProbe;
         this.stream.Changed += Relay;
+        this.authProbe.Changed += Relay;
     }
 
     public event Action? Changed;
@@ -32,6 +36,8 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
     public string WorkspacePath => workspace.WatchedSolutionPath ?? "(no watched workspace)";
 
     public ConsoleStatus Status => new(stream.Connected, stream.ActiveTurn is not null);
+
+    public AuthStatus Auth => authProbe.Current;
 
     public IReadOnlyList<TranscriptEntry> Transcript
     {
@@ -93,6 +99,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
     public void Dispose()
     {
         stream.Changed -= Relay;
+        authProbe.Changed -= Relay;
     }
 
     private void Relay()

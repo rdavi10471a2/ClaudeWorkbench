@@ -79,6 +79,8 @@ internal static class Program
         builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
+        builder.Services.AddSingleton<AuthStatusProbe>();
+        builder.Services.AddHostedService(provider => provider.GetRequiredService<AuthStatusProbe>());
         builder.Services.AddScoped<SidecarOperatorConsole>();
         builder.Services.AddScoped<IOperatorConsole>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddScoped<IApprovalQueue>(provider => provider.GetRequiredService<SidecarOperatorConsole>());

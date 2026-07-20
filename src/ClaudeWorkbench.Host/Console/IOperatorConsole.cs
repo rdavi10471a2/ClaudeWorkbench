@@ -10,6 +10,10 @@ public interface IOperatorConsole
 
     ConsoleStatus Status { get; }
 
+    // Login state of the Claude and GitHub CLIs, for the command-bar dots. Orthogonal
+    // to Status (turn/session), and probed out-of-band, so it lives on its own seam.
+    AuthStatus Auth { get; }
+
     IReadOnlyList<TranscriptEntry> Transcript { get; }
 
     IReadOnlyList<ActivityEntry> Activity { get; }

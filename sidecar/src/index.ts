@@ -1,5 +1,7 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { dirname } from "node:path";
 import {
   query,
@@ -578,6 +580,60 @@ app.get("/health", (_req, res) => {
     activeTurn,
     pendingGates: gate.list().length,
   });
+});
+
+// Claude login state, so the host's command-bar dot reflects authentication rather
+// than mere sidecar liveness. The sidecar owns the Claude CLI relationship, so the
+// probe lives here (GitHub's `gh` probe lives in the host's GitService instead).
+//
+// `claude auth status` prints JSON with a `loggedIn` boolean and exits 0 whether or
+// not you are signed in, so we parse the JSON rather than trust the exit code. Result
+// is cached: the probe spawns a process, and the host polls this on an interval.
+//   null  = unknown (CLI missing, timed out, or output unparseable) — NOT "signed out"
+//   true  = loggedIn: true
+//   false = loggedIn: false
+const execAsync = promisify(exec);
+const AUTH_TTL_MS = 20_000;
+let claudeAuthCache: { loggedIn: boolean | null; at: number } = { loggedIn: null, at: 0 };
+
+function parseLoggedIn(output: string): boolean | null {
+  try {
+    const parsed = JSON.parse(output) as { loggedIn?: unknown };
+    if (typeof parsed.loggedIn === "boolean") {
+      return parsed.loggedIn;
+    }
+  } catch {
+    // Not JSON — fall through to a textual sniff for forward-compatibility.
+  }
+  if (/loggedIn["']?\s*[:=]\s*true/i.test(output)) return true;
+  if (/loggedIn["']?\s*[:=]\s*false/i.test(output)) return false;
+  return null;
+}
+
+async function probeClaudeAuth(): Promise<boolean | null> {
+  try {
+    // exec (not execFile) runs through the OS shell, so the `claude` PATH shim
+    // (claude.cmd on Windows) resolves exactly as it would in the operator's own
+    // shell. The command is a constant string — no interpolation, no injection surface
+    // — which is also why we avoid execFile's shell:true (DEP0190) here.
+    const { stdout } = await execAsync("claude auth status", {
+      windowsHide: true,
+      timeout: 10_000,
+    });
+    return parseLoggedIn(stdout);
+  } catch (err) {
+    // A non-zero exit still carries stdout on the error; parse it before giving up.
+    const out = (err as { stdout?: unknown })?.stdout;
+    return typeof out === "string" && out.length > 0 ? parseLoggedIn(out) : null;
+  }
+}
+
+app.get("/auth", async (_req, res) => {
+  const now = Date.now();
+  if (now - claudeAuthCache.at > AUTH_TTL_MS) {
+    claudeAuthCache = { loggedIn: await probeClaudeAuth(), at: now };
+  }
+  res.json({ loggedIn: claudeAuthCache.loggedIn });
 });
 
 // Live token/context + subscription usage, read straight off the Query handle.

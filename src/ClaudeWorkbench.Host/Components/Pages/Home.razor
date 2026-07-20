@@ -26,8 +26,12 @@ else
         </div>
         <div class="command-bar-actions">
             <span class="wb-status">
-                <span class="wb-dot @(Session.Status.Connected ? "up" : "down")"></span>
-                @(Session.Status.Connected ? "Claude available" : "Claude unavailable")
+                <span class="wb-flag" title="@ClaudeCue.Title">
+                    <span class="wb-dot @ClaudeCue.Css"></span>@ClaudeCue.Label
+                </span>
+                <span class="wb-flag" title="@GitHubCue.Title">
+                    <span class="wb-dot @GitHubCue.Css"></span>@GitHubCue.Label
+                </span>
             </span>
             <button type="button" class="wb-about-link" @onclick="@(() => aboutOpen = true)" title="What is best in life?">About</button>
             <RadzenButton Icon="help_outline"
