@@ -118,7 +118,8 @@ public partial class MergeReviewDialog : IAsyncDisposable
                 overrideOfferedForRecordId = recordId;
             }
 
-            // The accept has already written watched source by here. Telling the agent
+            // A non-terminal accept has written nothing (ADR-0005) and carries no summary; the
+            // terminal accept has written the whole session by here. Telling the agent
             // how the build went is best-effort transport: if it fails it must not abort
             // the advance to the next staged file, but it must not vanish either — the
             // operator has to know the agent was never told the build failed.

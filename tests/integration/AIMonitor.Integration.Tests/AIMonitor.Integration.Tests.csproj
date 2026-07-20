@@ -27,6 +27,10 @@
     <ProjectReference Include="..\..\..\src\AIMonitor.Workflow\AIMonitor.Workflow.csproj" />
     <ProjectReference Include="..\..\..\src\AIMonitor.MSBuild\AIMonitor.MSBuild.csproj" />
     <ProjectReference Include="..\..\..\src\AIMonitor.Indexing\AIMonitor.Indexing.csproj" />
+    <!-- EngineReviewSessionAtomicityTests drives the host's EngineReviewWorkflow directly:
+         it is the only code that writes watched source, so ADR-0005's "the session is the
+         atomic unit" contract has to be asserted against the real class, not a stand-in. -->
+    <ProjectReference Include="..\..\..\src\ClaudeWorkbench.Host\ClaudeWorkbench.Host.csproj" />
   </ItemGroup>
 
 </Project>
