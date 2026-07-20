@@ -738,6 +738,10 @@ public sealed class CliIndexQueryTests
         string programStagedRecordId = programStageDocument.RootElement.GetProperty("stagedRecordId").GetString()
             ?? throw new InvalidOperationException("Missing program staged record id.");
 
+        // Staging and validating a multi-file session must leave the working tree untouched.
+        // ADR-0005 extends the same guarantee across the operator's per-file accepts: no file in
+        // a session reaches watched source until the terminal accept writes them all together
+        // (asserted against the writer itself in EngineReviewSessionAtomicityTests).
         PreMergeValidationResult validation = ValidateStaged(fixture, programStagedRecordId);
         Assert.Equal("failed", validation.Status);
         Assert.Equal(originalProgramText, await File.ReadAllTextAsync(fixture.ProgramFilePath));

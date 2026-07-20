@@ -856,41 +856,7 @@ public sealed class WorkflowEditService
 
         if (normalizedDecision == "accepted")
         {
-            if (string.IsNullOrWhiteSpace(expectedStagedHash))
-            {
-                throw new InvalidOperationException("--expected-staged-hash is required when recording an accepted decision.");
-            }
-
-            if (!record.StagedHash.Equals(expectedStagedHash, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Staged record hash does not match --expected-staged-hash.");
-            }
-
-            if (!File.Exists(record.StagedFilePath))
-            {
-                throw new FileNotFoundException("Staged candidate file was not found.", record.StagedFilePath);
-            }
-
-            string currentStagedHash = FileHash.Compute(record.StagedFilePath);
-            if (!currentStagedHash.Equals(record.StagedHash, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Staged candidate content changed after staging. Edit the Working file and run edit stage again.");
-            }
-
-            if (!record.LaunchStatus.Equals("launched", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Cannot accept a staged record before a successful diff review launch.");
-            }
-
-            if (string.IsNullOrWhiteSpace(record.PreMergeValidationStatus))
-            {
-                throw new InvalidOperationException("Cannot accept a staged record before pre-merge validation has completed.");
-            }
-
-            if (record.PreMergeValidationIsError && !record.PreMergeValidationForceApproved)
-            {
-                throw new InvalidOperationException("Cannot accept a staged record with failed pre-merge validation unless the failure was explicitly approved before launch.");
-            }
+            EnsureAcceptanceGuardsPass(record, expectedStagedHash);
         }
 
         if (normalizedDecision == "rejected"
@@ -941,6 +907,96 @@ public sealed class WorkflowEditService
         }
 
         return record;
+    }
+
+    // ADR-0005: the operator's per-file Accept inside a multi-file edit session is an
+    // APPROVAL, not a write. It advances the review (the record stops being pending) while
+    // watched source stays untouched until the terminal accept writes the whole approved set.
+    //
+    // It deliberately does NOT go through RecordDecision: that classifies by comparing
+    // watched source against the staged candidate, and here watched source is *supposed* to
+    // still be at its baseline, which would classify as "dirty-unexpected" and throw. The
+    // guards that protect an accept (hash, staged file present, review launched, pre-merge
+    // verdict) are the SAME ones RecordDecision runs — see EnsureAcceptanceGuardsPass — so an
+    // approval is exactly as gated as an accept; only the write and the classification are
+    // deferred.
+    //
+    // "approved" is intentionally NOT a terminal decision (EnsureRecordNotDecided /
+    // IsTerminalDecision), so the terminal accept can still record "accepted" on this record
+    // afterwards, and a session-voiding reject can still record "rejected" on it. The manifest
+    // is not touched either: RequiresRefresh/IndexStale describe watched source, and nothing
+    // has reached watched source yet.
+    public StagedEditRecord RecordSessionApproval(string stagedRecordId, string expectedStagedHash)
+    {
+        StagedEditRecord record = GetStagedRecord(stagedRecordId);
+        EnsureRecordNotDecided(record);
+        if (!File.Exists(record.WatchedFilePath) && !record.IsNewFile)
+        {
+            throw new FileNotFoundException("Watched file was not found.", record.WatchedFilePath);
+        }
+
+        EnsureAcceptanceGuardsPass(record, expectedStagedHash);
+
+        record.Decision = "approved";
+        record.DecisionAtUtc = DateTimeOffset.UtcNow.ToString("O");
+        record.Classification = "approved";
+        record.Status = "approved";
+        record.Message = "Operator approved this file. Nothing has been written to watched source; the edit session writes every approved file together on the final accept.";
+        SaveStagedRecord(record);
+        return record;
+    }
+
+    // Stamp the recorded fact that this record's staged bytes are now in watched source.
+    // Called by the host immediately after each successful temp-file-then-rename write, so a
+    // partial multi-file write leaves an accurate per-file record and a retry of the terminal
+    // accept skips what is already on disk instead of rewriting it.
+    public StagedEditRecord MarkWrittenToWatchedSource(string stagedRecordId)
+    {
+        StagedEditRecord record = GetStagedRecord(stagedRecordId);
+        record.WrittenAtUtc = DateTimeOffset.UtcNow.ToString("O");
+        SaveStagedRecord(record);
+        return record;
+    }
+
+    // The accept-side guards, shared verbatim by RecordDecision("accepted") and by
+    // RecordSessionApproval. Unchanged from the original inline block in RecordDecision.
+    private static void EnsureAcceptanceGuardsPass(StagedEditRecord record, string? expectedStagedHash)
+    {
+        if (string.IsNullOrWhiteSpace(expectedStagedHash))
+        {
+            throw new InvalidOperationException("--expected-staged-hash is required when recording an accepted decision.");
+        }
+
+        if (!record.StagedHash.Equals(expectedStagedHash, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Staged record hash does not match --expected-staged-hash.");
+        }
+
+        if (!File.Exists(record.StagedFilePath))
+        {
+            throw new FileNotFoundException("Staged candidate file was not found.", record.StagedFilePath);
+        }
+
+        string currentStagedHash = FileHash.Compute(record.StagedFilePath);
+        if (!currentStagedHash.Equals(record.StagedHash, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Staged candidate content changed after staging. Edit the Working file and run edit stage again.");
+        }
+
+        if (!record.LaunchStatus.Equals("launched", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Cannot accept a staged record before a successful diff review launch.");
+        }
+
+        if (string.IsNullOrWhiteSpace(record.PreMergeValidationStatus))
+        {
+            throw new InvalidOperationException("Cannot accept a staged record before pre-merge validation has completed.");
+        }
+
+        if (record.PreMergeValidationIsError && !record.PreMergeValidationForceApproved)
+        {
+            throw new InvalidOperationException("Cannot accept a staged record with failed pre-merge validation unless the failure was explicitly approved before launch.");
+        }
     }
 
     public void MarkIndexFresh(string watchedFilePath)

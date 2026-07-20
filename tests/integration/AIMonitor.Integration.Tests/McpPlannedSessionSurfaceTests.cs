@@ -162,6 +162,13 @@ public sealed class McpPlannedSessionSurfaceTests
         // Both planned files must be staged before the operator reviews the batch.
         client = await McpSurfaceClient.ReconnectAfterInAppReviewAsync(client, fixture, helperRecordId, programRecordId);
 
+        // Under ADR-0005 the operator's in-app accept writes nothing until the session's terminal
+        // accept (EngineReviewWorkflow — see EngineReviewSessionAtomicityTests). This test drives
+        // the AGENT-facing record_diff_decision surface instead, where the merge has already
+        // happened by the time the decision is recorded, so the merge is simulated per file here.
+        // What must hold either way: recording a decision never writes a file itself.
+        Assert.DoesNotContain("accepted-helper", await File.ReadAllTextAsync(helperFilePath), StringComparison.Ordinal);
+
         // Decide the first file; index refresh is DEFERRED until the whole batch is decided.
         File.Copy(helperStagedPath, helperFilePath, overwrite: true);
         CallToolResult helperDecision = await client.CallToolAsync(
@@ -192,6 +199,8 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.Equal("accepted", McpSurfaceClient.JsonString(programDecisionJson, "classification"));
         Assert.Contains("\"status\":\"rebuilt\"", programDecisionJson, StringComparison.Ordinal);
 
+        // Both files carry their merged content once the session is complete — which is the same
+        // end state ADR-0005 produces through the host's terminal accept, reached differently.
         Assert.Contains("accepted-helper", await File.ReadAllTextAsync(helperFilePath), StringComparison.Ordinal);
         Assert.Contains("Helper.Value()", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
         await client.DisposeAsync();

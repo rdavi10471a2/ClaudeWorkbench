@@ -38,6 +38,19 @@ public sealed class StagedEditRecord
 
     public string DecisionAtUtc { get; set; } = string.Empty;
 
+    // ADR-0005: the edit session is the atomic unit, so a per-file operator Accept is an
+    // APPROVAL ("approved") and writes nothing; every approved file in the session is written
+    // together on the terminal accept. That makes "has this record's bytes reached watched
+    // source?" a real question, and it is answered here as a RECORDED FACT stamped at the
+    // moment of the write — never inferred from Decision/Status/Classification, because those
+    // move for reasons that have nothing to do with the filesystem.
+    //
+    // Empty = never written. Records written by older builds (which wrote per accept) also
+    // deserialize to empty, which is safe: the only consumer is the terminal accept's
+    // "approved AND unwritten" write set, and those records carry Decision "accepted", not
+    // "approved", so they are never in it.
+    public string WrittenAtUtc { get; set; } = string.Empty;
+
     public string Classification { get; set; } = string.Empty;
 
     public string Message { get; set; } = string.Empty;
