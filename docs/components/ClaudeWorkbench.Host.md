@@ -92,7 +92,7 @@ flowchart TD
 | Service | File | Role |
 |---|---|---|
 | `WorkspaceManager` | (engine, `AIMonitor.McpServer`) | The shared, singleton engine handle. Holds `Settings`, `EditService`, `RepositoryRoot`, `WatchedSolutionPath`, `HasWorkspace`; every host service that touches the watched solution goes through it. |
-| `EngineReviewWorkflow` | `Services/EngineReviewWorkflow.cs` | `IReviewWorkflow` (singleton). In-process adapter over the AIMonitor workflow engine that replaces the external WinMerge step. **The only place watched source is written** (an atomic temp-then-rename write into the watched tree on operator Accept, after the GATE-2 build passes). |
+| `EngineReviewWorkflow` | `Services/EngineReviewWorkflow.cs` | `IReviewWorkflow` (singleton). In-process adapter over the AIMonitor workflow engine that replaces the external WinMerge step. **The only place watched source is written** — temp-then-rename per file, on the **terminal** operator Accept only, covering every approved file in the session, after the GATE-2 build passes. |
 | `SidecarProcessHost` | `Services/SidecarProcessHost.cs` | `IHostedService` that launches + supervises `node dist/index.js`; skips launch if the port is already open; kills the child tree on shutdown. |
 | `SidecarEventStream` | `Services/SidecarEventStream.cs` | `BackgroundService` that reads the sidecar's SSE `/events`, maintaining bounded event history (max 500), the pending-gate set, elicitations, connection + active-turn state; raises `Changed`. Reconnects every 2 s on drop; re-seeds gates/elicitations on each connect. |
 | `SidecarClient` | `Services/SidecarClient.cs` | Typed `HttpClient` for the sidecar's control surface: `/prompt`, `/gates/{id}`, `/elicitations/{id}`, `/stop`, `/new-thread`, `/review-outcome`, `/usage`. |
@@ -108,11 +108,17 @@ flowchart TD
 
 ## The two critical flows
 
-### (a) Operator Accept writes watched source
+### (a) The terminal Accept writes the whole session
 
-`EngineReviewWorkflow.Accept` runs **GATE 2's authoritative build first, then writes**, then records the decision (index rebuild). GATE 1 remains the fast staged-overlay readiness check (no `dotnet build`); the terminal build runs *before* any bytes reach the watched tree, and **a failed build is a hard stop** — nothing is written, so there is nothing to roll back.
+**The edit session is the atomic unit** ([ADR 0005](../decisions/0005-edit-session-is-atomic.md)). A per-file **Accept before the last file is an approval that writes nothing** — it records the decision so review advances, and returns a message saying plainly that nothing has reached source yet. Only the **terminal** accept (the last pending file) runs GATE 2 and writes, and it writes **every approved-but-unwritten file in the session together**, after the combined-overlay build passes. A **single Reject voids the session**, including files approved earlier — they were never written, so there is nothing to roll back.
 
-> Historical note: this used to be the reverse (`File.Copy` before `StagedDecisionWorkflow.Record` ran the build), which meant a failed build left the watched file already overwritten. Fixed in `b029a03` — see the `H2 + write-before-build` comment in `EngineReviewWorkflow.cs`.
+GATE 1 remains the fast staged-overlay readiness check (no `dotnet build`). The terminal build runs *before* any bytes reach the watched tree, and **a failed build is a hard stop**.
+
+Written-ness is a recorded fact, not an inference: `StagedEditRecord.WrittenAtUtc` is stamped immediately after each file's rename, so a retry after a partial write resumes rather than rewriting.
+
+> Writing N files is **not** a transaction and does not claim to be. Each file is temp-file-then-rename, so no single file can be left truncated, but a failure partway leaves the set half-applied. `Accept` reports exactly which relative paths reached source and which did not, and how to resume.
+
+> Historical note: writes used to happen per accept, and before `b029a03` even preceded the build (`File.Copy` before `StagedDecisionWorkflow.Record`), so a failed build left the watched file already overwritten. `b029a03` inverted build and write; ADR 0005 then made the *session* the unit, so accepting file 1 of 3 and rejecting file 2 can no longer leave half a refactor in your source.
 
 ```mermaid
 sequenceDiagram
@@ -126,14 +132,21 @@ sequenceDiagram
     Val-->>ERW: PreMergeValidationResult
     Note over ERW: if error & not force-approved → return, no write
     ERW->>ERW: record still pending? staged file present? re-hash == StagedHash?
-    ERW->>Val: (terminal accept) Validate(session overlay) — authoritative GATE 2 build
-    Val-->>ERW: PreMergeValidationResult
-    Note over ERW: build failed & not force-approved → return, NOTHING written
-    ERW->>FS: copy staged → *.cwb-accept-tmp, then File.Move(overwrite:true)
-    Note right of FS: WRITE happens here — after the GATE 2 build
-    ERW->>SDW: Record("accepted", ...) → index rebuild (no terminalValidationRecords: build already ran)
-    SDW-->>ERW: decision + index outcome
-    ERW-->>Op: ReviewActionResult (message + outcome summary)
+    alt more files still pending (non-terminal)
+        ERW->>ERW: RecordSessionApproval → decision "approved"
+        ERW-->>Op: "NOTHING written yet; N file(s) still to review"
+    else last pending file (terminal)
+        ERW->>Val: Validate(write set overlay) — authoritative GATE 2 build
+        Val-->>ERW: PreMergeValidationResult
+        Note over ERW: build failed & not force-approved → return, NOTHING written
+        loop each approved-but-unwritten file, oldest first
+            ERW->>FS: copy staged → *.cwb-accept-tmp, then File.Move(overwrite:true)
+            ERW->>ERW: MarkWrittenToWatchedSource (stamp WrittenAtUtc)
+        end
+        ERW->>SDW: Record("accepted") per file → index rebuild for the whole set
+        SDW-->>ERW: decision + index outcome
+        ERW-->>Op: ReviewActionResult (message + outcome summary)
+    end
 ```
 
 ### (b) Sidecar SSE → Blazor UI
@@ -172,14 +185,15 @@ Two consumers, one backing service. `GitService` is a stateless CLI wrapper that
 
 ## Owns / Does Not Own
 
-**Owns:** the *only* write to watched source — `EngineReviewWorkflow.Accept`'s atomic temp-then-rename write into the watched tree, gated behind an operator Blazor action. Owns the MCP HTTP surface composition, the sidecar lifecycle, the Blazor console, and the git seam.
+**Owns:** the *only* write to watched source — the temp-then-rename write performed by `EngineReviewWorkflow.Accept` on the **terminal** accept, covering the whole approved session, gated behind an operator Blazor action. Owns the MCP HTTP surface composition, the sidecar lifecycle, the Blazor console, and the git seam.
 
 **Does not own:** engine internals. `WorkspaceManager`, `EditService`, `StagedDecisionWorkflow`, `PreMergeValidationService`, the index, and the underlying `AIMonitorTools` all live in the `AIMonitor.*` projects; the Host adapts and orchestrates them but does not implement staging, validation, indexing, or search.
 
 ## Gotchas & invariants
 
 - **Validate-before-write (Accept).** Every guard runs before a byte reaches the watched tree: the record must still be pending (not superseded, not decided), the staged file must exist and still re-hash to `record.StagedHash`, and on the terminal accept the authoritative GATE-2 build must pass. A failed build is a hard stop — nothing is written, so there is nothing to roll back — unless the operator explicitly overrides validation.
-- **The watched write is atomic.** `Accept` copies the staged file to a sibling `*.cwb-accept-tmp` and then `File.Move(..., overwrite: true)`s it into place, so a crash or disk-full mid-write cannot leave watched source truncated; the temp file is best-effort deleted on failure.
+- **Each file's write is atomic; the session's is not.** `Accept` copies each staged file to a sibling `*.cwb-accept-tmp` then `File.Move(..., overwrite: true)`s it into place, so no file can be left truncated. Across N files there is no transaction: a failure partway leaves the set half-applied, and `Accept` says exactly which paths reached source and which did not rather than implying a rollback. `WrittenAtUtc` makes a retry resume instead of rewriting.
+- **A non-terminal accept touches no file.** It records `"approved"` — deliberately *not* a terminal decision, so the record can still become `accepted` or `rejected`. `"approved"` is a new value in a string-typed state field (`Decision`/`Status`/`Classification`); readers that switch on it were checked, but that is where an unchecked reader would hide.
 - **The terminal build runs in the Host, not in `StagedDecisionWorkflow`.** `Accept` deliberately calls `Record(...)` **without** `terminalValidationRecords` — passing them would re-run the build it already ran pre-write.
 - **`runtime/**` is excluded from compilation.** `DefaultItemExcludes` in the `.csproj` excludes `runtime\**`. Those folders hold working/staged mirrors of watched-solution `.cs` source; if globbed into the Host assembly they produce duplicate-type build errors (CS0101/CS0111) as soon as a watched solution is configured. Do not remove the exclude.
 - **SSE fragility.** `SidecarEventStream.ReadStreamAsync` deserializes each `data:` line independently; a malformed JSON payload throws out of the read loop, marks the stream disconnected, and forces the 2 s reconnect — a single bad line tears the current stream. On reconnect it re-seeds gates and elicitations from `/gates` and `/elicitations` so stale state self-heals.

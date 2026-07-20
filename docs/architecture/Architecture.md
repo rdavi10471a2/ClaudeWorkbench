@@ -28,7 +28,7 @@ flowchart TB
     operator -->|runs turns, reviews & accepts edits, commits/pushes| CWB
     CWB -->|drives, deny-by-default tools| claude
     claude -->|proposes edits through governed MCP tools| CWB
-    CWB -->|reads always; writes ONLY on operator Accept| watched
+    CWB -->|reads always; writes ONLY on the terminal operator Accept| watched
     CWB -->|operator-driven commit/push| github
 ```
 
@@ -162,8 +162,13 @@ sequenceDiagram
 
 - The agent **stops at the staging line** — it never calls the accept. The operator's
   **Accept** is the only thing that writes real source.
+- **The session is the atomic unit** ([ADR 0005](../decisions/0005-edit-session-is-atomic.md)).
+  A per-file Accept before the last file is an *approval* that writes nothing; the **terminal**
+  accept writes every approved file together once the combined-overlay build passes. A single
+  **Reject voids the session**, including files approved earlier — nothing was written, so
+  nothing needs undoing. Half a refactor is not a smaller refactor.
 - **Validate, then write.** Every accept check runs *before* watched source is touched; a
-  failed build leaves the file exactly as it was.
+  failed build leaves the files exactly as they were.
 - **Freshness at accept.** The solution index rebuilds after an accepted decision — the
   normal point where downstream truth is refreshed.
 
@@ -178,7 +183,7 @@ Two independent checks protect watched source. Both must be satisfied to accept.
 | Gate | When | What it checks | Where |
 |---|---|---|---|
 | **GATE 1 — pre-merge validation** | at stage/review-open | a fast staged-overlay **readiness check**, no `dotnet build` (on the MCP/CLI path, a full overlay build) | `PreMergeValidationService`, `StagedDiffLaunchWorkflow` |
-| **GATE 2 — the authoritative build + decision** | at accept, **before anything is written** | the record is still pending, the staged file **re-hashes unchanged**, and the combined session overlay **compiles** (a real build) — then, and only then, the bytes are written and `expectedStagedHash` / `dirty-unexpected` are re-checked as the decision is recorded | `EngineReviewWorkflow.Accept` → `PreMergeValidationService`, then `WorkflowEditService.RecordDecision` |
+| **GATE 2 — the authoritative build + decision** | at the **terminal** accept, **before anything is written** | the record is still pending, the staged file **re-hashes unchanged**, and the overlay of the whole write set **compiles** (a real build) — then, and only then, every approved-but-unwritten file in the session is written and `expectedStagedHash` / `dirty-unexpected` are re-checked as each decision is recorded | `EngineReviewWorkflow.Accept` → `PreMergeValidationService`, then `WorkflowEditService.RecordDecision` |
 
 **Ordering matters, and it is validate-then-write.** In the in-app path the GATE-2 build runs
 *before* watched source is touched: a failed build (or a superseded record, or a staged file that
