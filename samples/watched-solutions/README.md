@@ -41,3 +41,22 @@ path into your checkout.
 Do not use samples as the only regression proof. If a behavior must stay fixed, add a test fixture or smoke.
 
 For Razor samples, keep smoke expectations representative and grep-verified. The current monitor indexes normal C#, clean `.razor.cs`, and source-mapped Razor references; it does not attempt to prove every Blazor markup binding in a production page.
+
+## Framework / project-format coverage
+
+Two fixtures exist specifically to prove the watched solution's target framework and project
+format are independent of ClaudeWorkbench's own `net10.0`:
+
+| Fixture | Shape | Result |
+|---|---|---|
+| `Net8Sample` | SDK-style, `net8.0` | indexes; `NamedType`/`Method`/`Field`/`Property` symbols extracted |
+| `LegacyFrameworkSample` | **non-SDK-style** `net472` — `ToolsVersion`, explicit `<Compile Include>`, `packages.config`, `Microsoft.CSharp.targets` import | indexes; `NamedType`/`Method` symbols extracted |
+
+The legacy one exists because the expected failure — `MSBuildLocator.RegisterDefaults()` picking
+the SDK's MSBuild, which "cannot evaluate a Visual Studio-era project" — **did not happen**. It
+evaluates fine and Roslyn builds a real semantic model from it.
+
+Both are deliberately minimal: framework references only, no restore, no VS-only imports. They
+prove the *format* is not the barrier. They do **not** prove an arbitrary legacy solution will
+load — that is far likelier to fail on a dependency (unrestored `packages.config`, a custom
+`.targets`) than on the `.csproj` shape.

@@ -97,11 +97,20 @@ ClaudeWorkbench is a **two-process** app — a .NET Blazor host **plus a Node si
 
 | Requirement | Why | Notes |
 |---|---|---|
-| **.NET 10 SDK/runtime** | Blazor host + extracted engine + in-proc MCP server | `net10.0` |
+| **.NET 10 SDK** | Blazor host + extracted engine + in-proc MCP server; the **SDK** specifically, because indexing goes through MSBuild/Roslyn | `net10.0`. This is what ClaudeWorkbench runs on — **not** a constraint on the solution you watch (see below) |
 | **Node.js** (LTS; tested on v24) | The sidecar runs the **Claude Agent SDK, which is Node-only** — there is no .NET Agent SDK | Runtime is small (~50–90 MB) and can be **bundled as a single-file executable (Node SEA)** — no system-wide install needed |
 | **`claude` CLI** | The Agent SDK **spawns the `claude` binary** | **Bundled with the SDK** — the `@anthropic-ai/claude-agent-sdk-win32-x64` package ships/extracts the CLI; **no separate install**. This is most of the ~300 MB `sidecar/node_modules`. |
 | **A Claude login** | Auth | A **subscription login** (cached in `~/.claude`) runs it for yourself with **no API key**; an `ANTHROPIC_API_KEY` is only needed to ship to *other* users |
 | Ports **6100** (host) + **6110** (sidecar) | The two processes talk over localhost HTTP/SSE | configurable |
+
+> **The watched solution does not have to target `net10.0`.** The index is built via
+> `MSBuildWorkspace`, so the requirement is only that the installed SDK can evaluate the project.
+> Verified by indexing, with real symbol extraction: `net10.0` (Razor/Web/WinForms/console
+> fixtures), `net9.0` and `net9.0-windows` (daily use), `net8.0`, and — contrary to expectation —
+> a **legacy non-SDK-style `net472` `.csproj`** (`ToolsVersion`, explicit `<Compile Include>`,
+> `packages.config`). Both of the last two ship as fixtures under `samples/watched-solutions/`.
+> Caveat: those fixtures are simple. A real legacy solution is likelier to fail on a *dependency*
+> — unrestored `packages.config`, a custom or VS-only `.targets` import — than on its project format.
 
 > **Deployment footprint:** the agent driver is the Node-based Agent SDK, which bundles the `claude` CLI. So a target needs the **.NET runtime + a Node runtime (small, bundleable) + the sidecar folder (`dist` + `node_modules` ≈ 300 MB, self-contained CLI included) + a Claude login**. There's no pure-.NET/no-Node build, but Node itself is light and can be shipped as a single binary. WinMerge is **not** required (review/merge is in-app).
 

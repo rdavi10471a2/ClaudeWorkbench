@@ -150,7 +150,7 @@ committed sample config uses relative paths and works in any checkout.
 
 | Needs | Why |
 |---|---|
-| **.NET 10 SDK** | Two separate reasons. The publish is framework-dependent, so it needs the *runtime* to start — but indexing also calls `MSBuildLocator.RegisterDefaults()`, which needs **MSBuild and the Roslyn toolset that ship with the SDK**. Publishing `--self-contained` removes the runtime requirement but **not** this one: without the SDK the app starts and then fails to index a solution. |
+| **.NET 10 SDK** | Two separate reasons. The publish is framework-dependent, so it needs the *runtime* to start — but indexing also calls `MSBuildLocator.RegisterDefaults()`, which needs **MSBuild and the Roslyn toolset that ship with the SDK**. Publishing `--self-contained` removes the runtime requirement but **not** this one: without the SDK the app starts and then fails to index a solution. This is the requirement for running ClaudeWorkbench itself — **not** for the solution you watch; see below. |
 | **Node.js** on PATH | The sidecar runs the Claude Agent SDK, which is Node-only. |
 | **A Claude login** | A subscription login cached in `~\.claude` runs it with no API key; `ANTHROPIC_API_KEY` is only needed to ship to other people. See [Settings & Usage](settings-and-usage.md#auth). |
 | **Free ports from 6100 / 6110** | Each instance takes a host+sidecar pair; the Launcher picks free ones per instance. |
@@ -158,6 +158,33 @@ committed sample config uses relative paths and works in any checkout.
 
 The `claude` CLI does **not** need a separate install — the Agent SDK package ships it, which is
 most of the sidecar's `node_modules` size.
+
+### What the WATCHED solution has to be
+
+ClaudeWorkbench targets `net10.0`; **the solution it watches does not have to.** The index is
+built through `MSBuildWorkspace`, so the real requirement is simply that the installed SDK can
+evaluate the project. A .NET 10 SDK builds `net9.0`, `net8.0`, `netstandard2.0` and
+multi-targeted projects perfectly well.
+
+| Watched project | Verified by |
+|---|---|
+| `net10.0` — Razor, Web, WinForms, console | `samples/watched-solutions/` fixtures |
+| `net9.0` (ASP.NET Core) · `net9.0-windows` (desktop) | daily use |
+| `net8.0`, SDK-style | `samples/watched-solutions/Net8Sample` — indexed, symbols extracted |
+| **`net472`, legacy NON-SDK-style `.csproj`** (`ToolsVersion`, explicit `<Compile Include>`, `packages.config`) | `samples/watched-solutions/LegacyFrameworkSample` — indexed, symbols extracted |
+
+The legacy case is the surprising one. The expectation was that
+`MSBuildLocator.RegisterDefaults()` resolves the **SDK's** MSBuild, which would refuse a project
+expecting Visual Studio's — but the SDK's MSBuild evaluates an old-format project fine, and
+Roslyn produced a real semantic model from it (`NamedType`/`Method` symbols, not just parsed
+text). Both fixtures were indexed through `AIMonitor.Cli index rebuild`.
+
+> **What that does and does not prove.** Both fixtures are deliberately simple: framework
+> references only, no NuGet restore, no `.targets` imports from a VS-only SDK, no WCF/WebForms/
+> designer generation. A real legacy solution is far more likely to fail on a *dependency* —
+> an unrestored `packages.config`, a custom `.targets`, a VS-only import — than on its project
+> format. Treat "old formats load" as established and "your particular legacy solution loads"
+> as untested until you point the workbench at it.
 
 ### Copying an install to another machine
 
