@@ -11,7 +11,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { EventBus } from "./bus.js";
-import { OperatorGate, isGatedTool, baseName } from "./gate.js";
+import { OperatorGate, isGatedTool, isNeverAutoApproved, baseName } from "./gate.js";
 import type { SidecarEvent } from "./events.js";
 
 // --- config -------------------------------------------------------------
@@ -335,7 +335,10 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
     return { behavior: "allow", updatedInput: input };
   }
 
-  if (activeAutoApprove) {
+  // ADR-0006: checked BEFORE auto-approve, so the toggle cannot reach it. Auto-approve means
+  // "skip per-call prompts for candidate edits"; it must never be the reason something
+  // irreversible happened to watched source.
+  if (activeAutoApprove && !isNeverAutoApproved(toolName)) {
     return { behavior: "allow", updatedInput: input };
   }
 

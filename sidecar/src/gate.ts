@@ -42,6 +42,25 @@ export function isGatedTool(toolName: string): boolean {
   return GATED_TOOLS.has(baseName(toolName));
 }
 
+// Tools auto-approve may NEVER skip (ADR-0006). Auto-approve is defensible today because every
+// gated tool mutates the monitor-owned Working candidate and the irreversible step — bytes
+// reaching watched source — is gated separately at the operator's Accept. File-level delete and
+// rename break that: no candidate, nothing to diff, nothing for merge review to hold, and no
+// retrieval backup unless the file happened to go through refresh_file.
+//
+// Populated before the tools exist on purpose. A destructive tool added later cannot silently
+// inherit auto-approve; the worst case is that it is gated more than someone intended.
+const NEVER_AUTO_APPROVED_TOOLS = new Set<string>([
+  "delete_file",
+  "remove_file",
+  "rename_file",
+  "move_file",
+]);
+
+export function isNeverAutoApproved(toolName: string): boolean {
+  return NEVER_AUTO_APPROVED_TOOLS.has(baseName(toolName));
+}
+
 export interface GateResolution {
   decision: GateDecision;
   reason?: string;
