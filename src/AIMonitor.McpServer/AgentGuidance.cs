@@ -40,6 +40,8 @@ public static class AgentGuidance
         builder.AppendLine();
         builder.AppendLine("Notes:");
         builder.AppendLine();
+        builder.AppendLine("- NEVER dismiss a compiler diagnostic as a tooling artifact from reasoning alone. If overlay validation reports a diagnostic, either prove the claim with a tool or report it to the operator as unexplained and let them decide. The authoritative build runs at the operator's accept, so a wrong dismissal is not discovered until after they have approved it.");
+        builder.AppendLine("- A reject voids the WHOLE edit session, including files the operator already approved — nothing is written. Re-stage the entire set, not just the rejected file.");
         builder.AppendLine("- `blocked`, `dirty-unexpected`, `superseded`, missing Working files, and stale hashes require recovery before follow-up edits.");
         builder.AppendLine("- Pre-merge (GATE 1) validation and the full build/index (GATE 2) validation are run by the host around the operator's accept, not by you.");
         builder.AppendLine("- The operator's Accept in the Merge Review dialog is the only path candidates reach watched source. Never try to copy a candidate into watched source yourself.");
