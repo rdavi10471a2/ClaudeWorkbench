@@ -1,6 +1,7 @@
 using AIMonitor.Core;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Text;
 using System.Text.Json;
 
@@ -104,11 +105,22 @@ internal sealed class CandidateEditValidator
             trees.Add(BuildImplicitGlobalUsingsTree(parseOptions, watchedRoot));
             trees.Add(BuildWinFormsBootstrapTree(parseOptions));
 
+            // Compile as an executable when any candidate uses top-level statements, otherwise
+            // as a library. Hardcoding DynamicallyLinkedLibrary made every overlay that touched
+            // a Program.cs report CS8805 ("top-level statements must be in an executable") —
+            // permanently, for content reasons that do not exist. A diagnostic that is always
+            // wrong is worse than no diagnostic: it trains the reader to wave errors away, which
+            // is exactly the habit the staging guide forbids.
+            bool hasTopLevelStatements = trees.Any(tree =>
+                tree.GetRoot().ChildNodes().Any(node => node is GlobalStatementSyntax));
+
             CSharpCompilation compilation = CSharpCompilation.Create(
                 "AIMonitorCandidateOverlayValidation",
                 trees,
                 GetMetadataReferences(watchedRoot),
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+                new CSharpCompilationOptions(hasTopLevelStatements
+                    ? OutputKind.ConsoleApplication
+                    : OutputKind.DynamicallyLinkedLibrary));
 
             HashSet<string> diagnosticPaths = BuildOverlayTreePaths(watchedRoot, manifest, overlayRelatives)
                 .Select(Path.GetFullPath)
