@@ -112,8 +112,17 @@
 
 .attach-chips {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 6px;
+    min-height: 100px;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid #d7e1ea;
+    border-radius: 8px;
+    background: #f8fbff;
+    flex: 0 0 auto;
 }
 
 .attach-chip {
