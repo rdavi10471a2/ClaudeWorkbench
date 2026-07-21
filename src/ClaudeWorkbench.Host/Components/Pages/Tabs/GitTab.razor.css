@@ -108,6 +108,36 @@
 .git-badge.dirty { background: #fef7e0; color: #b06000; }
 .git-badge.clean { background: #e6f4ea; color: #137333; }
 
+/* "viewing history" cue: a past commit is read-only, so the write actions disable. */
+.git-history-mode {
+    font-size: 0.78rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    background: #fff8c5;
+    color: #7d4e00;
+    border: 1px solid #eac54f;
+}
+
+/* Make the disabled write actions unmistakable while viewing history. Radzen Light buttons are
+   already gray, so their default disabled state is invisible -- GitHub Primer muted treatment. */
+.git-syncbar ::deep .rz-button:disabled,
+.git-branchbar ::deep .rz-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #8c959f !important;
+    background: #f6f8fa !important;
+    border-color: #d0d7de !important;
+    box-shadow: none !important;
+}
+
+.git-branch-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #8c959f;
+    background: #f6f8fa;
+}
+
 .git-bar-sep {
     width: 1px;
     align-self: stretch;

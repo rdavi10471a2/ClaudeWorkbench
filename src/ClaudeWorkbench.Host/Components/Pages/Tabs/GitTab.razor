@@ -38,7 +38,7 @@
         <div class="git-header">
             <div class="git-branchbar">
                 <RadzenIcon Icon="account_tree" />
-                <select class="git-branch-select" value="@status.Branch" @onchange="OnBranchSelected" disabled="@busy" title="Switch branch (confirms — changes the working tree)">
+                <select class="git-branch-select" value="@status.Branch" @onchange="OnBranchSelected" disabled="@(busy || ViewingHistory)" title="Switch branch (confirms — changes the working tree)">
                     @if (status.Branch is not null && !branches.Contains(status.Branch))
                     {
                         <option value="@status.Branch">@status.Branch</option>
@@ -48,7 +48,7 @@
                         <option value="@branch">@branch</option>
                     }
                 </select>
-                <RadzenButton Icon="add" Text="New" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@busy"
+                <RadzenButton Icon="add" Text="New" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory)"
                               Click="@(() => newBranchOpen = !newBranchOpen)" Title="Create a new branch" />
                 @if (status.Upstream is not null)
                 {
@@ -83,15 +83,20 @@
                               Click="@ToggleLeft" Title="Show or hide the review panel" />
                 <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@busy" Click="@ReloadAsync" />
                 <span class="git-bar-sep" aria-hidden="true"></span>
+                @if (ViewingHistory)
+                {
+                    <span class="git-history-mode" title="Viewing a past commit — write actions are disabled. Click a working-tree file or Refresh to act on the current state.">viewing history</span>
+                }
                 @* Operator-only write actions. These call GitWorkspaceService directly (never
-                   MCP); the outward/irreversible ones confirm first. *@
+                   MCP); the outward/irreversible ones confirm first. Disabled while VIEWING HISTORY:
+                   a past commit is read-only, so commit/push/merge/branch do not apply. *@
                 <RadzenButton Icon="edit_note" Text="Commit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                              Disabled="@(busy || !status.HasChanges)" Click="@OpenCommit" Title="Commit the working-tree changes" />
-                <RadzenButton Icon="download" Text="Fetch" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@FetchAsync" />
-                <RadzenButton Icon="south" Text="Pull" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@PullAsync" />
-                <RadzenButton Icon="cloud_upload" Text="Push" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || !status.HasRemote)" Click="@PushAsync" />
+                              Disabled="@(busy || ViewingHistory || !status.HasChanges)" Click="@OpenCommit" Title="Commit the working-tree changes" />
+                <RadzenButton Icon="download" Text="Fetch" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory || !status.HasRemote)" Click="@FetchAsync" />
+                <RadzenButton Icon="south" Text="Pull" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory || !status.HasRemote)" Click="@PullAsync" />
+                <RadzenButton Icon="cloud_upload" Text="Push" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory || !status.HasRemote)" Click="@PushAsync" />
                 <RadzenButton Icon="merge" Text="Merge to main" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
-                              Disabled="@(busy || OnMain)" Click="@MergeToMainAsync"
+                              Disabled="@(busy || ViewingHistory || OnMain)" Click="@MergeToMainAsync"
                               Title="@(OnMain ? "Already on main" : "Merge this branch into main (requires a clean tree)")" />
             </div>
         </div>

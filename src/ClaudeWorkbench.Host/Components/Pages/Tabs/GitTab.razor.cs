@@ -86,6 +86,12 @@ public partial class GitTab : IAsyncDisposable
 
     private bool OnMain => string.Equals(status?.Branch, MainBranch, StringComparison.Ordinal);
 
+    // True when a history commit's diff is showing (vs a working-tree file). The operator is looking
+    // at the past, which is read-only, so the toolbar disables the write actions (commit / push /
+    // merge / branch / fetch / pull) and shows a "viewing history" cue. Refresh and Hide Panel stay
+    // live; clicking a working-tree file (or Refresh) returns to the actionable current state.
+    private bool ViewingHistory => selectedCommit is not null;
+
     private async Task ReloadAsync()
     {
         busy = true;
