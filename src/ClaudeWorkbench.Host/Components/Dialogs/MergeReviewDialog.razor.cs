@@ -32,8 +32,11 @@ public partial class MergeReviewDialog : IAsyncDisposable
     private string? selectedRecordId;
     private string? errorMessage;
     private bool actionBusy;
-    private CancellationTokenSource? sessionMonitorCts;
-    private Task? sessionMonitorTask;
+    // The busy overlay ("submitting, compiling, rebuilding the index") is shown ONLY for the
+    // terminal accept — the one that actually builds/writes/reindexes. A non-terminal accept is a
+    // pure approval (no build, no write, no index refresh), so painting the overlay for it made the
+    // operator think the index rebuilt per file. It never did. See IsTerminalAccept.
+    private bool building;
 
     private bool UseSessionFlow => !string.IsNullOrWhiteSpace(SessionId);
     private string DialogTitle => UseSessionFlow ? "Merge Review" : "Merge Review Queue";
@@ -59,7 +62,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
     protected override void OnParametersSet()
     {
         LoadReview(preserveSelection: false);
-        EnsureSessionMonitor();
     }
 
     private void RefreshReview()
@@ -99,6 +101,14 @@ public partial class MergeReviewDialog : IAsyncDisposable
         return AcceptSelectedCoreAsync(forceApproveValidation: true);
     }
 
+    // The terminal accept (the last pending file in the session) is the one that submits, runs the
+    // GATE-2 build, writes the whole approved set, and rebuilds the index ONCE. A non-terminal
+    // accept only records the operator's approval — no build, no write, no index refresh — so it
+    // must not paint the busy overlay. Single-file (non-session) is always terminal.
+    private bool IsTerminalAccept() =>
+        !UseSessionFlow
+        || pendingItems.Count(item => string.Equals(item.SessionId, SessionId, StringComparison.Ordinal)) <= 1;
+
     private async Task AcceptSelectedCoreAsync(bool forceApproveValidation)
     {
         if (string.IsNullOrWhiteSpace(selectedRecordId) || actionBusy)
@@ -107,6 +117,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
         }
 
         actionBusy = true;
+        building = IsTerminalAccept();
         try
         {
             await InvokeAsync(StateHasChanged);
@@ -138,6 +149,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
         finally
         {
             actionBusy = false;
+            building = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -175,6 +187,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
         finally
         {
             actionBusy = false;
+            building = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -187,62 +200,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
         if (sessionComplete && AutoCloseWhenComplete)
         {
             DialogService.Close();
-        }
-    }
-
-    private void EnsureSessionMonitor()
-    {
-        if (!UseSessionFlow)
-        {
-            StopSessionMonitor();
-            return;
-        }
-
-        if (sessionMonitorTask is not null)
-        {
-            return;
-        }
-
-        sessionMonitorCts = new CancellationTokenSource();
-        sessionMonitorTask = MonitorSessionAsync(sessionMonitorCts.Token);
-    }
-
-    private void StopSessionMonitor()
-    {
-        CancellationTokenSource? cts = sessionMonitorCts;
-        sessionMonitorCts = null;
-        sessionMonitorTask = null;
-        cts?.Cancel();
-        cts?.Dispose();
-    }
-
-    private async Task MonitorSessionAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            using (PeriodicTimer timer = new(TimeSpan.FromSeconds(1)))
-            {
-                while (await timer.WaitForNextTickAsync(cancellationToken))
-                {
-                    await InvokeAsync(() =>
-                    {
-                        if (actionBusy)
-                        {
-                            return;
-                        }
-
-                        LoadReview(preserveSelection: true);
-                        StateHasChanged();
-                        if (UseSessionFlow && AutoCloseWhenComplete && (selectedModel?.IsSessionComplete ?? false))
-                        {
-                            DialogService.Close();
-                        }
-                    });
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
         }
     }
 
@@ -391,7 +348,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        StopSessionMonitor();
         return ValueTask.CompletedTask;
     }
 }
