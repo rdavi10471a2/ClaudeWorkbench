@@ -159,10 +159,66 @@
 .chat-composer-actions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex-wrap: wrap;
     gap: 8px;
     min-height: 34px;
+}
+
+/* compact icon-style attach button (holds the hidden InputFile) */
+.composer-icon-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 32px;
+    border: 1px solid #d7e1ea;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #46617d;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: border-color .12s ease, background .12s ease;
+}
+
+.composer-icon-btn:hover {
+    border-color: #5b82f1;
+    background: #f0f5ff;
+}
+
+.composer-icon-btn.busy {
+    opacity: .7;
+    cursor: progress;
+}
+
+.composer-icon-btn .attach-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.composer-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .8rem;
+    font-weight: 700;
+    color: #46617d;
+    cursor: pointer;
+    user-select: none;
+    flex: 0 0 auto;
+}
+
+.composer-check input {
+    cursor: pointer;
+    margin: 0;
+}
+
+/* pushes Send/Stop to the right of the compact action bar */
+.composer-actions-spacer {
+    flex: 1 1 auto;
 }
 
 .chat-composer-actions .rz-button {

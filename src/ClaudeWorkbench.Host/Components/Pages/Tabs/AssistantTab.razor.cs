@@ -4,6 +4,7 @@ using ClaudeWorkbench.Host.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
+using Radzen;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Tabs;
 
@@ -17,6 +18,9 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
 
     [Inject]
     private UploadService Uploads { get; set; } = default!;
+
+    [Inject]
+    private DialogService Dialogs { get; set; } = default!;
 
     private ElementReference assistantLayout;
     private ElementReference chatComposer;
@@ -224,6 +228,22 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         }
 
         await resizeModule.InvokeVoidAsync("copyTextToClipboard", text);
+    }
+
+    // Activity is an on-demand modal opened from the composer toolbar (it is no longer a tab):
+    // a raw view of the sidecar event stream for the current run, useful when the engine is
+    // still evolving. See the activity-tab-fate note.
+    private async Task OpenActivityAsync()
+    {
+        await Dialogs.OpenAsync<ActivityTab>(
+            "Activity",
+            options: new DialogOptions
+            {
+                Width = "72vw",
+                Height = "72vh",
+                Resizable = true,
+                Draggable = true,
+            });
     }
 
     private async Task PopOutAsync()
