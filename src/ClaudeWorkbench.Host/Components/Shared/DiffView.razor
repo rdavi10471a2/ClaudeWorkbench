@@ -18,24 +18,30 @@ else
            drives their horizontal offset. *@
         <div class="diff-view-body">
             <div class="diff-view-pane left" @ref="leftPane">
-                @for (int index = 0; index < LineCount; index++)
-                {
-                    var left = LeftLine(index);
-                    <div class="diff-view-line @LineClass(left)">
-                        <span class="diff-view-ln">@Num(left)</span>
-                        <code>@Text(left)</code>
-                    </div>
-                }
+                @* Inner box grows to the widest line so every row (width:auto) stretches to the same
+                   width -- otherwise each row's highlight ends at its own text and the block is ragged. *@
+                <div class="diff-view-pane-inner">
+                    @for (int index = 0; index < LineCount; index++)
+                    {
+                        var left = LeftLine(index);
+                        <div class="diff-view-line @LineClass(left)">
+                            <span class="diff-view-ln">@Num(left)</span>
+                            <code>@Text(left)</code>
+                        </div>
+                    }
+                </div>
             </div>
             <div class="diff-view-pane right" @ref="rightPane">
-                @for (int index = 0; index < LineCount; index++)
-                {
-                    var right = RightLine(index);
-                    <div class="diff-view-line @LineClass(right)">
-                        <span class="diff-view-ln">@Num(right)</span>
-                        <code>@Text(right)</code>
-                    </div>
-                }
+                <div class="diff-view-pane-inner">
+                    @for (int index = 0; index < LineCount; index++)
+                    {
+                        var right = RightLine(index);
+                        <div class="diff-view-line @LineClass(right)">
+                            <span class="diff-view-ln">@Num(right)</span>
+                            <code>@Text(right)</code>
+                        </div>
+                    }
+                </div>
             </div>
         </div>
 

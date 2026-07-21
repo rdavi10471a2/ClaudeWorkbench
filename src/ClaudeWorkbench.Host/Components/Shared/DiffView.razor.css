@@ -76,15 +76,21 @@
     height: 1px;
 }
 
-/* width:max-content grows the ROW to the longest line, so the pane's scrollWidth actually reflects
-   the content (a plain `minmax(max-content, 1fr)` overflows the track but keeps the row box pinned at
-   pane width -- leaving scrollWidth == clientWidth and the shared bar with nothing to measure).
-   min-width:100% keeps short rows filling the pane so their highlight spans the full width. */
+/* The inner box carries the width. width:max-content grows it to the longest line so the pane's
+   scrollWidth reflects the content (a plain `minmax(max-content, 1fr)` on the row overflows its track
+   but keeps the row box pinned at pane width -- leaving scrollWidth == clientWidth and the shared bar
+   with nothing to measure). min-width:100% keeps it filling the pane when every line is short. */
+.diff-view-pane-inner {
+    width: max-content;
+    min-width: 100%;
+}
+
+/* Rows take width:auto so they fill the inner box -- i.e. every row is as wide as the WIDEST line, not
+   just its own text. That is what makes each row's highlight span the full block width instead of
+   ending ragged at its own content. */
 .diff-view-line {
     display: grid;
     grid-template-columns: 3.25rem 1fr;
-    width: max-content;
-    min-width: 100%;
     border-bottom: 1px solid #eef2f7;
     font-family: "Cascadia Mono", Consolas, monospace;
     font-size: 0.84rem;
