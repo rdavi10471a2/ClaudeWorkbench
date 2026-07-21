@@ -179,10 +179,16 @@
                                 <div class="message user">
                                     <div class="message-header">
                                         <span class="message-meta">You</span>
-                                        @if (!string.IsNullOrEmpty(entry.Time))
-                                        {
-                                            <span class="entry-time">@entry.Time</span>
-                                        }
+                                        <div class="message-header-right">
+                                            @if (!string.IsNullOrEmpty(entry.Time))
+                                            {
+                                                <span class="entry-time">@entry.Time</span>
+                                            }
+                                            <button type="button" class="message-copy" title="Copy this message"
+                                                    @onclick="@(() => CopyMessageAsync(entry.Text))">
+                                                <RadzenIcon Icon="content_copy" />
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="message-body">@entry.Text</div>
                                 </div>
@@ -202,10 +208,16 @@
                                 <div class="message assistant">
                                     <div class="message-header">
                                         <span class="message-meta">Assistant</span>
-                                        @if (!string.IsNullOrEmpty(entry.Time))
-                                        {
-                                            <span class="entry-time">@entry.Time</span>
-                                        }
+                                        <div class="message-header-right">
+                                            @if (!string.IsNullOrEmpty(entry.Time))
+                                            {
+                                                <span class="entry-time">@entry.Time</span>
+                                            }
+                                            <button type="button" class="message-copy" title="Copy this message"
+                                                    @onclick="@(() => CopyMessageAsync(entry.Text))">
+                                                <RadzenIcon Icon="content_copy" />
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="message-body">@RenderMarkdown(entry.Text)</div>
                                 </div>

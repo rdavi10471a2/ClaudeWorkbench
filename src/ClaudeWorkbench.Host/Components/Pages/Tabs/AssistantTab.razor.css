@@ -462,6 +462,38 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* time + per-message copy, grouped on the right of the message header */
+.message-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.message-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #8aa0b6;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.message-header:hover .message-copy {
+    opacity: 0.8;
+}
+
+.message-copy:hover {
+    opacity: 1;
+    background: rgba(15, 23, 34, 0.08);
+}
+
 .message {
     max-width: 1320px;
     margin: 0 0 12px;

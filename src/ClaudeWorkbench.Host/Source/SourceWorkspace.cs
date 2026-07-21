@@ -69,6 +69,15 @@ public sealed class SourceWorkspace
         Refresh();
     }
 
+    // Re-read the current source WITHOUT a reindex: rebuild the snapshot from the existing index DB
+    // plus fresh file contents from disk (LoadDocument reads the selected file off disk). Cheap; for
+    // when the index is current but you want to see the latest saved source. Distinct from
+    // RebuildAsync, which re-provisions/reindexes the whole solution.
+    public void Reload()
+    {
+        Refresh();
+    }
+
     public void Select(SourceSelection selection)
     {
         selectedPath = selection.RelativePath;

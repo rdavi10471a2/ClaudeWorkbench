@@ -6,6 +6,12 @@
         <div class="source-toolbar">
             <RadzenTextBox Value="@Filter" Change="@OnFilterChanged" Placeholder="Filter source files" />
             <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@ApplyFilter" />
+            <RadzenButton Icon="sync"
+                          Text="Refresh"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Title="Re-read the current source without rebuilding the index"
+                          Click="@Reload" />
             <RadzenButton Icon="refresh"
                           Text="Rebuild Index"
                           BusyText="Indexing..."
@@ -74,6 +80,9 @@
 
     [Parameter]
     public EventCallback RebuildIndex { get; set; }
+
+    [Parameter]
+    public EventCallback Reload { get; set; }
 
     [Parameter]
     public EventCallback<SourceSelection> SelectFile { get; set; }

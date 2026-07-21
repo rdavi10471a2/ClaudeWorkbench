@@ -214,6 +214,18 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         await resizeModule.InvokeVoidAsync("copyTextToClipboard", BuildTranscriptText());
     }
 
+    // Copy a single message's text (the raw text; for an assistant message that is the markdown
+    // source). Distinct from CopyAsync, which copies the whole transcript.
+    private async Task CopyMessageAsync(string text)
+    {
+        if (resizeModule is null || string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        await resizeModule.InvokeVoidAsync("copyTextToClipboard", text);
+    }
+
     private async Task PopOutAsync()
     {
         if (resizeModule is null || !HasTranscript)

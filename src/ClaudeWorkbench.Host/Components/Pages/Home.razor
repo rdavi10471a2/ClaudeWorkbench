@@ -33,13 +33,13 @@ else
                     <span class="wb-dot @GitHubCue.Css"></span>@GitHubCue.Label
                 </span>
             </span>
-            <button type="button" class="wb-about-link" @onclick="@(() => aboutOpen = true)" title="What is best in life?">About</button>
             <RadzenButton Icon="help_outline"
                           Text="Help"
                           ButtonStyle="ButtonStyle.Light"
                           Size="ButtonSize.Small"
                           Title="How ClaudeWorkbench works — the governed loop, tabs, and controls"
                           Click="@(() => helpOpen = true)" />
+            <button type="button" class="wb-about-link" @onclick="@(() => aboutOpen = true)" title="What is best in life?">About</button>
             <RadzenButton Icon="settings"
                           Text="Settings"
                           ButtonStyle="ButtonStyle.Light"
@@ -75,12 +75,6 @@ else
                         <span class="workspace-state-text">Ready</span>
                     }
                 </div>
-                <RadzenButton Icon="folder_open"
-                              Text="Select Solution"
-                              ButtonStyle="ButtonStyle.Light"
-                              Size="ButtonSize.Small"
-                              Title="Select / switch the watched solution"
-                              Click="@(() => workspacePickerOpen = true)" />
             </div>
 
             <RadzenTabs RenderMode="TabRenderMode.Client">
@@ -125,9 +119,5 @@ else
         </div>
     }
 
-    @if (workspacePickerOpen)
-    {
-        <WorkspacePicker Embedded="false" OnClose="@CloseWorkspacePicker" />
-    }
 </section>
 }
