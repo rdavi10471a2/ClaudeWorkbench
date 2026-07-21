@@ -251,23 +251,22 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.False(File.Exists(newFilePath));
     }
 
-    // Salvaged from `AIMonitor.ToolSmokeTests --mcp-live-multi-file-session` (docs/plans/
-    // retire-legacy-test-harness.md, Phase 2.3). The only SEQUENTIAL assertion of the planned-overlay
-    // contract anywhere in the suite.
+    // The multi-file plan-complete contract. Two mutually-dependent NEW files are queued in one
+    // planned session. A multi-file plan NEVER compiles the overlay on submit — that keeps the
+    // compile off the parallel-submit path so concurrent submits cannot race it, and never
+    // compiles a half-queued overlay. The single compile happens once, at complete_edit_plan:
     //
-    // Two mutually-dependent NEW files are staged in one planned session. Overlay validation cannot run
-    // until every planned working file exists, so the ORDER of the two submits is the whole test:
+    //   new_file(A) -> submit(A)   overlayValidation DEFERRED => exactly "planned-overlay-pending".
+    //   new_file(B) -> submit(B)   still DEFERRED => still "planned-overlay-pending" (submits never
+    //                              compile a multi-file overlay).
+    //   complete_edit_plan         every planned file is submitted => the overlay compiles ONCE over
+    //                              the whole set; both files are consistent, so it compiles clean.
     //
-    //   new_file(A) -> submit(A)   B's working file does not exist yet => overlayValidation is DEFERRED,
-    //                              and must report exactly "planned-overlay-pending".
-    //   new_file(B) -> submit(B)   both working files now exist => the real overlay compile runs and the
-    //                              status must have moved PAST pending.
-    //
-    // Without this, a regression that either never defers (compiling A alone against a type that does not
-    // exist yet) or never resumes (leaving the batch permanently pending) would go unnoticed.
+    // Without this, a regression that compiled on submit (the old existence-keyed gate, which fired
+    // against empty siblings) or never compiled at complete would go unnoticed.
     [Fact]
     [Trait("Suite", "McpSurface")]
-    public async Task Planned_overlay_validation_stays_pending_until_every_planned_file_exists()
+    public async Task Multi_file_overlay_defers_on_every_submit_and_compiles_once_at_complete_edit_plan()
     {
         McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
         await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
@@ -278,7 +277,7 @@ public sealed class McpPlannedSessionSurfaceTests
             "start_monitor_session",
             new Dictionary<string, object?>
             {
-                ["purpose"] = "sequential planned-overlay contract",
+                ["purpose"] = "multi-file plan-complete overlay contract",
                 ["filesPlanned"] = new object[]
                 {
                     new Dictionary<string, object?>
@@ -300,7 +299,7 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.False(session.IsError == true, McpSurfaceClient.Text(session));
         string sessionId = McpSurfaceClient.JsonString(McpSurfaceClient.Text(session), "sessionId");
 
-        // First file: references nothing. The second planned working file does not exist yet.
+        // Multi-file plan: no submit compiles the overlay. Both stay pending.
         string firstSubmitJson = await ComposeNewFileAsync(
             client,
             sessionId,
@@ -308,14 +307,22 @@ public sealed class McpPlannedSessionSurfaceTests
             "namespace Example { public static class OverlayOne { public static string Value => \"one\"; } }");
         Assert.Equal("planned-overlay-pending", OverlayStatus(firstSubmitJson));
 
-        // Second file: consumes the first. Now every planned working file exists, so the deferral lifts
-        // and the real overlay compile runs across the batch.
         string secondSubmitJson = await ComposeNewFileAsync(
             client,
             sessionId,
             secondFilePath,
             "namespace Example { public static class OverlayTwo { public static string Value => OverlayOne.Value + \":two\"; } }");
-        Assert.NotEqual("planned-overlay-pending", OverlayStatus(secondSubmitJson));
+        Assert.Equal("planned-overlay-pending", OverlayStatus(secondSubmitJson));
+
+        // Plan complete: every planned file is submitted, so the overlay compiles ONCE over the whole
+        // set. The two files are mutually consistent, so it compiles clean.
+        CallToolResult complete = await client.CallToolAsync(
+            "complete_edit_plan",
+            new Dictionary<string, object?> { ["sessionId"] = sessionId });
+        Assert.False(complete.IsError == true, McpSurfaceClient.Text(complete));
+        using System.Text.Json.JsonDocument completeDoc = System.Text.Json.JsonDocument.Parse(McpSurfaceClient.Text(complete));
+        Assert.True(completeDoc.RootElement.GetProperty("planComplete").GetBoolean(), McpSurfaceClient.Text(complete));
+        Assert.False(completeDoc.RootElement.GetProperty("hasErrors").GetBoolean(), McpSurfaceClient.Text(complete));
     }
 
     // ---- AREA C: safety / negative paths ----

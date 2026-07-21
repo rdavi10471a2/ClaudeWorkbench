@@ -127,6 +127,17 @@ public sealed record AIMonitorSessionPlannedFile(
     string Role,
     string Reason);
 
+// Result of complete_edit_plan: the one overlay compile over the whole planned set. When
+// PlanComplete is false, the plan still has unsubmitted files (UnsubmittedFiles) and nothing was
+// compiled. When true, HasErrors + Diagnostics report the combined overlay result.
+public sealed record PlanCompletionResult(
+    bool PlanComplete,
+    bool HasErrors,
+    int DiagnosticCount,
+    IReadOnlyList<string> Diagnostics,
+    IReadOnlyList<string> UnsubmittedFiles,
+    string Message);
+
 public sealed record AIMonitorSessionPlannedFileInput(
     string SourceFilePath,
     string? OwningProjectPath = null,

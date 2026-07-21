@@ -541,6 +541,29 @@ public sealed class WorkflowEditService
         return GetStatus(fullWatchedPath);
     }
 
+    // Compile the CURRENT overlay for one file's candidate WITHOUT writing new content, and stamp
+    // the result on its manifest. The overlay a single file compiles IS the whole session's
+    // candidate set (CandidateEditValidator.BuildCandidateOverlayMap), so this is the "plan
+    // complete" gate — call it per planned file to stamp each record with the complete-overlay
+    // result. Runs under the file's manifest lock, so it never reads a candidate mid-submit.
+    public EditOverlayValidationResult ValidateOverlayForFile(string watchedFilePath)
+    {
+        string fullWatchedPath = Path.GetFullPath(watchedFilePath);
+        using IDisposable manifestLock = AcquireManifestLock(fullWatchedPath);
+        EditSessionManifest manifest = LoadManifest(fullWatchedPath)
+            ?? throw new InvalidOperationException("No edit session exists for this file. Run edit refresh first.");
+        if (!File.Exists(manifest.WorkingFilePath))
+        {
+            throw new InvalidOperationException(
+                $"No Working candidate exists for {manifest.RelativePath}; submit it before completing the plan.");
+        }
+
+        EditOverlayValidationResult result = editValidator.ValidateCandidateOverlayCompilation(manifest, manifest.WorkingFilePath);
+        manifest.LastOverlayValidation = result;
+        SaveManifest(fullWatchedPath, manifest);
+        return result;
+    }
+
     public CompareSnapshotResult Compare(string watchedFilePath, string? ledgerSummary = null)
     {
         string fullWatchedPath = Path.GetFullPath(watchedFilePath);

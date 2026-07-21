@@ -330,6 +330,14 @@ public sealed partial class AIMonitorTools
         return new PlannedSessionDecisionOptions(!allPlannedFilesDecided, refreshPlan, terminalValidationRecords);
     }
 
+    // A MULTI-file plan's overlay is compiled ONCE, at plan complete (complete_edit_plan), and
+    // NEVER on submit: deferring every submit keeps the compile off the parallel-submit path
+    // entirely, so concurrent submits cannot race the compile or the validator's cache, and no
+    // submit ever compiles a half-queued overlay (refresh_file/new_file create the Working file up
+    // front with old/empty content, so keying the gate on existence fired it before the siblings
+    // were queued). A SINGLE-file plan has no siblings to race and no "queueing" to finish, so it
+    // still validates on submit for immediate feedback — the submit IS plan-complete. Either way
+    // the accept-time GATE-2 build remains the authoritative net.
     private bool ShouldDeferPlannedOverlayValidation(string? sessionId, string sourceFilePath)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -337,20 +345,9 @@ public sealed partial class AIMonitorTools
             return false;
         }
 
-        AIMonitorSessionEditPlan? editPlan = RequireSessionEditPlan(sessionId);
+        AIMonitorSessionEditPlan editPlan = RequireSessionEditPlan(sessionId);
         EnsurePlannedFile(editPlan, sourceFilePath);
-        string currentPath = Path.GetFullPath(sourceFilePath);
-        bool allPlannedWorkingFilesExist = editPlan.FilesPlanned.All(file =>
-        {
-            string plannedPath = Path.GetFullPath(file.SourceFilePath);
-            if (plannedPath.Equals(currentPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return File.Exists(workflowPaths.GetWorkingFilePath(plannedPath));
-        });
-        return !allPlannedWorkingFilesExist;
+        return editPlan.FilesPlanned.Count > 1;
     }
 
     private void EnsurePlannedMutationAllowed(string? sessionId, string sourceFilePath)

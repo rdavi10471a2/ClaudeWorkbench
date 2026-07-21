@@ -2,6 +2,7 @@ using AIMonitor.Core;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 
@@ -14,7 +15,11 @@ internal sealed class CandidateEditValidator
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly WorkflowEditPaths paths;
-    private readonly Dictionary<string, EditOverlayValidationResult> overlayValidationCache = new(StringComparer.Ordinal);
+    // Concurrent: a single validator (per workspace) is shared across sessions, so single-file
+    // submits from different sessions can compile overlays at the same time and touch this cache
+    // concurrently. Multi-file plans no longer validate on submit (they compile once at
+    // complete_edit_plan), so contention is low, but the cache must still be race-safe.
+    private readonly ConcurrentDictionary<string, EditOverlayValidationResult> overlayValidationCache = new(StringComparer.Ordinal);
 
     public CandidateEditValidator(MonitorSettings settings)
     {

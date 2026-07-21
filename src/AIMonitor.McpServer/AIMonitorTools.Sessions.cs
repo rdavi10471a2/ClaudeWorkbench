@@ -139,6 +139,64 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
+    [Description("Mark this run's edit plan COMPLETE and compile the overlay ONCE over the whole planned set. This is the ONLY point the overlay gate runs while editing — submit_file and the edit tools never compile it — so call this AFTER you have submitted every planned file and BEFORE staging. Returns the combined overlay result; errors name the specific file/line. If any planned file has no submitted candidate yet, it compiles nothing and tells you which files are still pending, so it is safe to call and re-call.")]
+    public PlanCompletionResult CompleteEditPlan(
+        [Description("Session handle returned by start_monitor_session.")] string sessionId)
+    {
+        runtimeState.Touch();
+        AIMonitorSessionEditPlan editPlan = RequireSessionEditPlan(sessionId);
+
+        // Refuse (report, don't compile) until every planned file has a submitted candidate.
+        // This is what makes the gate race-safe: it never compiles a half-queued overlay, even
+        // if the agent batches this call alongside the submits.
+        List<string> unsubmitted = editPlan.FilesPlanned
+            .Where(file => workflowService.GetStatus(Path.GetFullPath(file.SourceFilePath)).OperationCount == 0)
+            .Select(file => workflowPaths.GetRelativeWatchedPath(Path.GetFullPath(file.SourceFilePath)))
+            .ToList();
+        if (unsubmitted.Count > 0)
+        {
+            return new PlanCompletionResult(
+                false,
+                false,
+                0,
+                [],
+                unsubmitted,
+                $"Plan not complete: {unsubmitted.Count} planned file(s) have no submitted candidate yet. Submit them, then call complete_edit_plan again.");
+        }
+
+        // One compile covers the whole overlay (any file compiles the full candidate set) and the
+        // validator caches it, so stamping every planned file's record is cheap and consistent.
+        List<string> diagnostics = new();
+        bool hasErrors = false;
+        foreach (AIMonitorSessionPlannedFile file in editPlan.FilesPlanned)
+        {
+            EditOverlayValidationResult result = workflowService.ValidateOverlayForFile(Path.GetFullPath(file.SourceFilePath));
+            if (result.HasErrors)
+            {
+                hasErrors = true;
+                diagnostics.AddRange(result.Diagnostics.Select(diagnostic =>
+                    $"{diagnostic.Path}({diagnostic.Line},{diagnostic.Column}): {diagnostic.Id} {diagnostic.Message}"));
+            }
+        }
+
+        IReadOnlyList<string> distinctDiagnostics = diagnostics.Distinct(StringComparer.Ordinal).Take(50).ToList();
+        RecordMonitorSessionEvent(
+            sessionId,
+            "complete-edit-plan",
+            hasErrors ? $"overlay compiled with {distinctDiagnostics.Count} error(s)" : "overlay compiled clean",
+            JsonSerializer.Serialize(distinctDiagnostics, JsonOptions));
+        return new PlanCompletionResult(
+            true,
+            hasErrors,
+            distinctDiagnostics.Count,
+            distinctDiagnostics,
+            [],
+            hasErrors
+                ? $"Plan complete, but the overlay compiled WITH ERRORS ({distinctDiagnostics.Count}). Fix and re-submit the affected files, then call complete_edit_plan again."
+                : "Plan complete: the overlay compiled clean. Stage the planned files for review.");
+    }
+
+    [McpServerTool]
     [Description("Replace the watched files planned for this monitor edit session after explicit operator correction.")]
     public AIMonitorSessionState SetMonitorSessionEditPlan(
         [Description("Session handle returned by start_monitor_session.")] string sessionId,
