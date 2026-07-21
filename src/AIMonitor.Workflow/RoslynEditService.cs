@@ -611,20 +611,46 @@ public sealed class RoslynEditService
 
     private static TypeDeclarationSyntax ResolveSingleType(CompilationUnitSyntax root, string containingType)
     {
-        bool expectsQualifiedName = containingType.Contains('.', StringComparison.Ordinal);
         TypeDeclarationSyntax[] matches = root.DescendantNodes()
             .OfType<TypeDeclarationSyntax>()
-            .Where(type => expectsQualifiedName
-                ? string.Equals(BuildContainingType(type), containingType, StringComparison.Ordinal)
-                : type.Identifier.ValueText.Equals(containingType, StringComparison.Ordinal))
+            .Where(type => MatchesContainingType(type, containingType))
             .ToArray();
 
         return matches.Length switch
         {
             1 => matches[0],
-            0 => throw new InvalidOperationException($"Containing type '{containingType}' was not found."),
-            _ => throw new InvalidOperationException($"Containing type '{containingType}' is ambiguous.")
+            0 => throw new InvalidOperationException(
+                $"Containing type '{containingType}' was not found. Use the containing type shown by get_source_map (its simple name, e.g. 'Calculator', or the namespace-qualified name)."),
+            _ => throw new InvalidOperationException(
+                $"Containing type '{containingType}' is ambiguous; qualify it with its namespace as shown by get_source_map.")
         };
+    }
+
+    // Match a candidate type against the caller's containingType in whatever form they passed:
+    // the simple name ('Calculator'), the nested chain ('Outer.Inner'), or the fully
+    // namespace-qualified name ('Ns.Outer.Inner'). The source map reports the simple/nested form,
+    // but an agent commonly composes the namespace-qualified name, so all are honored. (Previously
+    // a dotted name was compared to BuildContainingType(type) -- the ENCLOSING-type chain, which is
+    // null for a top-level type -- so a namespace-qualified name never matched; see the
+    // typed-symbol resolve bug.)
+    private static bool MatchesContainingType(TypeDeclarationSyntax type, string containingType)
+    {
+        string simple = type.Identifier.ValueText;
+        if (containingType.Equals(simple, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        string? enclosing = BuildContainingType(type);
+        string nested = string.IsNullOrEmpty(enclosing) ? simple : $"{enclosing}.{simple}";
+        if (containingType.Equals(nested, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        string ns = BuildNamespace(type);
+        string qualified = string.IsNullOrEmpty(ns) ? nested : $"{ns}.{nested}";
+        return containingType.Equals(qualified, StringComparison.Ordinal);
     }
 
     private static int IndexOfMember(SyntaxList<MemberDeclarationSyntax> members, string symbolName)

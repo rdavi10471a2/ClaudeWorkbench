@@ -16,6 +16,15 @@ namespace AIMonitor.McpServer;
 
 public sealed partial class AIMonitorTools
 {
+    // Shared param doc for every typed-symbol tool's containing-type argument. Points the agent at
+    // the source map (the value it should copy) rather than composing the name by hand; the
+    // resolver accepts the simple, nested, or namespace-qualified form, so consistency is built
+    // into the surface instead of relying on the agent picking one form.
+    private const string ContainingTypeDescription =
+        "The type to add into. Use the exact value shown by get_source_map (its containingType/type " +
+        "field) instead of composing it yourself. Accepts the simple name (e.g. 'Calculator'), the " +
+        "namespace-qualified name (e.g. 'CalculatorSample.Calculator'), or a nested chain (e.g. 'Outer.Inner').";
+
     [McpServerTool]
     [Description("Replace one C# symbol in the monitor-owned Working candidate using a Roslyn selector.")]
     public RoslynEditResult SubmitSymbol(string path, string symbolSelectorJson, string code, string? sessionId = null, string? manifestJson = null)
@@ -57,7 +66,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add or remove the partial modifier on a C# type in the monitor-owned Working candidate.")]
-    public RoslynEditResult SetTypePartial(string path, string containingType, bool isPartial, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult SetTypePartial(string path, [Description(ContainingTypeDescription)] string containingType, bool isPartial, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
@@ -70,7 +79,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add a C# member or nested type to a containing type in the monitor-owned Working candidate.")]
-    public RoslynEditResult AddSymbol(string path, string containingType, string symbolType, string code, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult AddSymbol(string path, [Description(ContainingTypeDescription)] string containingType, string symbolType, string code, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
@@ -83,7 +92,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add a C# field to a containing type in the monitor-owned Working candidate.")]
-    public RoslynEditResult AddField(string path, string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult AddField(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
@@ -96,7 +105,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add a C# property to a containing type in the monitor-owned Working candidate.")]
-    public RoslynEditResult AddProperty(string path, string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult AddProperty(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
@@ -109,7 +118,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add a C# method to a containing type in the monitor-owned Working candidate.")]
-    public RoslynEditResult AddMethod(string path, string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult AddMethod(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
@@ -122,7 +131,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add a C# constructor to a containing type in the monitor-owned Working candidate.")]
-    public RoslynEditResult AddConstructor(string path, string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult AddConstructor(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
@@ -135,7 +144,7 @@ public sealed partial class AIMonitorTools
 
     [McpServerTool]
     [Description("Add a C# nested type to a containing type in the monitor-owned Working candidate.")]
-    public RoslynEditResult AddNestedType(string path, string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
+    public RoslynEditResult AddNestedType(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
