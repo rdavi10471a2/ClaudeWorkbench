@@ -192,11 +192,15 @@
     cursor: progress;
 }
 
-.composer-icon-btn .attach-input {
+/* ::deep so the rule reaches InputFile's inner <input> (scoped CSS alone does not) */
+.composer-icon-btn ::deep input {
     position: absolute;
     inset: 0;
+    width: 100%;
+    height: 100%;
     opacity: 0;
     cursor: pointer;
+    padding: 0;
 }
 
 .composer-check {
@@ -219,6 +223,14 @@
 /* pushes Send/Stop to the right of the compact action bar */
 .composer-actions-spacer {
     flex: 1 1 auto;
+}
+
+/* top utility bar: attach, activity, auto-approve (uses the roomy top strip) */
+.chat-composer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
 }
 
 .chat-composer-actions .rz-button {

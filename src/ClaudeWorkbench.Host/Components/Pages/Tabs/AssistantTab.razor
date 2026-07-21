@@ -1,6 +1,23 @@
 <div class="assistant-host">
     <div class="assistant-layout" @ref="assistantLayout">
         <div class="chat-composer" @ref="chatComposer">
+            <div class="chat-composer-toolbar">
+                <label class="composer-icon-btn @(uploading ? "busy" : null)"
+                       title="@(uploading ? "Uploading..." : "Attach files")">
+                    <InputFile class="attach-input" OnChange="OnFilesSelectedAsync" multiple disabled="@uploading" />
+                    <RadzenIcon Icon="attach_file" />
+                </label>
+                <button type="button" class="composer-icon-btn"
+                        title="Activity — tool calls and events for this run"
+                        @onclick="OpenActivityAsync">
+                    <RadzenIcon Icon="monitoring" />
+                </button>
+                <label class="composer-check"
+                       title="Auto-approve claude-workbench edits for THIS thread only. The merge review still gates every write to watched source; New Thread turns it back off.">
+                    <input type="checkbox" @bind="autoApprove" />
+                    <span>Auto-approve</span>
+                </label>
+            </div>
             @if (Working)
             {
                 <div class="assistant-turn-activity" role="status" aria-live="polite">
@@ -37,21 +54,6 @@
                 </div>
             }
             <div class="chat-composer-actions">
-                <label class="composer-icon-btn @(uploading ? "busy" : null)"
-                       title="@(uploading ? "Uploading..." : "Attach files")">
-                    <InputFile class="attach-input" OnChange="OnFilesSelectedAsync" multiple disabled="@uploading" />
-                    <RadzenIcon Icon="attach_file" />
-                </label>
-                <button type="button" class="composer-icon-btn"
-                        title="Activity — tool calls and events for this run"
-                        @onclick="OpenActivityAsync">
-                    <RadzenIcon Icon="monitoring" />
-                </button>
-                <label class="composer-check"
-                       title="Auto-approve claude-workbench edits for THIS thread only. The merge review still gates every write to watched source; New Thread turns it back off.">
-                    <input type="checkbox" @bind="autoApprove" />
-                    <span>Auto-approve</span>
-                </label>
                 <span class="composer-actions-spacer" aria-hidden="true"></span>
                 @if (Working)
                 {
