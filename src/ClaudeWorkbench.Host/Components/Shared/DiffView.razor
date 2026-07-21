@@ -1,23 +1,48 @@
-<div class="diff-view">
-    <div class="diff-view-scroll">
-        <div class="diff-view-col-head left">@LeftLabel</div>
-        <div class="diff-view-col-head right">@RightLabel</div>
-        @for (int index = 0; index < LineCount; index++)
-        {
-            var left = LeftLine(index);
-            var right = RightLine(index);
-            <div class="diff-view-line left @LineClass(left)">
-                <span class="diff-view-ln">@Num(left)</span>
-                <code>@Text(left)</code>
-            </div>
-            <div class="diff-view-line right @LineClass(right)">
-                <span class="diff-view-ln">@Num(right)</span>
-                <code>@Text(right)</code>
-            </div>
-        }
-        @if (LineCount == 0)
-        {
-            <div class="diff-view-empty">No differences.</div>
-        }
+@if (LineCount == 0)
+{
+    <div class="diff-view">
+        <div class="diff-view-empty">No differences.</div>
     </div>
-</div>
+}
+else
+{
+    <div class="diff-view">
+        @* Headers live OUTSIDE the scroll area so they never move when a pane scrolls. *@
+        <div class="diff-view-heads">
+            <div class="diff-view-col-head left">@LeftLabel</div>
+            <div class="diff-view-col-head right">@RightLabel</div>
+        </div>
+
+        @* The body owns the single shared VERTICAL scrollbar (both panes are inside it, so they
+           scroll vertically together natively). Each pane clips horizontally; the shared bar below
+           drives their horizontal offset. *@
+        <div class="diff-view-body">
+            <div class="diff-view-pane left" @ref="leftPane">
+                @for (int index = 0; index < LineCount; index++)
+                {
+                    var left = LeftLine(index);
+                    <div class="diff-view-line @LineClass(left)">
+                        <span class="diff-view-ln">@Num(left)</span>
+                        <code>@Text(left)</code>
+                    </div>
+                }
+            </div>
+            <div class="diff-view-pane right" @ref="rightPane">
+                @for (int index = 0; index < LineCount; index++)
+                {
+                    var right = RightLine(index);
+                    <div class="diff-view-line @LineClass(right)">
+                        <span class="diff-view-ln">@Num(right)</span>
+                        <code>@Text(right)</code>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* The single shared HORIZONTAL scrollbar. Its track is sized (in JS) to the widest pane, and
+           scrolling it drives BOTH panes' horizontal offset together. *@
+        <div class="diff-view-hbar" @ref="hBar">
+            <div class="diff-view-hbar-inner" @ref="hBarInner"></div>
+        </div>
+    </div>
+}
