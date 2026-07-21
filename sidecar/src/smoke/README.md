@@ -40,13 +40,30 @@ tokens).
 `samples/watched-solutions/CalculatorSample/` — a tiny buildable console solution
 with `Calculator` and `AdvancedCalculations`. The smoke asks the agent for small
 additions (`Modulo`, `Triple`, `Negate`/`Cube`), drives the decision, verifies what
-did or didn't land on disk, then **restores every fixture file it touched**
-(`Calculator.cs`, `AdvancedCalculations.cs`, `Program.cs` — guaranteed in a
-`finally`) and starts a fresh thread, so it is safe to re-run.
+did or didn't land on disk, then **resets the watched fixture to a completely fresh
+copy** of a pristine golden and re-warms the index (guaranteed in a `finally`), and
+starts a fresh thread — so every case begins from pristine source no matter what the
+last case wrote or created (a new folder/namespace, an accepted whole-file overwrite).
+Because an accept WRITES watched source, this reset is what keeps the cases independent;
+a per-file restore is not enough.
 
-The committed fixture config uses **relative** paths — `WatchedSolutionPath`
-resolves against the config file's own folder, `RuntimeRoot` against the repo root —
-so it works in any checkout with no editing.
+## Fixture: a throwaway %temp% copy + a golden
+
+Point the harness at the pristine source with `SMOKE_GOLDEN_DIR`; the reset wipes the
+watched tree and re-copies it. The recommended setup gives each case a fresh solution
+without ever mutating the repo sample:
+
+```bash
+# From the repo root. $TEMP is your temp dir.
+golden="$TEMP/cwb-smoke-golden/CalculatorSample"; work="$TEMP/cwb-smoke-work/CalculatorSample"
+rm -rf "$golden" "$work"; mkdir -p "$(dirname "$golden")" "$(dirname "$work")"
+cp -r samples/watched-solutions/CalculatorSample "$golden"; rm -rf "$golden/bin" "$golden/obj"
+cp -r "$golden" "$work"
+```
+
+Then a config pointing `WatchedSolutionPath` at `$work/CalculatorSample.slnx` and
+`RuntimeRoot` at a temp dir. When `SMOKE_GOLDEN_DIR` is unset the reset is a no-op and
+multi-accept cases bleed together — set it.
 
 ## Run
 
@@ -54,27 +71,31 @@ Needs the **.NET 10 SDK** (indexing calls `MSBuildLocator.RegisterDefaults()`, w
 needs MSBuild/Roslyn — the runtime alone is not enough), **Node.js**, and a Claude
 login.
 
-1. Start the host **from the repo root** with the fixture config **and the review API
-   opted in**. The host launches the sidecar itself.
+1. Stage the fixture (above), then start the host on the working copy with the review
+   API opted in (the host launches the sidecar itself):
 
    ```bash
-   # bash
    CWB_ENABLE_REVIEW_API=1 dotnet run --project src/ClaudeWorkbench.Host \
-     -- --config src/ClaudeWorkbench.Host/config/appsettings.calculator-sample.json
+     -- --config /abs/path/to/smoke-config.json --repo-root "$PWD"
    ```
 
-   ```powershell
-   # PowerShell
-   $env:CWB_ENABLE_REVIEW_API = "1"
-   dotnet run --project src/ClaudeWorkbench.Host `
-     -- --config src/ClaudeWorkbench.Host/config/appsettings.calculator-sample.json
-   ```
-
-2. In `sidecar/`:
+2. In `sidecar/`, run the smoke pointed at the golden (and an evidence dir):
 
    ```bash
-   npm run smoke
+   SMOKE_GOLDEN_DIR="$golden" SMOKE_EVIDENCE_DIR="$TEMP/cwb-smoke-evidence" npm run smoke
    ```
+
+## Evidence
+
+Each case writes, under `SMOKE_EVIDENCE_DIR` (default `sidecar/smoke-evidence/`,
+gitignored), the whole turn for offline analysis:
+
+- `<case>.chat.txt` — the readable transcript: the prompt, every assistant message, and
+  every tool call in order.
+- `<case>.events.jsonl` — the raw sidecar event stream for the turn.
+
+The chat is captured off the sidecar's `/events` bus, best-effort: a dropped stream
+loses the capture, not the test (completion is polled off `/health`).
 
 ## Safety note on the review endpoints
 
@@ -100,3 +121,5 @@ The smoke also refuses to run unless the host reports it is watching
 | `WORKBENCH_HOST` | `http://127.0.0.1:6100` | host base URL |
 | `SIDECAR_BASE` | `http://127.0.0.1:6110` | sidecar base URL |
 | `SMOKE_TURN_TIMEOUT_MS` | `300000` | max wait for the agent turn |
+| `SMOKE_GOLDEN_DIR` | (unset) | pristine solution the fixture is reset FROM between cases; unset = no reset |
+| `SMOKE_EVIDENCE_DIR` | `sidecar/smoke-evidence` | where per-case `<case>.chat.txt` + `.events.jsonl` are written |

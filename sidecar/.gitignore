@@ -6,3 +6,4 @@ dist/
 boot.log
 boot.err
 e2e-*.log
+smoke-evidence/
