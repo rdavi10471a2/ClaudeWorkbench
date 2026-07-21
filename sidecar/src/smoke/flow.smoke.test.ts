@@ -208,3 +208,79 @@ test("multi-file: stage two files in one session -> accept both -> both written,
     assert.match(adv, /Cube/, "AdvancedCalculations.cs change not on disk");
   });
 });
+
+test("multi-file reject: two files in one session -> reject one -> whole session voided, NOTHING written", { timeout: TURN_TIMEOUT_MS + 90_000 }, async () => {
+  await withFixture(async (fixtureDir) => {
+    const calcBefore = await readFile(join(fixtureDir, "Calculator.cs"), "utf8");
+    const advBefore = await readFile(join(fixtureDir, "AdvancedCalculations.cs"), "utf8");
+
+    const staged = await runTurnAndCollectStaged(
+      "Make two changes and stage BOTH files in a single monitor session: " +
+        "(1) add a public method `Half(double x)` returning x / 2 to the Calculator class in Calculator.cs, and " +
+        "(2) add a public method `Quadruple(double x)` returning x * 4 to the AdvancedCalculations class in AdvancedCalculations.cs. " +
+        "Stage both for review and then stop.",
+    );
+    const paths = staged.map((r) => basename(r.relativePath).toLowerCase());
+    assert.ok(paths.includes("calculator.cs"), `Calculator.cs not staged (staged: ${JSON.stringify(staged)})`);
+    assert.ok(paths.includes("advancedcalculations.cs"), `AdvancedCalculations.cs not staged (staged: ${JSON.stringify(staged)})`);
+    // One run must be one session, so a single reject can void the whole set.
+    assert.equal(new Set(staged.map((r) => r.sessionId)).size, 1, `expected ONE session, got: ${JSON.stringify(staged.map((r) => r.sessionId))}`);
+
+    // Reject ONE file. ADR-0005: a single reject voids the ENTIRE session.
+    const target = staged.find((r) => basename(r.relativePath).toLowerCase() === "calculator.cs")!;
+    const { body } = await postJson<{ rejected: boolean; message: string }>(`${HOST}/review/reject`, {
+      stagedRecordId: target.stagedRecordId,
+    });
+    assert.ok(body.rejected, `reject failed: ${body.message}`);
+
+    // The core guarantee: NOTHING was written — not the rejected file, nor the other file in the
+    // voided session (which was never even accepted here).
+    assert.equal(await readFile(join(fixtureDir, "Calculator.cs"), "utf8"), calcBefore, "reject must not write watched source (Calculator.cs changed)");
+    assert.equal(await readFile(join(fixtureDir, "AdvancedCalculations.cs"), "utf8"), advBefore, "a rejected session must write NOTHING, but AdvancedCalculations.cs changed");
+
+    // Every record from the voided session is gone from the pending queue.
+    const stagedIds = new Set(staged.map((r) => r.stagedRecordId));
+    const stillPending = (await pending()).filter((item) => stagedIds.has(item.stagedRecordId));
+    assert.equal(stillPending.length, 0, `voided session's records still pending: ${JSON.stringify(stillPending)}`);
+  });
+});
+
+test("multi-file build error: change that breaks a caller -> accept refused, watched source unchanged", { timeout: TURN_TIMEOUT_MS + 90_000 }, async () => {
+  await withFixture(async (fixtureDir) => {
+    const calcBefore = await readFile(join(fixtureDir, "Calculator.cs"), "utf8");
+    const advBefore = await readFile(join(fixtureDir, "AdvancedCalculations.cs"), "utf8");
+
+    // Rename Calculator.Multiply -> Mul and update Program, but DELIBERATELY leave
+    // AdvancedCalculations.Power (which calls Multiply) untouched. The fixture is designed for
+    // exactly this "break the caller in the other file" case, so the combined overlay/GATE-2 build
+    // cannot compile. The instruction to stage despite the error is what makes this a build-gate
+    // test and not an agent-judgement test.
+    const staged = await runTurnAndCollectStaged(
+      "Change ONLY Calculator.cs and Program.cs. Do NOT modify AdvancedCalculations.cs, and do NOT add a Multiply method back, EVEN IF validation reports errors in AdvancedCalculations.cs — the operator will decide. " +
+        "In Calculator.cs, rename the `Multiply` method to `Mul`. In Program.cs, change the multiply demo line to call `calculator.Mul(6, 7)`. " +
+        "Stage both files for review and then stop.",
+    );
+    assert.ok(staged.length >= 1, `agent staged nothing (staged: ${JSON.stringify(staged)})`);
+    assert.equal(new Set(staged.map((r) => r.sessionId)).size, 1, `expected ONE session, got: ${JSON.stringify(staged.map((r) => r.sessionId))}`);
+
+    // Accept the whole session. The terminal accept runs the authoritative GATE-2 build over the
+    // combined overlay, which FAILS (AdvancedCalculations.Power calls the now-gone Multiply), so
+    // the accept is REFUSED and nothing is written. (Accept With Validation Override is the only
+    // way past it, and this test never takes it.)
+    let refused = false;
+    let messages = "";
+    for (const record of [...staged].reverse()) {
+      const { body } = await postJson<AcceptResult>(`${HOST}/review/accept`, { stagedRecordId: record.stagedRecordId });
+      messages += ` ${body.message}`;
+      if (!body.accepted) {
+        refused = true;
+      }
+    }
+    assert.ok(refused, `expected the build gate to REFUSE the broken change, but every accept succeeded: ${messages.trim()}`);
+    assert.match(messages, /build failed|not accepted|validation override/i, `expected a build-failure message, got: ${messages.trim()}`);
+
+    // Failed build => watched source is untouched (H2: validate before write).
+    assert.equal(await readFile(join(fixtureDir, "Calculator.cs"), "utf8"), calcBefore, "a failed build must not write Calculator.cs");
+    assert.equal(await readFile(join(fixtureDir, "AdvancedCalculations.cs"), "utf8"), advBefore, "a failed build must not write AdvancedCalculations.cs");
+  });
+});

@@ -4,13 +4,21 @@
 TypeScript, against the live stack — three tests, each a real Claude turn:
 
 ```
-1. accept      POST /prompt (autoApprove) → agent stages → POST /review/accept
-               → GATE-2 build passes → watched source written
-2. reject      POST /prompt (autoApprove) → agent stages → POST /review/reject
-               → watched source UNCHANGED
-3. multi-file  one session stages two files → accept both
-               → terminal build passes → both written
+1. accept        POST /prompt (autoApprove) → agent stages → POST /review/accept
+                 → GATE-2 build passes → watched source written
+2. reject        POST /prompt (autoApprove) → agent stages → POST /review/reject
+                 → watched source UNCHANGED
+3. multi-file    one session stages two files → accept both
+                 → terminal build passes → both written
+4. multi-reject  two files in one session → reject ONE → whole session voided
+                 (ADR-0005), NOTHING written, both records leave the queue
+5. build-error   a change that breaks a caller in an untouched file → accept
+                 → terminal GATE-2 build FAILS → accept refused, source unchanged
 ```
+
+Every case is one real Claude turn off the CalculatorSample fixture, covering the workflow
+shapes: single-file, multi-file, reject, and build-gate failure. (2)/(4) also assert the
+one-session-per-run invariant — every staged record shares one `sessionId`.
 
 Accept/Reject are `EngineReviewWorkflow` — where the H1/H2 fixes live. Note the
 ordering the accept test asserts: the authoritative GATE-2 build runs **before**
