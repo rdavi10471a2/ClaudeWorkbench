@@ -404,3 +404,45 @@ test("multi-file build error: change that breaks a caller -> accept refused, wat
     assert.equal(await readFile(join(fixtureDir, "AdvancedCalculations.cs"), "utf8"), advBefore, "a failed build must not write AdvancedCalculations.cs");
   });
 });
+
+test("multi-function: rewrite + edit + a brand-new namespace, all one session -> accept all -> written, build passes", { timeout: TURN_TIMEOUT_MS + 120_000 }, async () => {
+  await withFixture(async (fixtureDir) => {
+    // The big one: a full-file rewrite (Program off top-level statements), an edit to an existing
+    // class (Calculator gets a mode switch), AND a brand-new folder/namespace/file (Calculus +
+    // Newton's method). It exercises every shape at once -- rewrite, edit, new file -- in one
+    // session, and is the truest test of the golden reset's new-file cleanup.
+    const staged = await runTurnAndCollectStaged(
+      "multi-function",
+      "Rewrite main to not use top level statements. " +
+        "Update Calculator to support a running total and a single memory location via a mode switch. " +
+        "Add a folder and a namespace named calculus and an implementation of Newton's method with any support that it needs. " +
+        "Stage every changed and new file for review, then stop.",
+    );
+    // One run is one session -- across a rewrite, an edit, and a new namespace.
+    assert.ok(
+      staged.length >= 3,
+      `expected >= 3 staged files (Program, Calculator, a Calculus file), got: ${JSON.stringify(staged.map((r) => r.relativePath))}`,
+    );
+    assert.equal(new Set(staged.map((r) => r.sessionId)).size, 1, `expected ONE session, got: ${JSON.stringify(staged.map((r) => r.sessionId))}`);
+    const calculus = staged.find((r) => /calculus/i.test(r.relativePath));
+    assert.ok(calculus, `no Calculus namespace file was staged: ${JSON.stringify(staged.map((r) => r.relativePath))}`);
+
+    // Accept the whole session; the terminal build passes and every file -- new one included --
+    // lands together.
+    let summaries = "";
+    for (const record of [...staged].reverse()) {
+      const { body } = await postJson<AcceptResult>(`${HOST}/review/accept`, { stagedRecordId: record.stagedRecordId });
+      assert.ok(body.accepted, `accept failed for ${record.relativePath}: ${body.message}`);
+      summaries += ` ${body.agentSummary ?? ""}`;
+    }
+    assert.match(summaries, /Build passed/i, `expected a passing terminal build, got: ${summaries.trim()}`);
+
+    // Structural results are on disk: Program is wrapped in a class with a Main (no top-level
+    // statements), and the new Calculus file carries a type.
+    const program = await readFile(join(fixtureDir, "Program.cs"), "utf8");
+    assert.match(program, /\bclass\b/, "Program.cs still uses top-level statements (no class wrapper)");
+    assert.match(program, /\bMain\b/, "Program.cs has no Main method after the rewrite");
+    const calculusOnDisk = await readFile(join(fixtureDir, calculus.relativePath), "utf8");
+    assert.match(calculusOnDisk, /\bclass\b/i, "the new Calculus file has no type declaration on disk");
+  });
+});
