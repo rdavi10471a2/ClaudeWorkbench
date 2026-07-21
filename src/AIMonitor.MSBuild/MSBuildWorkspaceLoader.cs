@@ -164,6 +164,19 @@ public sealed class MSBuildWorkspaceLoader
 
             registrationAttempted = true;
 
+            // Set BEFORE the first workspace/BuildHost is created so every child MSBuild inherits it.
+            // Persistent build-server children (MSBuild worker nodes, the dotnet MSBuild server, and
+            // VBCSCompiler for shared compilation) otherwise outlive an index/build and keep OS file
+            // handles on the watched sample's obj/bin, which blanks the fixture on a golden Reset and
+            // forces an app stop between manual test steps. Disabling reuse/servers makes each build's
+            // children exit with the build. Env vars flow to grandchildren too; MSBuild reads env vars
+            // as global properties, so UseSharedCompilation=false disables VBCSCompiler. See the
+            // file-locking diagnosis. (Does not address a wedged/orphaned BuildHost itself — that class
+            // is covered by WorkspaceChildProcessJob.)
+            Environment.SetEnvironmentVariable("MSBUILDDISABLENODEREUSE", "1");
+            Environment.SetEnvironmentVariable("DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER", "1");
+            Environment.SetEnvironmentVariable("UseSharedCompilation", "false");
+
             // Before the first workspace exists, so Roslyn's BuildHost child is born inside the job
             // and cannot outlive this process. See WorkspaceChildProcessJob for why that matters.
             WorkspaceChildProcessJob.EnsureCurrentProcessIsJobbed();

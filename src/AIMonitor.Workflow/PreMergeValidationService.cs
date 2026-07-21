@@ -87,7 +87,11 @@ public sealed class PreMergeValidationService
 
             ProcessResult build = RunProcess(
                 "dotnet",
-                ["build", validationSolutionPath, "--nologo", "-v:minimal"],
+                // -nodeReuse:false + UseSharedCompilation=false: don't leave MSBuild worker nodes or
+                // VBCSCompiler running after validation; they otherwise pin the validation copy's obj/bin
+                // (and pile up per accept). Belt-and-suspenders with the process-wide env vars set in
+                // MSBuildWorkspaceLoader. See the file-locking diagnosis.
+                ["build", validationSolutionPath, "--nologo", "-v:minimal", "-nodeReuse:false", "-p:UseSharedCompilation=false"],
                 validationWorkspaceRoot,
                 TimeSpan.FromMinutes(3));
             string output = string.Join(Environment.NewLine, [build.StandardOutput, build.StandardError]);

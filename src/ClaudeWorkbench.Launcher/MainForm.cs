@@ -142,8 +142,16 @@ public sealed class MainForm : Form
         }
     }
 
-    // Make each sample under samples\ match samples-golden\ exactly: delete then re-copy, so
-    // agent-added files are removed rather than left behind by an overwrite-only copy.
+    // Make each sample under samples\ match samples-golden\ exactly: wipe the SOURCE then re-copy,
+    // so agent-added files are removed rather than left behind by an overwrite-only copy.
+    //
+    // Deliberately SKIPS bin\ and obj\. The host indexes/builds the watched sample IN PLACE, so
+    // build output accumulates here and can be held open by a lingering Roslyn BuildHost or a
+    // compiler/MSBuild server. A full recursive delete then collides with that lock, half-deletes
+    // the tree, and BLANKS the source. bin/obj are derived (rebuilt on next build) and the golden
+    // carries none, so leaving them is correct as well as safe. This mirrors the smoke's
+    // resetFixture, which skips build output and has never hit this failure. See the file-locking
+    // diagnosis. (Top-level bin/obj only; the sample fixtures are single-project.)
     private static void RestoreFromGolden(string golden, string samples)
     {
         Directory.CreateDirectory(samples);
@@ -152,10 +160,32 @@ public sealed class MainForm : Form
             string target = Path.Combine(samples, Path.GetFileName(goldenSample));
             if (Directory.Exists(target))
             {
-                Directory.Delete(target, recursive: true);
+                WipeExceptBuildOutput(target);
             }
 
             CopyTree(goldenSample, target);
+        }
+    }
+
+    // Delete every top-level entry under root except bin\ and obj\ (see RestoreFromGolden).
+    private static void WipeExceptBuildOutput(string root)
+    {
+        foreach (string entry in Directory.GetFileSystemEntries(root))
+        {
+            string name = Path.GetFileName(entry);
+            if (name is "bin" or "obj")
+            {
+                continue;
+            }
+
+            if (Directory.Exists(entry))
+            {
+                Directory.Delete(entry, recursive: true);
+            }
+            else
+            {
+                File.Delete(entry);
+            }
         }
     }
 
