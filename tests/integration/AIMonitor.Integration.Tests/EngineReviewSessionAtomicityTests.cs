@@ -159,6 +159,96 @@ public sealed class EngineReviewSessionAtomicityTests
         Assert.NotNull(accept.AgentSummary);
     }
 
+    // The ONLY automated coverage of the Accept-With-Validation-Override path. A mutually-broken
+    // two-file session (each references a member the OTHER never defines) carries a pre-merge
+    // overlay-compile error on BOTH records, so normal accept is refused and the operator must
+    // force. Asserts the override contract end to end:
+    //   - normal accept is refused and offers the override;
+    //   - a NON-terminal override is an approval: force-approved, writes NOTHING, and runs no build
+    //     (the redundant per-file build that flashed the accept spinner — see
+    //     WorkflowEditService.ForceApprovePreMergeValidation);
+    //   - the terminal override writes the WHOLE broken set at once even though GATE-2 fails,
+    //     because forcing is a deliberate, operator-only choice.
+    // Reaches the terminal GATE-2 dotnet build, so (like the other terminal tests) it is
+    // minutes-scale by design.
+    [Fact]
+    public void Force_override_writes_a_build_failing_session_atomically()
+    {
+        McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
+        WorkspaceManager workspace = CreateWorkspace(fixture);
+        string helperFilePath = Path.Combine(fixture.WatchedDirectory, "Helper.cs");
+        File.WriteAllText(helperFilePath, "namespace Example { internal static class Helper { public static string Value() => \"old\"; } }");
+        string originalHelperText = File.ReadAllText(helperFilePath);
+
+        // Each file references a member the OTHER does not define: both candidates PARSE (so they
+        // clear the submit-time syntax guard) but the combined set cannot compile.
+        string sessionId = Guid.NewGuid().ToString("N");
+        StagedEditRecord helperRecord = Stage(
+            workspace,
+            helperFilePath,
+            "namespace Example { internal static class Helper { public static string Value() => Program.Missing(); } }",
+            sessionId);
+        StagedEditRecord programRecord = Stage(
+            workspace,
+            fixture.ProgramFilePath,
+            "namespace Example { internal static class Program { public static string Value => Helper.Missing(); } }",
+            sessionId);
+
+        // Stamp the overlay-compile failure a real staged record carries (complete_edit_plan records
+        // it; GATE 1 is only a readiness check, so the atomicity Stage helper leaves no verdict).
+        StampOverlayError(workspace, helperRecord.StagedRecordId);
+        StampOverlayError(workspace, programRecord.StagedRecordId);
+
+        EngineReviewWorkflow review = new(workspace, new NullMonitorLogger());
+
+        // Normal accept is refused; the override is offered.
+        ReviewActionResult blocked = review.Accept(helperRecord.StagedRecordId, forceApproveValidation: false);
+        Assert.True(blocked.OverrideAvailable, blocked.Message);
+        Assert.Equal(originalHelperText, File.ReadAllText(helperFilePath));
+
+        // Non-terminal override: an approval — force-approved, writes NOTHING (and runs no build).
+        ReviewActionResult overrideFirst = review.Accept(helperRecord.StagedRecordId, forceApproveValidation: true);
+        Assert.StartsWith("Accepted", overrideFirst.Message, StringComparison.Ordinal);
+        Assert.Contains("NOTHING has been written", overrideFirst.Message, StringComparison.Ordinal);
+        Assert.Equal(originalHelperText, File.ReadAllText(helperFilePath));
+        StagedEditRecord approvedHelper = workspace.EditService.GetStagedRecord(helperRecord.StagedRecordId);
+        Assert.Equal("approved", approvedHelper.Decision);
+        Assert.True(approvedHelper.PreMergeValidationForceApproved);
+        Assert.Equal(string.Empty, approvedHelper.WrittenAtUtc);
+
+        // Terminal override: GATE-2 build FAILS, but forcing writes the whole set together anyway.
+        ReviewActionResult overrideTerminal = review.Accept(programRecord.StagedRecordId, forceApproveValidation: true);
+        Assert.StartsWith("Accepted", overrideTerminal.Message, StringComparison.Ordinal);
+        Assert.Contains("written", overrideTerminal.Message, StringComparison.Ordinal);
+
+        // Both broken files land on disk together — the deliberate, forced merge.
+        Assert.Contains("Program.Missing()", File.ReadAllText(helperFilePath), StringComparison.Ordinal);
+        Assert.Contains("Helper.Missing()", File.ReadAllText(fixture.ProgramFilePath), StringComparison.Ordinal);
+        StagedEditRecord finalHelper = workspace.EditService.GetStagedRecord(helperRecord.StagedRecordId);
+        StagedEditRecord finalProgram = workspace.EditService.GetStagedRecord(programRecord.StagedRecordId);
+        Assert.Equal("accepted", finalHelper.Decision);
+        Assert.Equal("accepted", finalProgram.Decision);
+        Assert.NotEqual(string.Empty, finalHelper.WrittenAtUtc);
+        Assert.NotEqual(string.Empty, finalProgram.WrittenAtUtc);
+    }
+
+    // Stamp the pre-merge overlay-compile failure a real staged record carries so the override path
+    // is exercised. EnsureValidatedAndLaunched preserves an existing verdict (it does not re-run
+    // GATE 1 over the top), so this is exactly the state a complete_edit_plan overlay failure leaves.
+    private static void StampOverlayError(WorkspaceManager workspace, string stagedRecordId)
+    {
+        workspace.EditService.RecordPreMergeValidation(
+            stagedRecordId,
+            new PreMergeValidationResult
+            {
+                Status = "failed",
+                IsError = true,
+                DiagnosticCount = 1,
+                Diagnostics = ["overlay compile error (test fixture)"]
+            },
+            forceApproved: false);
+    }
+
     private static WorkspaceManager CreateWorkspace(McpSurfaceFixture fixture)
     {
         MonitorSettings settings = MonitorSettings.Create(

@@ -89,9 +89,12 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                     overrideAvailable: true);
             }
 
-            PreMergeValidationResult revalidation = new PreMergeValidationService().Validate(workspace.Settings, record);
-            workspace.EditService.RecordPreMergeValidation(stagedRecordId, revalidation, forceApproved: true);
-            record = workspace.EditService.GetStagedRecord(stagedRecordId);
+            // Force-approval records the operator's deliberate choice to merge despite the
+            // ALREADY-stamped validation failure. Do NOT re-run the build here: the record already
+            // carries its validation result, and the terminal accept re-validates the whole set (the
+            // authoritative gate). Re-building per force-approved file made every override click run a
+            // full dotnet build — a redundant accept-spinner flash on each file of the session.
+            record = workspace.EditService.ForceApprovePreMergeValidation(stagedRecordId);
         }
 
         // --- H1: validate the staged record BEFORE writing watched source ---

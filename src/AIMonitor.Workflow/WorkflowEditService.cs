@@ -838,6 +838,21 @@ public sealed class WorkflowEditService
         return record;
     }
 
+    // Mark an ALREADY-validated record as force-approved WITHOUT re-running the build. The record
+    // still carries the validation status/errors stamped at staging / overlay-completion, so there
+    // is nothing to recompute — flipping the force-approved flag is the whole decision. Used by the
+    // operator's Accept With Validation Override so a per-file override does not run a full dotnet
+    // build; the terminal accept re-validates the whole set, which is the authoritative gate.
+    public StagedEditRecord ForceApprovePreMergeValidation(string stagedRecordId)
+    {
+        StagedEditRecord record = GetStagedRecord(stagedRecordId);
+        EnsureRecordNotDecided(record);
+        record.PreMergeValidationForceApproved = record.PreMergeValidationIsError;
+        record.PreMergeValidationAtUtc = DateTimeOffset.UtcNow.ToString("O");
+        SaveStagedRecord(record);
+        return record;
+    }
+
     public StagedEditRecord PrepareReviewFileForLaunch(string stagedRecordId)
     {
         StagedEditRecord record = GetStagedRecord(stagedRecordId);
