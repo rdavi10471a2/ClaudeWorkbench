@@ -3,6 +3,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Concurrent;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
 
@@ -352,29 +354,51 @@ internal sealed class CandidateEditValidator
         }
     }
 
+    // Key references by assembly SIMPLE NAME, not by file path, so the same assembly present at
+    // multiple paths collapses to exactly one reference. Keying by path (the old behaviour) handed
+    // Roslyn several references with the same identity — from two sources:
+    //   1. duplicate copies inside the watched bin tree (bin\...\Foo.dll plus its
+    //      bin\...\runtimes\{rid}\lib\{tfm}\Foo.dll and ref\ counterparts), and
+    //   2. the host's own runtime assemblies (TPA) overlapping the versions the watched solution
+    //      ships.
+    // Either produces CS1703/CS0433/CS1701 that are NOT real errors in the candidate code
+    // (Microsoft.Data.SqlClient was the visible case). Precedence: the watched solution wins over
+    // the framework baseline so the compile matches the versions it actually targets.
     private static List<MetadataReference> GetMetadataReferences(string watchedRoot)
     {
-        Dictionary<string, MetadataReference> references = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, ReferenceCandidate> byName = new(StringComparer.OrdinalIgnoreCase);
+
+        // Framework baseline first (host runtime + Windows Desktop) so watched copies can override it.
         string? tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
         if (!string.IsNullOrWhiteSpace(tpa))
         {
             foreach (string path in tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
             {
-                AddReference(references, path);
+                ConsiderReference(byName, path, fromWatched: false);
             }
-        }
-
-        foreach (string path in EnumerateObservedBinaryReferences(watchedRoot))
-        {
-            AddReference(references, path);
         }
 
         foreach (string path in EnumerateWindowsDesktopReferences())
         {
-            AddReference(references, path);
+            ConsiderReference(byName, path, fromWatched: false);
         }
 
-        return references.Values.ToList();
+        // Watched solution output last: wins on identity for any assembly it also ships.
+        foreach (string path in EnumerateObservedBinaryReferences(watchedRoot))
+        {
+            ConsiderReference(byName, path, fromWatched: true);
+        }
+
+        List<MetadataReference> references = new(byName.Count);
+        foreach (ReferenceCandidate candidate in byName.Values)
+        {
+            if (candidate.CreateReference() is MetadataReference reference)
+            {
+                references.Add(reference);
+            }
+        }
+
+        return references;
     }
 
     private static IEnumerable<string> EnumerateObservedBinaryReferences(string watchedRoot)
@@ -418,18 +442,85 @@ internal sealed class CandidateEditValidator
         }
     }
 
-    private static void AddReference(Dictionary<string, MetadataReference> references, string path)
+    private static void ConsiderReference(Dictionary<string, ReferenceCandidate> byName, string path, bool fromWatched)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        // A file with no managed metadata (e.g. the native Microsoft.Data.SqlClient.SNI.dll) is not a
+        // valid reference and has no assembly identity to dedupe on — skip it outright.
+        (string Name, Version Version)? identity = TryReadAssemblyIdentity(path);
+        if (identity is null)
+        {
+            return;
+        }
+
+        ReferenceCandidate candidate = new(Path.GetFullPath(path), identity.Value.Version, fromWatched);
+        if (!byName.TryGetValue(identity.Value.Name, out ReferenceCandidate? existing) || candidate.Wins(existing))
+        {
+            byName[identity.Value.Name] = candidate;
+        }
+    }
+
+    private static (string Name, Version Version)? TryReadAssemblyIdentity(string path)
     {
         try
         {
-            if (File.Exists(path))
+            using FileStream stream = File.OpenRead(path);
+            using PEReader pe = new(stream);
+            if (!pe.HasMetadata)
             {
-                references[Path.GetFullPath(path)] = MetadataReference.CreateFromFile(path);
+                return null;
             }
+
+            MetadataReader reader = pe.GetMetadataReader();
+            AssemblyDefinition assembly = reader.GetAssemblyDefinition();
+            return (reader.GetString(assembly.Name), assembly.Version);
         }
         catch
         {
-            // Best effort only; one bad reference should not hide candidate diagnostics from other files.
+            return null;
+        }
+    }
+
+    private sealed record ReferenceCandidate(string FilePath, Version Version, bool FromWatched)
+    {
+        // Main-output copies beat platform (runtimes\) and reference-assembly (ref\) copies of the
+        // same assembly, both of which are duplicates for a compile-time reference.
+        private int LocationRank =>
+            FilePath.Contains($"{Path.DirectorySeparatorChar}runtimes{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+            || FilePath.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                ? 1
+                : 0;
+
+        public bool Wins(ReferenceCandidate other)
+        {
+            if (FromWatched != other.FromWatched)
+            {
+                return FromWatched; // watched solution overrides the framework baseline
+            }
+
+            if (LocationRank != other.LocationRank)
+            {
+                return LocationRank < other.LocationRank;
+            }
+
+            return Version > other.Version; // otherwise the newest wins
+        }
+
+        public MetadataReference? CreateReference()
+        {
+            try
+            {
+                return MetadataReference.CreateFromFile(FilePath);
+            }
+            catch
+            {
+                // Best effort only; one bad reference should not hide candidate diagnostics elsewhere.
+                return null;
+            }
         }
     }
 
