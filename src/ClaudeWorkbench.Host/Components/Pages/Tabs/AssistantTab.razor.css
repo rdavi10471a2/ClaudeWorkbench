@@ -617,6 +617,13 @@
     overflow-wrap: anywhere;
 }
 
+/* Inline images (agent-produced, served from the uploads folder) fit the transcript column. */
+.message-body ::deep img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
 .message-body ::deep p:first-child {
     margin-top: 0;
 }

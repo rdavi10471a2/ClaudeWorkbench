@@ -149,6 +149,11 @@ internal static class Program
 
         app.MapStaticAssets();
         app.UseAntiforgery();
+
+        // Serves upload-folder files (images) referenced in chat markdown so the browser
+        // can load them; only files under the workspace uploads/ folder are served.
+        app.MapLocalFiles();
+
         app.MapMcp("/mcp");
         app.MapGet("/health", (WorkspaceManager workspace) => Results.Ok(new
         {
