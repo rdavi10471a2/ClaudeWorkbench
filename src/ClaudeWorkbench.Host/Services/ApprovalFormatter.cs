@@ -202,6 +202,7 @@ public static class ApprovalFormatter
             "stage_candidate_for_review" => "Stage this file for your review",
             "record_diff_decision" => "Record a review decision",
             "start_monitor_session" => "Start a governed edit session",
+            "download_url" => "Download a file from a URL",
             _ => Humanize(tool),
         };
     }
