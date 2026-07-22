@@ -7,28 +7,21 @@ namespace ClaudeWorkbench.Host.Services;
 // MarkdownRenderer rewrites local references to /local-file?path=... and this endpoint
 // streams the bytes.
 //
-// Security: ONLY files under the workspace uploads/ folder are served; everything else is
-// 403. That folder is where operator attachments (and any agent-produced images) live, so
-// it is the whole surface we need -- keeping it to that single root is what stops this from
-// being an arbitrary-file-read hole.
+// Security: a file is served only if it is under the workspace uploads/ folder OR one the
+// agent read/wrote this thread (AgentFileAccess -- each such path was surfaced to, and for
+// writes gated by, the operator). Anything else is 403, so this can never become an
+// arbitrary-file-read hole.
 public static class LocalFileEndpoints
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
 
     public static void MapLocalFiles(this WebApplication app)
     {
-        app.MapGet("/local-file", (string path, UploadService uploads) =>
+        app.MapGet("/local-file", (string path, UploadService uploads, AgentFileAccess fileAccess) =>
         {
             if (string.IsNullOrWhiteSpace(path))
             {
                 return Results.BadRequest();
-            }
-
-            string? root = uploads.UploadsDirectory;
-            if (root is null)
-            {
-                // No watched workspace -> no uploads folder -> nothing is servable.
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
             }
 
             string full;
@@ -41,7 +34,12 @@ public static class LocalFileEndpoints
                 return Results.BadRequest();
             }
 
-            if (!IsUnderRoot(full, root))
+            string? root = uploads.UploadsDirectory;
+            bool underUploads = root is not null && IsUnderRoot(full, root);
+
+            // Serve only files under uploads/ or ones the agent read/wrote this thread; any
+            // other path (including system files) is refused.
+            if (!underUploads && !fileAccess.Contains(full))
             {
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
             }

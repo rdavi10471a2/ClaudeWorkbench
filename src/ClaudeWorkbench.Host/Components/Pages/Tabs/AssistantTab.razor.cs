@@ -121,6 +121,12 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         return new MarkupString(MarkdownRenderer.ToHtml(text));
     }
 
+    // A read-image entry carries the local path; serve it through /local-file.
+    private static string LocalFileUrl(string path)
+    {
+        return "/local-file?path=" + Uri.EscapeDataString(path);
+    }
+
     private async Task OnFilesSelectedAsync(InputFileChangeEventArgs args)
     {
         uploadError = null;
@@ -261,7 +267,13 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         StringBuilder builder = new();
         foreach (TranscriptEntry entry in Session.Transcript)
         {
-            builder.AppendLine(entry.Kind == TranscriptKind.ToolCall ? $"-> {entry.Text}" : entry.Text);
+            string line = entry.Kind switch
+            {
+                TranscriptKind.ToolCall => $"-> {entry.Text}",
+                TranscriptKind.Image => $"[image: {entry.Text}]",
+                _ => entry.Text,
+            };
+            builder.AppendLine(line);
             builder.AppendLine();
         }
 
@@ -276,6 +288,14 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             if (entry.Kind == TranscriptKind.ToolCall)
             {
                 builder.Append("<p><code>-> ").Append(System.Net.WebUtility.HtmlEncode(entry.Text)).Append("</code></p>");
+            }
+            else if (entry.Kind == TranscriptKind.Image)
+            {
+                builder.Append("<p><img style=\"max-width:100%\" src=\"")
+                    .Append(System.Net.WebUtility.HtmlEncode(LocalFileUrl(entry.Text)))
+                    .Append("\" alt=\"")
+                    .Append(System.Net.WebUtility.HtmlEncode(System.IO.Path.GetFileName(entry.Text)))
+                    .Append("\" /></p>");
             }
             else
             {

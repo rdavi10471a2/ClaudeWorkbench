@@ -617,11 +617,18 @@
     overflow-wrap: anywhere;
 }
 
-/* Inline images (agent-produced, served from the uploads folder) fit the transcript column. */
-.message-body ::deep img {
+/* Inline images fit the transcript column: ::deep img covers markdown-rendered images
+   (inside MarkupString); .chat-inline-image covers auto-rendered agent-read images. */
+.message-body ::deep img,
+.chat-inline-image {
     max-width: 100%;
     height: auto;
     border-radius: 6px;
+}
+
+.chat-inline-image {
+    display: block;
+    cursor: zoom-in;
 }
 
 .message-body ::deep p:first-child {

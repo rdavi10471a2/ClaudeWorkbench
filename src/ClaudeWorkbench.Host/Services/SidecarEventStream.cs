@@ -11,6 +11,7 @@ public sealed class SidecarEventStream : BackgroundService
 {
     private readonly IHttpClientFactory httpClientFactory;
     private readonly SidecarOptions options;
+    private readonly AgentFileAccess fileAccess;
     private readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     private readonly LinkedList<SidecarEvent> events = new();
     private readonly Dictionary<string, GateInfo> gates = new(StringComparer.Ordinal);
@@ -18,10 +19,11 @@ public sealed class SidecarEventStream : BackgroundService
     private readonly object sync = new();
     private const int MaxEvents = 500;
 
-    public SidecarEventStream(IHttpClientFactory httpClientFactory, SidecarOptions options)
+    public SidecarEventStream(IHttpClientFactory httpClientFactory, SidecarOptions options, AgentFileAccess fileAccess)
     {
         this.httpClientFactory = httpClientFactory;
         this.options = options;
+        this.fileAccess = fileAccess;
     }
 
     public event Action? Changed;
@@ -237,6 +239,7 @@ public sealed class SidecarEventStream : BackgroundService
                     events.Clear();
                     gates.Clear();
                     elicitations.Clear();
+                    fileAccess.Clear();
                     ActiveTurn = null;
                     break;
                 case "elicitation_request" when evt.ElicitationId is not null && evt.Questions is JsonElement questions:
@@ -251,8 +254,14 @@ public sealed class SidecarEventStream : BackgroundService
                 case "turn_finished":
                     ActiveTurn = null;
                     break;
+                case "tool_call_started":
+                    // Any file the agent touches (read/write/edit) becomes viewable in chat
+                    // via /local-file, even outside the uploads folder -- the operator saw the call.
+                    fileAccess.Add(FilePathOf(evt.Input));
+                    break;
                 case "gate_request" when evt.GateId is not null:
                     gates[evt.GateId] = new GateInfo(evt.GateId, evt.Tool ?? string.Empty, evt.FilePath, evt.Input);
+                    fileAccess.Add(evt.FilePath ?? FilePathOf(evt.Input));
                     break;
                 case "gate_resolved" when evt.GateId is not null:
                     gates.Remove(evt.GateId);
@@ -261,6 +270,31 @@ public sealed class SidecarEventStream : BackgroundService
                     break;
             }
         }
+    }
+
+    // Pull a file path out of a tool call's input (native Read/Write use file_path;
+    // MCP tools use path/sourceFilePath/filePath; notebooks use notebook_path).
+    private static string? FilePathOf(JsonElement? input)
+    {
+        if (input is not JsonElement element || element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (string key in new[] { "file_path", "path", "sourceFilePath", "filePath", "notebook_path" })
+        {
+            if (element.TryGetProperty(key, out JsonElement value)
+                && value.ValueKind == JsonValueKind.String)
+            {
+                string? path = value.GetString();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    return path;
+                }
+            }
+        }
+
+        return null;
     }
 
     private void SetConnected(bool value)
