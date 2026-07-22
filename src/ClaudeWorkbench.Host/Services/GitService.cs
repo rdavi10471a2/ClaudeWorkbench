@@ -293,9 +293,11 @@ public sealed partial class GitService
     // a delete + an add — each independently diffable via ShowAsync on the two sides.
     public async Task<IReadOnlyList<GitCommitFile>> CommitFilesAsync(string directory, string hash, CancellationToken cancellationToken = default)
     {
+        // --root so the first commit (no parent) lists its files as additions instead of coming back
+        // empty; it is a no-op for commits that do have a parent.
         GitResult result = await RunAsync(
             directory,
-            ["diff-tree", "--no-commit-id", "--name-status", "-r", hash],
+            ["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", hash],
             cancellationToken).ConfigureAwait(false);
         if (!result.Ok)
         {

@@ -228,6 +228,34 @@
     box-sizing: border-box;
 }
 
+/* The file-list box reads as data, not prose: monospace and a touch muted. */
+.git-commit-files-box {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--rz-text-secondary-color, #52606d);
+    background: var(--rz-base-background-color, #fff);
+}
+
+.git-commit-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--rz-text-secondary-color, #52606d);
+    margin-top: 2px;
+}
+
+.git-commit-label-hint {
+    font-weight: 400;
+    color: var(--rz-text-tertiary-color, #7b8794);
+}
+
+/* Command output (e.g. a commit's summary): keep git's own line breaks instead of collapsing the
+   whole thing onto one run-on line, and let long lines wrap. */
+.git-result {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
 /* --- change groups --- */
 .git-group {
     display: flex;

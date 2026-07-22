@@ -262,6 +262,12 @@ public sealed class GitWorkspaceService
         };
     }
 
+    // The changed paths, one per line, for the commit body -- so the message itself records exactly
+    // which files moved. Mirrors the working-tree list the Git panel shows (folders collapsed the way
+    // git's porcelain reports them).
+    public static string DraftFileList(GitStatus status)
+        => string.Join("\n", status.Changes.Select(change => change.Path));
+
     // Prefer the repository root as the working directory so porcelain paths and diff
     // targets are consistent; fall back to the watched folder (e.g. before init).
     private async Task<string?> ResolveDirectoryAsync(CancellationToken cancellationToken)

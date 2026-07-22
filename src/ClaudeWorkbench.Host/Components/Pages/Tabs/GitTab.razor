@@ -115,7 +115,16 @@
         @if (commitOpen)
         {
             <div class="git-inline-form commit">
-                <textarea class="git-commit-message" @bind="commitMessage" @bind:event="oninput" placeholder="Commit message" rows="2"></textarea>
+                <label class="git-commit-label" for="git-commit-msg">Message</label>
+                <textarea id="git-commit-msg" class="git-commit-message" @bind="commitMessage" @bind:event="oninput"
+                          placeholder="Summary of your change" rows="2"></textarea>
+
+                <label class="git-commit-label" for="git-commit-files">
+                    Files <span class="git-commit-label-hint">— added to the commit body; edit or clear as you like</span>
+                </label>
+                <textarea id="git-commit-files" class="git-commit-message git-commit-files-box" @bind="commitBody" @bind:event="oninput"
+                          placeholder="Changed files (one per line)" rows="4"></textarea>
+
                 <div class="git-inline-actions">
                     <RadzenButton Icon="check" Text="Commit all changes" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
                                   Disabled="@(busy || !status.HasChanges || string.IsNullOrWhiteSpace(commitMessage))" Click="@CommitAsync"

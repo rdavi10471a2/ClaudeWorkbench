@@ -62,6 +62,8 @@ public partial class GitTab : IAsyncDisposable
     private string newBranchName = string.Empty;
     private bool commitOpen;
     private string commitMessage = string.Empty;
+    // The commit body: pre-filled with the changed file list, editable, appended under the message.
+    private string commitBody = string.Empty;
 
     private const string MainBranch = "main";
 
@@ -237,11 +239,20 @@ public partial class GitTab : IAsyncDisposable
             return;
         }
 
-        string message = commitMessage;
+        // The message box is the subject; the (optional) file-list box becomes the body, one blank
+        // line below it -- the standard git subject/body split.
+        string message = commitMessage.Trim();
+        string body = commitBody.Trim();
+        if (body.Length > 0)
+        {
+            message = $"{message}\n\n{body}";
+        }
+
         bool committed = await RunAsync(() => Git.CommitAsync(message), "Committed.");
         if (committed)
         {
             commitMessage = string.Empty;
+            commitBody = string.Empty;
             commitOpen = false;
             ClearDiff();
         }
@@ -250,9 +261,19 @@ public partial class GitTab : IAsyncDisposable
     private void OpenCommit()
     {
         commitOpen = true;
-        if (string.IsNullOrWhiteSpace(commitMessage) && status is not null && status.HasChanges)
+        if (status is null || !status.HasChanges)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(commitMessage))
         {
             commitMessage = GitWorkspaceService.DraftCommitMessage(status);
+        }
+
+        if (string.IsNullOrWhiteSpace(commitBody))
+        {
+            commitBody = GitWorkspaceService.DraftFileList(status);
         }
     }
 
@@ -325,7 +346,35 @@ public partial class GitTab : IAsyncDisposable
     }
 
     private static string Combine(string message, string detail)
-        => string.IsNullOrWhiteSpace(detail) ? message : $"{message} {detail}";
+    {
+        string clean = CleanDetail(detail);
+        return clean.Length == 0 ? message : $"{message}\n{clean}";
+    }
+
+    // Git tails a commit's output with a "create mode 100644 <path>" (or delete/rename/copy/mode
+    // change) line per file, which turns a many-file commit into a wall of text. Keep the useful
+    // summary -- the "[branch hash] subject" line and the "N files changed" shortstat -- and drop the
+    // per-file mode noise. Rendered with white-space:pre-wrap so the remaining lines actually break.
+    private static string CleanDetail(string detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return string.Empty;
+        }
+
+        IEnumerable<string> lines = detail
+            .Replace("\r\n", "\n")
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0
+                && !line.StartsWith("create mode ", StringComparison.Ordinal)
+                && !line.StartsWith("delete mode ", StringComparison.Ordinal)
+                && !line.StartsWith("rename ", StringComparison.Ordinal)
+                && !line.StartsWith("copy ", StringComparison.Ordinal)
+                && !line.StartsWith("mode change ", StringComparison.Ordinal));
+
+        return string.Join("\n", lines);
+    }
 
     private static string FirstNonEmpty(params string[] candidates)
         => candidates.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
