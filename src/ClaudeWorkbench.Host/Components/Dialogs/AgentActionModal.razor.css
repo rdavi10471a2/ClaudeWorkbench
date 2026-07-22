@@ -375,3 +375,13 @@
     position: sticky;
     bottom: 0;
 }
+
+/* Full-width amber caution line above the footer buttons for the arg-agnostic session-allow. */
+.agent-modal-remember-warning {
+    flex-basis: 100%;
+    margin: 0 0 4px;
+    color: #b45309;
+    font-size: .8rem;
+    line-height: 1.35;
+    font-weight: 700;
+}

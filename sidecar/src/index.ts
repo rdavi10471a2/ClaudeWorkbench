@@ -238,6 +238,10 @@ let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOO
 // When on, claude-workbench mutations auto-allow instead of pausing at the operator
 // gate. Watched source is still only written by the operator's merge-review Accept.
 let activeAutoApprove = false;
+// Tools the operator chose "Allow all … this thread" for. Keyed by tool basename only
+// (argument-agnostic): a single click blanket-allows every future call to that tool, any
+// arguments, until New Thread. Never applied to NEVER_AUTO_APPROVED tools (see canUseTool).
+const sessionAllowed = new Set<string>();
 // The long-lived streaming query for the current thread + its input stream.
 let activeQuery: Query | null = null;
 let activeInput: InputStream | null = null;
@@ -344,6 +348,12 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
     return { behavior: "allow", updatedInput: input };
   }
 
+  // "Allow all <tool> this thread": auto-allow a tool the operator blanket-approved earlier
+  // in this thread. Argument-agnostic (keyed by basename). Never for irreversible tools.
+  if (sessionAllowed.has(baseName(toolName)) && !isNeverAutoApproved(toolName)) {
+    return { behavior: "allow", updatedInput: input };
+  }
+
   const { gateId, decided } = gate.request(
     baseName(toolName),
     input,
@@ -362,6 +372,11 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   signal.addEventListener("abort", onAbort, { once: true });
   const resolution = await decided;
   signal.removeEventListener("abort", onAbort);
+
+  // Remember an arg-agnostic session allow, unless this is a never-auto-approve tool.
+  if (resolution.decision === "allow" && resolution.remember && !isNeverAutoApproved(toolName)) {
+    sessionAllowed.add(baseName(toolName));
+  }
 
   bus.emit({
     type: "gate_resolved",
@@ -720,7 +735,7 @@ app.post("/gates/:id", (req, res) => {
     res.status(400).json({ error: "decision must be 'allow' or 'deny'." });
     return;
   }
-  const ok = gate.resolve(req.params.id, decision, req.body?.reason);
+  const ok = gate.resolve(req.params.id, decision, req.body?.reason, req.body?.remember === true);
   res.status(ok ? 200 : 404).json({ resolved: ok });
 });
 
@@ -767,6 +782,7 @@ app.post("/new-thread", (_req, res) => {
   currentSessionId = null;
   pendingReviewOutcome = "";
   elicitations.clear();
+  sessionAllowed.clear();
   bus.clear();
   bus.emit({ type: "thread_reset", turnId: "thread" });
   res.json({ ok: true });

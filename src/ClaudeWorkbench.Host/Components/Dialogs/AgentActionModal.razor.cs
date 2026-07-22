@@ -112,7 +112,7 @@ public partial class AgentActionModal : IDisposable
         selections.Remove(question);
     }
 
-    private async Task ResolveApprovalAsync(bool approve)
+    private async Task ResolveApprovalAsync(bool approve, bool remember = false)
     {
         ApprovalRequest? approval = CurrentApproval;
         if (approval is null)
@@ -120,8 +120,24 @@ public partial class AgentActionModal : IDisposable
             return;
         }
 
-        await Approvals.ResolveApprovalAsync(approval.Id, approve);
+        await Approvals.ResolveApprovalAsync(approval.Id, approve, reason: null, remember: remember);
     }
+
+    // Denylist: open-ended / irreversible tools never get the arg-agnostic session-allow,
+    // because "allow every future call, any arguments, this thread" is too large a silent
+    // surface for them. In the governed workbench the gate only ever shows bounded MCP
+    // staging tools (their real write is gated again at merge-review Accept), so this is
+    // defense-in-depth + future-proofing if the gate surface is ever widened.
+    private static readonly HashSet<string> NeverRemember = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Open-ended native tools (only reach the gate if an operator enables them).
+        "Bash", "PowerShell", "Write", "Edit", "MultiEdit", "NotebookEdit",
+        "WebFetch", "WebSearch", "Agent", "Workflow",
+        // Direct file operations (harmless to list even if not exposed here).
+        "delete_file", "remove_file", "rename_file", "move_file",
+    };
+
+    private static bool CanRemember(string tool) => !NeverRemember.Contains(tool);
 
     private async Task SubmitElicitationAsync()
     {

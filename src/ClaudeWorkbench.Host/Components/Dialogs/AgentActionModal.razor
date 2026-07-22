@@ -43,10 +43,25 @@
                 </section>
             </div>
             <div class="agent-modal-footer">
+                @if (CanRemember(approval.Tool))
+                {
+                    <p class="agent-modal-remember-warning">
+                        &#9888; "Allow all @approval.Tool" lets it run for the rest of this thread without asking — <strong>any arguments</strong>. Reset on New Thread.
+                    </p>
+                }
                 <RadzenButton Text="Allow"
                               ButtonStyle="ButtonStyle.Success"
                               Size="ButtonSize.Small"
+                              Title="Allow this one call"
                               Click="@(() => ResolveApprovalAsync(true))" />
+                @if (CanRemember(approval.Tool))
+                {
+                    <RadzenButton Text="@($"Allow all {approval.Tool} this thread")"
+                                  ButtonStyle="ButtonStyle.Warning"
+                                  Size="ButtonSize.Small"
+                                  Title="@($"Every {approval.Tool} call runs without asking for the rest of this thread, regardless of arguments (reset on New Thread).")"
+                                  Click="@(() => ResolveApprovalAsync(true, remember: true))" />
+                }
                 <RadzenButton Text="Deny"
                               ButtonStyle="ButtonStyle.Light"
                               Size="ButtonSize.Small"

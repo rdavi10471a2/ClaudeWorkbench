@@ -32,9 +32,9 @@ public sealed partial class SidecarOperatorConsole
     public IReadOnlyList<Elicitation> PendingElicitations =>
         stream.PendingElicitations().Select(MapElicitation).ToArray();
 
-    public async Task ResolveApprovalAsync(string approvalId, bool approve, string? reason = null)
+    public async Task ResolveApprovalAsync(string approvalId, bool approve, string? reason = null, bool remember = false)
     {
-        bool resolved = await client.ResolveGateAsync(approvalId, approve ? "allow" : "deny", reason);
+        bool resolved = await client.ResolveGateAsync(approvalId, approve ? "allow" : "deny", reason, remember);
         if (!resolved)
         {
             // The gate is gone on the sidecar (stale). Drop it so the UI clears
