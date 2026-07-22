@@ -211,6 +211,14 @@ const elicitations = new Map<string, { resolve: (answers: Record<string, unknown
 const ALWAYS_ALLOWED_NATIVE = ["ToolSearch", "TodoWrite"];
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 const BLOCKABLE_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
+// Web read tools the operator may also opt into. Unlike BLOCKABLE_TOOLS these reach OUTSIDE
+// the workspace (an outbound path), so they are deny-by-default and only enter the allow-set
+// when the operator explicitly enables them from Settings; canUseTool still gates every call.
+const OPTIONAL_WEB_TOOLS = ["WebFetch", "WebSearch"];
+// The full set an operator may re-enable from Settings. MUST stay in sync with the host's
+// OptionalAgentTools list (AgentToolPolicy.cs) -- anything the dialog offers but this rejects
+// is a toggle that silently no-ops (the "settings tab is a lie" bug).
+const ENABLEABLE_NATIVE = new Set<string>([...BLOCKABLE_TOOLS, ...OPTIONAL_WEB_TOOLS]);
 const WORKBENCH_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
 
 interface ToolPolicy {
@@ -699,12 +707,12 @@ app.post("/prompt", (req, res) => {
   const policy: ToolPolicy = {
     allowNativeReads: raw.allowNativeReads !== false,
     strictMcpConfig: raw.strictMcpConfig !== false,
-    // H3: an operator may only re-enable tools from the blockable set (the writers/shells).
-    // Arbitrary names (Agent, WebFetch, Workflow, anything unknown) can NOT be spliced into
-    // the allow-set, so a /prompt body cannot widen the deny-by-default surface beyond the
-    // intended opt-ins.
+    // H3: an operator may only re-enable tools from the fixed ENABLEABLE_NATIVE set (writers/
+    // shells + the opt-in web read tools). Arbitrary names (Agent, Workflow, anything unknown)
+    // still can NOT be spliced in, so a /prompt body cannot widen the deny-by-default surface
+    // beyond the intended, per-call-gated opt-ins.
     enabledTools: Array.isArray(raw.enabledTools)
-      ? raw.enabledTools.map(String).filter((tool) => BLOCKABLE_TOOLS.includes(tool))
+      ? raw.enabledTools.map(String).filter((tool) => ENABLEABLE_NATIVE.has(tool))
       : [],
     autoApprove: raw.autoApprove === true,
     model: typeof raw.model === "string" ? raw.model : "",

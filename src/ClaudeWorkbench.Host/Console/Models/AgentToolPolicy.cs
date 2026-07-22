@@ -61,15 +61,17 @@ public sealed record OptionalAgentTool(string Name, string Description, bool Ris
 
 public static class OptionalAgentTools
 {
+    // MUST stay in sync with the sidecar's ENABLEABLE_NATIVE set (sidecar/src/index.ts):
+    // every tool offered here has to be one the sidecar will actually honor, or the toggle
+    // silently no-ops. Agent/Workflow are deliberately NOT offered — multi-agent orchestration
+    // is out of scope for the governed workbench.
     public static readonly IReadOnlyList<OptionalAgentTool> All =
     [
         new("Bash", "Run shell commands (can read and WRITE files, run builds/tests).", true),
         new("PowerShell", "Run PowerShell commands (can read and WRITE files).", true),
         new("Write", "Create/overwrite files directly (bypasses the staged-review gate).", true),
         new("Edit", "Edit files directly (bypasses the staged-review gate).", true),
-        new("WebFetch", "Fetch content from a URL.", false),
-        new("WebSearch", "Search the web.", false),
-        new("Agent", "Spawn sub-agents.", false),
-        new("Workflow", "Run multi-agent orchestration workflows.", false),
+        new("WebFetch", "Fetch content from a URL (reaches outside the workspace).", false),
+        new("WebSearch", "Search the web (reaches outside the workspace).", false),
     ];
 }
