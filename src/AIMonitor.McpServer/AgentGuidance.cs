@@ -46,6 +46,15 @@ public static class AgentGuidance
         builder.AppendLine("- `blocked`, `dirty-unexpected`, `superseded`, missing Working files, and stale hashes require recovery before follow-up edits.");
         builder.AppendLine("- Pre-merge (GATE 1) validation and the full build/index (GATE 2) validation are run by the host around the operator's accept, not by you.");
         builder.AppendLine("- The operator's Accept in the Merge Review dialog is the only path candidates reach watched source. Never try to copy a candidate into watched source yourself.");
+        builder.AppendLine();
+        builder.AppendLine("## Git as durable memory (when available)");
+        builder.AppendLine();
+        builder.AppendLine("If Git tools are available (e.g. `git_status`, `git_diff`, `git_log`), treat the repository as DURABLE, QUERYABLE memory that outlives this session and your context window — query it instead of trusting recollection:");
+        builder.AppendLine();
+        builder.AppendLine("- \"What changed / current state\" -> `git_status` + `git_diff`. The diff against HEAD is ground truth even after your context is compacted mid-task; do NOT reconstruct it from memory or by re-reading whole files.");
+        builder.AppendLine("- \"What happened before this turn, and why\" -> `git_log` and commit messages. Checkpoint commits and snapshot tags are queryable restore points you can diff against to recover intent from work you were not present for.");
+        builder.AppendLine("- After a change is accepted, diff the working tree to confirm it landed as intended.");
+        builder.AppendLine("- Git is READ-ONLY to you: uncommitted working-tree changes are recoverable but not a permanent, addressable point — a checkpoint commit is. Commits and writes belong to the operator; surface the suggestion, do not attempt it.");
         return builder.ToString();
     }
 }

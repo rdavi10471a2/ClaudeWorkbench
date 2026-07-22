@@ -37,9 +37,20 @@ public sealed class GitWorkspaceService
             : await git.GetStatusAsync(directory, cancellationToken).ConfigureAwait(false);
     }
 
-    // Prompt-to-add path: initialize the watched folder as a repo.
+    // Prompt-to-add path: initialize the watched folder as a repo, and drop in a standard .NET
+    // .gitignore (build output + IDE cruft) so the very first checkpoint never commits bin/obj.
+    // Non-destructive: an existing .gitignore is left alone.
     public Task<GitResult> InitAsync(CancellationToken cancellationToken = default)
-        => WithWatchedDirectory(directory => git.InitAsync(directory, cancellationToken: cancellationToken));
+        => WithWatchedDirectory(async directory =>
+        {
+            GitResult result = await git.InitAsync(directory, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (result.Ok)
+            {
+                EnsureDefaultGitignore(directory);
+            }
+
+            return result;
+        });
 
     // Unified diff text (for the agent's git_diff MCP tool — compact and model-friendly).
     public Task<string> DiffAsync(string path, bool staged, bool untracked, CancellationToken cancellationToken = default)
@@ -314,6 +325,51 @@ public sealed class GitWorkspaceService
     }
 
     private static string Normalize(string text) => text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+    // Standard .NET exclusions, written on init so build output and IDE files never enter the repo
+    // (or its first checkpoint commit). Best-effort: a failure here does not fail the init.
+    private static void EnsureDefaultGitignore(string directory)
+    {
+        try
+        {
+            string path = Path.Combine(directory, ".gitignore");
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(path, DefaultGitignore);
+            }
+        }
+        catch
+        {
+            // Non-fatal — the operator can add a .gitignore later.
+        }
+    }
+
+    private const string DefaultGitignore =
+        """
+        # Build output
+        [Bb]in/
+        [Oo]bj/
+        [Oo]ut/
+
+        # IDE / editor
+        .vs/
+        .vscode/
+        .idea/
+        *.user
+        *.suo
+
+        # Test / coverage
+        [Tt]est[Rr]esult*/
+        [Cc]overage*/
+
+        # NuGet
+        *.nupkg
+        packages/
+
+        # OS
+        .DS_Store
+        Thumbs.db
+        """;
 
     private static GitResult NoWorkspace => new(-1, string.Empty, "No watched solution is selected.");
 }

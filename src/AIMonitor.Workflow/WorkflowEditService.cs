@@ -528,7 +528,7 @@ public sealed class WorkflowEditService
         string lineEnding = string.IsNullOrEmpty(existingText)
             ? DetectDominantLineEnding(content)
             : DetectDominantLineEnding(existingText);
-        File.WriteAllText(manifest.WorkingFilePath, NormalizeLineEndingsForFile(content, lineEnding));
+        WriteCandidateFile(manifest.WorkingFilePath, NormalizeLineEndingsForFile(content, lineEnding));
 
         EditOverlayValidationResult overlayValidation = validateOverlay
             ? editValidator.ValidateCandidateOverlayCompilation(manifest, manifest.WorkingFilePath)
@@ -539,6 +539,29 @@ public sealed class WorkflowEditService
         manifest.LastOverlayValidation = overlayValidation;
         SaveManifest(fullWatchedPath, manifest);
         return GetStatus(fullWatchedPath);
+    }
+
+    // Write candidate content while PRESERVING the source file's UTF-8 BOM. File.WriteAllText(string)
+    // defaults to UTF-8 WITHOUT a BOM, so an edit silently strips the BOM off a file that had one —
+    // which shows up as a spurious first-line diff and can trip tooling that expects it. The Working
+    // file was created by File.Copy from watched source, so its current leading bytes tell us whether
+    // the original carried a BOM; match it. (A brand-new file has none, so new files stay BOM-less.)
+    private static void WriteCandidateFile(string path, string content)
+    {
+        bool hadBom = HasUtf8Bom(path);
+        File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: hadBom));
+    }
+
+    private static bool HasUtf8Bom(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        using FileStream stream = File.OpenRead(path);
+        Span<byte> head = stackalloc byte[3];
+        return stream.Read(head) == 3 && head[0] == 0xEF && head[1] == 0xBB && head[2] == 0xBF;
     }
 
     // Compile the CURRENT overlay for one file's candidate WITHOUT writing new content, and stamp
