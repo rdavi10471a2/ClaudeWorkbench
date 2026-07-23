@@ -189,7 +189,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Write a full-file candidate into the monitor-owned Working mirror. Does not create a staged record.")]
+    [Description("Write a full-file candidate into the monitor-owned Working mirror. Does not create a staged record. Prefer the narrower symbol/span tools (submit_symbol, add_method, add_property, replace_span_in_file, replace_text_in_file) for a localized change — reserve submit_file for a NEW file or a genuine wholesale rewrite, since a full-file overwrite makes a larger, less reviewable diff and can clobber unrelated content.")]
     public EditSessionStatus SubmitFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
         [Description("Complete replacement file content.")] string content,
