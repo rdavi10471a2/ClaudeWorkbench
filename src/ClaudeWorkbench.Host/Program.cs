@@ -179,6 +179,19 @@ internal static class Program
         // can load them; only files under the workspace uploads/ folder are served.
         app.MapLocalFiles();
 
+        // Vendored Mermaid, served explicitly rather than through MapStaticAssets. The static-
+        // asset manifest lists this 3.5MB blob (identically to sourceResize.js) yet MapStaticAssets
+        // 404s every variant of it at runtime — plain and fingerprinted — while the smaller assets
+        // it authored serve fine. Rather than fight that pipeline over a third-party bundle, we
+        // read the physical file from wwwroot/lib and serve it on a route the manifest doesn't own.
+        app.MapGet("/vendor/mermaid.min.js", (IWebHostEnvironment env) =>
+        {
+            string path = Path.Combine(env.WebRootPath, "lib", "mermaid", "mermaid.min.js");
+            return File.Exists(path)
+                ? Results.File(path, "text/javascript")
+                : Results.NotFound();
+        });
+
         app.MapMcp("/mcp");
         app.MapGet("/health", (WorkspaceManager workspace) => Results.Ok(new
         {

@@ -703,6 +703,17 @@
     height: auto;
 }
 
+/* Shown when the mermaid bundle failed to load or the diagram source is malformed. */
+.message-body ::deep .mermaid-error {
+    margin: 8px 0 2px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #fff4f4;
+    border: 1px solid #f0c4c4;
+    color: #a12d2d;
+    font-size: 0.85em;
+}
+
 @keyframes assistant-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }

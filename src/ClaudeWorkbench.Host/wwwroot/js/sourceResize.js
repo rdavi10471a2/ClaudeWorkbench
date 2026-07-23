@@ -389,20 +389,50 @@ function ensureMermaid() {
     return true;
 }
 
+// The vendored bundle is ~3.5MB, so the first render pass can fire before window.mermaid
+// finishes parsing. Poll briefly rather than give up (and no-op forever) on that race.
+async function waitForMermaid(tries) {
+    for (let i = 0; i < tries; i++) {
+        if (window.mermaid) {
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return !!window.mermaid;
+}
+
 export async function renderMermaidBlocks(container) {
-    if (!container || !ensureMermaid()) {
+    if (!container) {
         return;
     }
 
-    const blocks = container.querySelectorAll("pre code.language-mermaid, pre code[class*='language-mermaid']");
-    for (const block of blocks) {
-        const pre = block.closest("pre");
-        if (!pre || pre.dataset.mermaid === "1") {
+    // Markdig's advanced extensions render a ```mermaid fence as <pre class="mermaid">SOURCE</pre>
+    // (its built-in diagram extension) — NOT <pre><code class="language-mermaid">. Match that.
+    const blocks = container.querySelectorAll("pre.mermaid");
+    if (blocks.length === 0) {
+        return;
+    }
+
+    const loaded = window.mermaid ? true : await waitForMermaid(20);
+    for (const pre of blocks) {
+        if (pre.dataset.mermaid === "1") {
             continue;
         }
-        pre.dataset.mermaid = "1";
 
-        const source = block.textContent || "";
+        const source = pre.textContent || "";
+
+        if (!loaded) {
+            // Bundle never arrived (404 / global not set). Leave a visible note instead of
+            // silently showing the raw fence, and allow a later pass to retry.
+            const note = document.createElement("div");
+            note.className = "mermaid-error";
+            note.textContent = "⚠ Mermaid did not load (window.mermaid undefined) — diagram not rendered.";
+            pre.replaceWith(note);
+            continue;
+        }
+
+        pre.dataset.mermaid = "1";
+        ensureMermaid();
         const host = document.createElement("div");
         host.className = "mermaid-rendered";
 
@@ -412,9 +442,13 @@ export async function renderMermaidBlocks(container) {
             host.innerHTML = svg;
             pre.replaceWith(host);
         } catch (e) {
-            // Bad diagram source: keep the raw fence so the operator can see/fix it.
-            pre.dataset.mermaid = "";
-            host.remove();
+            // The diagram itself is malformed: surface the parse error and keep the source.
+            const note = document.createElement("div");
+            note.className = "mermaid-error";
+            note.textContent = "⚠ Mermaid parse error: " + (e && e.message ? e.message : e);
+            const raw = document.createElement("pre");
+            raw.textContent = source;
+            pre.replaceWith(note, raw);
         }
     }
 }
