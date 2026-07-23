@@ -321,6 +321,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         }
 
         await resizeModule.InvokeVoidAsync("scrollElementToBottom", transcriptView);
+        await resizeModule.InvokeVoidAsync("highlightCodeBlocks", transcriptView);
     }
 
     public void Dispose()

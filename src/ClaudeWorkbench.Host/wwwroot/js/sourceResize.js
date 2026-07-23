@@ -274,3 +274,88 @@ export function setBeforeUnloadGuard(enabled, message) {
 
     window.__codingServicesBeforeUnloadMessage = "";
 }
+
+
+// --- chat code-block syntax highlighting -------------------------------------------------------
+// A lightweight, self-hosted highlighter for transcript code blocks. Monaco is too heavy to spin
+// up per inline block and a CDN highlighter would fight the CSP, so this tokenizes comments,
+// strings, numbers, and a per-language keyword set; everything else stays plain. Idempotent
+// (dataset guard) so re-renders don't double-wrap. Errors fall back to leaving the block as-is.
+const HL_KEYWORDS = {
+    csharp: "abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach get goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly record ref return sbyte sealed set short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using var virtual void volatile while yield nameof when where",
+    sql: "select from where join inner left right full outer cross apply on group by having order asc desc insert into values update set delete create table view index alter drop add column primary key foreign references not null default distinct union all as and or in exists between like is case when then else end with cast convert count sum avg min max top limit offset over partition begin commit rollback declare",
+    javascript: "await async function return if else for while do break continue const let var new class extends super this typeof instanceof in of null undefined true false void delete try catch finally throw switch case default yield import export from get set static",
+    json: "true false null",
+    bash: "if then else elif fi for while do done case esac function return in export local set echo cd",
+};
+
+function hlKeywordSet(lang) {
+    const alias = { cs: "csharp", ts: "javascript", typescript: "javascript", js: "javascript",
+        sh: "bash", powershell: "bash", ps1: "bash", jsonc: "json" };
+    const words = HL_KEYWORDS[alias[lang] || lang];
+    return words ? new Set(words.split(" ")) : null;
+}
+
+function hlEscape(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function hlLineComment(lang) {
+    if (lang === "sql") return "--";
+    if (["bash", "sh", "powershell", "ps1", "python", "py", "yaml", "yml", "ini", "toml"].includes(lang)) return "#";
+    return "//";
+}
+
+export function highlightCodeBlocks(container) {
+    if (!container) {
+        return;
+    }
+
+    container.querySelectorAll("pre code").forEach(block => {
+        try {
+            if (block.dataset.hl === "1") {
+                return;
+            }
+            block.dataset.hl = "1";
+            const match = (block.className || "").match(/language-([a-z0-9#+]+)/i);
+            let lang = match ? match[1].toLowerCase() : "";
+            if (lang === "c#") {
+                lang = "csharp";
+            }
+            block.innerHTML = hlTokenize(block.textContent || "", lang);
+        } catch (e) {
+            // Leave the block as plain text on any tokenizer error.
+        }
+    });
+}
+
+function hlTokenize(code, lang) {
+    const kw = hlKeywordSet(lang);
+    const lc = hlLineComment(lang).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Priority: line comment, block comment, string, number, identifier, single char.
+    const re = new RegExp(
+        "(" + lc + "[^\\n]*)" +
+        "|(/\\*[\\s\\S]*?\\*/)" +
+        "|(\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`(?:\\\\.|[^`\\\\])*`)" +
+        "|(\\b\\d[\\d_.]*\\b)" +
+        "|([A-Za-z_$][\\w$]*)" +
+        "|([\\s\\S])", "g");
+    let out = "";
+    let m;
+    while ((m = re.exec(code)) !== null) {
+        if (m[1] || m[2]) {
+            out += '<span class="hl-com">' + hlEscape(m[0]) + "</span>";
+        } else if (m[3]) {
+            out += '<span class="hl-str">' + hlEscape(m[0]) + "</span>";
+        } else if (m[4]) {
+            out += '<span class="hl-num">' + hlEscape(m[0]) + "</span>";
+        } else if (m[5]) {
+            const token = m[0];
+            const isKeyword = kw && kw.has(lang === "sql" ? token.toLowerCase() : token);
+            out += isKeyword ? '<span class="hl-kw">' + hlEscape(token) + "</span>" : hlEscape(token);
+        } else {
+            out += hlEscape(m[0]);
+        }
+    }
+    return out;
+}

@@ -677,6 +677,13 @@
     color: inherit;
 }
 
+/* Lightweight syntax-highlight token colors (dark palette, matches the dark pre background;
+   see highlightCodeBlocks in sourceResize.js). */
+.message-body ::deep pre code .hl-kw { color: #7cc7ff; }
+.message-body ::deep pre code .hl-str { color: #b5e8a0; }
+.message-body ::deep pre code .hl-com { color: #7d8ca0; font-style: italic; }
+.message-body ::deep pre code .hl-num { color: #f0b072; }
+
 @keyframes assistant-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
