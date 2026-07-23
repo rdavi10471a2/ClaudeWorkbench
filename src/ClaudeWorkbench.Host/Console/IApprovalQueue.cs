@@ -11,7 +11,9 @@ public interface IApprovalQueue
 
     IReadOnlyList<Elicitation> PendingElicitations { get; }
 
-    Task ResolveApprovalAsync(string approvalId, bool approve, string? reason = null);
+    // remember: when approving, don't ask again for this tool for the rest of the
+    // thread (cleared on New Thread). Ignored on deny.
+    Task ResolveApprovalAsync(string approvalId, bool approve, string? reason = null, bool remember = false);
 
     Task AnswerElicitationAsync(string elicitationId, IReadOnlyDictionary<string, string> values);
 }

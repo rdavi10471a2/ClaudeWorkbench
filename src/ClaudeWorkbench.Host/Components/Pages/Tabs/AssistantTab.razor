@@ -208,6 +208,25 @@
                                     }
                                 </div>
                             }
+                            else if (entry.Kind == TranscriptKind.Image)
+                            {
+                                <div class="message assistant">
+                                    <div class="message-header">
+                                        <span class="message-meta">Assistant</span>
+                                        <div class="message-header-right">
+                                            @if (!string.IsNullOrEmpty(entry.Time))
+                                            {
+                                                <span class="entry-time">@entry.Time</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="message-body">
+                                        <a href="@LocalFileUrl(entry.Text)" target="_blank" rel="noopener" title="@entry.Text">
+                                            <img class="chat-inline-image" src="@LocalFileUrl(entry.Text)" alt="@System.IO.Path.GetFileName(entry.Text)" />
+                                        </a>
+                                    </div>
+                                </div>
+                            }
                             else
                             {
                                 <div class="message assistant">

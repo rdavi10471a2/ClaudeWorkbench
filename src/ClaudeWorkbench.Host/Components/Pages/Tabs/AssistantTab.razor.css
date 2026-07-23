@@ -617,6 +617,20 @@
     overflow-wrap: anywhere;
 }
 
+/* Inline images fit the transcript column: ::deep img covers markdown-rendered images
+   (inside MarkupString); .chat-inline-image covers auto-rendered agent-read images. */
+.message-body ::deep img,
+.chat-inline-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
+.chat-inline-image {
+    display: block;
+    cursor: zoom-in;
+}
+
 .message-body ::deep p:first-child {
     margin-top: 0;
 }
@@ -661,6 +675,43 @@
     padding: 0;
     background: transparent;
     color: inherit;
+}
+
+/* Lightweight syntax-highlight token colors (dark palette, matches the dark pre background;
+   see highlightCodeBlocks in sourceResize.js). */
+.message-body ::deep pre code .hl-kw { color: #7cc7ff; }
+.message-body ::deep pre code .hl-str { color: #b5e8a0; }
+.message-body ::deep pre code .hl-com { color: #7d8ca0; font-style: italic; }
+.message-body ::deep pre code .hl-num { color: #f0b072; }
+
+/* Rendered ```mermaid diagrams (renderMermaidBlocks in sourceResize.js replaces the <pre>
+   with this div). Mermaid's default theme is light, so give it its own light surface rather
+   than the dark code-block background, and keep the SVG inside the transcript column. */
+.message-body ::deep .mermaid-rendered {
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: #fbfdff;
+    border: 1px solid #e2e8f0;
+}
+
+.message-body ::deep .mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Shown when the mermaid bundle failed to load or the diagram source is malformed. */
+.message-body ::deep .mermaid-error {
+    margin: 8px 0 2px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #fff4f4;
+    border: 1px solid #f0c4c4;
+    color: #a12d2d;
+    font-size: 0.85em;
 }
 
 @keyframes assistant-spin {

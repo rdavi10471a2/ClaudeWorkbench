@@ -77,6 +77,7 @@ internal static class Program
         builder.Services.AddSingleton<WorkspaceCoordinator>();
         builder.Services.AddScoped<UploadService>();
         builder.Services.AddHttpClient<SidecarClient>(client => client.BaseAddress = new Uri(sidecarBase));
+        builder.Services.AddSingleton<AgentFileAccess>();
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
         builder.Services.AddSingleton<AuthStatusProbe>();
@@ -147,8 +148,50 @@ internal static class Program
             }));
         }
 
+        // Content-Security-Policy. Defense-in-depth behind the MarkdownRenderer (which already
+        // escapes raw HTML and neutralizes external images in the untrusted model output). Kept
+        // permissive where the app genuinely needs it — inline styles/scripts (Radzen/Blazor), the
+        // SignalR socket, and the Source tab's Monaco editor loaded from jsDelivr — while locking
+        // down object/embed, base-uri, form-action, and who may frame the app.
+        app.Use(async (context, next) =>
+        {
+            context.Response.Headers.Append(
+                "Content-Security-Policy",
+                "default-src 'self'; " +
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+                "img-src 'self' data: https://cdn.jsdelivr.net; " +
+                "font-src 'self' data: https://cdn.jsdelivr.net; " +
+                "connect-src 'self' ws: wss: https://cdn.jsdelivr.net; " +
+                "worker-src 'self' blob:; " +
+                "child-src 'self' blob:; " +
+                "object-src 'none'; " +
+                "base-uri 'self'; " +
+                "form-action 'self'; " +
+                "frame-ancestors 'none'");
+            await next();
+        });
+
         app.MapStaticAssets();
         app.UseAntiforgery();
+
+        // Serves upload-folder files (images) referenced in chat markdown so the browser
+        // can load them; only files under the workspace uploads/ folder are served.
+        app.MapLocalFiles();
+
+        // Vendored Mermaid, served explicitly rather than through MapStaticAssets. The static-
+        // asset manifest lists this 3.5MB blob (identically to sourceResize.js) yet MapStaticAssets
+        // 404s every variant of it at runtime — plain and fingerprinted — while the smaller assets
+        // it authored serve fine. Rather than fight that pipeline over a third-party bundle, we
+        // read the physical file from wwwroot/lib and serve it on a route the manifest doesn't own.
+        app.MapGet("/vendor/mermaid.min.js", (IWebHostEnvironment env) =>
+        {
+            string path = Path.Combine(env.WebRootPath, "lib", "mermaid", "mermaid.min.js");
+            return File.Exists(path)
+                ? Results.File(path, "text/javascript")
+                : Results.NotFound();
+        });
+
         app.MapMcp("/mcp");
         app.MapGet("/health", (WorkspaceManager workspace) => Results.Ok(new
         {
@@ -166,6 +209,12 @@ internal static class Program
         // itself, so it reads this the same way it already reads /health. Deliberately one
         // source: the card used to restate these steps as TypeScript literals and drifted.
         app.MapGet("/guidance/staging", () => Results.Text(AgentGuidance.StagingGuide, "text/markdown"));
+
+        // The full governed role card, authored in C# (AgentGuidance.ComposeGovernanceCard) and
+        // fetched by the sidecar at startup — so the card's wording lives in one place, not
+        // restated in the sidecar's TypeScript.
+        app.MapGet("/guidance/card", (WorkspaceManager workspace) =>
+            Results.Text(AgentGuidance.ComposeGovernanceCard(workspace.WatchedSolutionPath ?? string.Empty), "text/markdown"));
 
         // --- test-only review HTTP surface -------------------------------------
         // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY

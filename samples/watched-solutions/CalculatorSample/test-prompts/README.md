@@ -27,6 +27,7 @@ tree for the big multi-file, new-file-plus-edits test in one shot.
 | `03-cross-file-move.md` | 3 files | move code OUT of one file into a new one + fix the caller — declare-all-files up front |
 | `04-multi-function-session.md` | 4 files | the big one: rewrite + edits + new folder/namespace, all one session, unit merge |
 | `05-build-fail-and-reject.md` | 2 files | GATE-2 build failure at Accept, and reject-voids-the-session |
+| `06-convert-tls-and-document.md` | 1 file + a doc | convert top-level statements to `Program.Main` (makes the entry point a real symbol → caller edges appear), then the doc-gen currency guardrail: won't document from a stale index |
 
 ## Adding your own
 

@@ -54,48 +54,40 @@ async function resolveWorkspaceCwd(): Promise<void> {
   }
 }
 
-// The governed role card, injected as the system prompt so the agent understands
-// its read-only + staging-workflow contract from turn one (instead of discovering
-// it by hitting a deny). This is the programmatic skill-card seam: no CLAUDE.md is
-// loaded (settingSources: []), so authored guidance is injected here.
-let stagingGuide: string | undefined;
-let stagingGuideWarned = false;
+// The governed role card is injected as the system prompt so the agent understands its contract
+// from turn one (instead of discovering it by hitting a deny). It is authored ONCE, in C#
+// (AgentGuidance.ComposeGovernanceCard), and served at GET /guidance/card. This file used to
+// restate the whole card as TypeScript literals, which is exactly the drift the C# single-source
+// prevents — so the sidecar now only FETCHES and injects it. No CLAUDE.md is loaded
+// (settingSources: []); this fetched card is the whole skill-card seam.
+let governanceCard: string | undefined;
+let governanceCardWarned = false;
 
-// The staging procedure is authored ONCE, in C# (AgentGuidance.StagingGuide), and served at
-// GET /guidance/staging. It used to be restated as literal steps in the card below, which
-// drifted: edf83c8 reworded the C# guide and left this copy describing a review path that no
-// longer existed, for weeks.
-//
-// The host starts this process, so it is normally already listening; 60s of retries covers a
-// cold start on a big solution. On failure we warn and fall back to POINTING at the tool
-// rather than re-inlining the steps — a stale copy is the exact bug being removed here.
-async function resolveStagingGuide(timeoutMs = 60_000): Promise<void> {
-  if (stagingGuide) {
+// The host starts this process, so it is normally already listening; 60s of retries covers a cold
+// start on a big solution. On failure we fall back to a MINIMAL card that points the agent at
+// get_staging_guide — never a second full copy of the card (a stale copy is the bug being avoided).
+async function resolveGovernanceCard(timeoutMs = 60_000): Promise<void> {
+  if (governanceCard) {
     return;
   }
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${HOST_BASE}/guidance/staging`);
+      const response = await fetch(`${HOST_BASE}/guidance/card`);
       if (response.ok) {
         const text = (await response.text()).trim();
         if (text) {
-          stagingGuide = text;
-          // Both channels on purpose: host.log is where a post-mortem looks (and the failure
-          // path already writes there via console.warn), the event bus is where the operator
-          // looks live. The bus replays history to late-connecting clients, so the host still
-          // sees this even though it subscribes to /events after startup.
+          governanceCard = text;
+          // Both channels on purpose: host.log is where a post-mortem looks, the event bus is
+          // where the operator looks live (it replays history to late-connecting clients).
           console.log(
-            `[sidecar] staging guide loaded from ${HOST_BASE} (${text.split("\n").length} lines).`,
+            `[sidecar] governance card loaded from ${HOST_BASE} (${text.split("\n").length} lines).`,
           );
-          // Say so in the operator's transcript, not just the log. Whether the agent's card
-          // carries the real procedure or the fallback pointer changes how it behaves, so it
-          // must be observable without reading host.log.
           bus.emit({
             type: "assistant_text",
             turnId: "startup",
-            text: `[governance] Staging guide loaded from the host (${text.split("\n").length} lines). The agent's card carries the host-authored procedure.`,
+            text: `[governance] Role card loaded from the host (${text.split("\n").length} lines). Authored in C#; the sidecar only injects it.`,
           });
           return;
         }
@@ -107,43 +99,29 @@ async function resolveStagingGuide(timeoutMs = 60_000): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  if (!stagingGuideWarned) {
-    stagingGuideWarned = true;
+  if (!governanceCardWarned) {
+    governanceCardWarned = true;
     console.warn(
-      `[sidecar] staging guide not available from ${HOST_BASE} after ${timeoutMs / 1000}s; ` +
-        "the card will tell the agent to call get_staging_guide itself.",
+      `[sidecar] governance card not available from ${HOST_BASE} after ${timeoutMs / 1000}s; ` +
+        "using a minimal fallback card.",
     );
-    // Surface the degraded card to the operator too — a warning only in host.log is a
-    // warning nobody reads.
     bus.emit({
       type: "assistant_text",
       turnId: "startup",
       text:
-        `[governance] WARNING: the staging guide could not be loaded from the host after ${timeoutMs / 1000}s. ` +
-        "The agent's card falls back to telling it to call get_staging_guide itself, so the workflow still holds — but check the host is healthy.",
+        `[governance] WARNING: the role card could not be loaded from the host after ${timeoutMs / 1000}s. ` +
+        "Using a minimal fallback — the workflow still holds (the agent is told to call get_staging_guide), but check the host is healthy.",
     });
   }
 }
 
 function buildGovernanceCard(): string {
-  const project = watchedSolutionPath ?? workspaceCwd ?? "(resolving)";
-  return [
-    "This session runs inside ClaudeWorkbench as a GOVERNED, READ-ONLY coding agent over a watched project. Follow these rules exactly.",
-    "",
-    `WATCHED PROJECT: ${project}`,
-    "",
-    "- You have NO Write, Edit, MultiEdit, NotebookEdit, or shell (Bash/PowerShell) tools, and you never will. Never claim you can write files to disk, and do not ask for those tools.",
-    "- Inspect the workspace with the claude-workbench MCP tools FIRST — get_source_map, get_file_outline and the symbol/query tools return structure and summaries, not whole files — or Read/Grep/Glob only when you need raw text the MCP tools do not surface. Prefer the MCP tools; do not read a whole file when an outline or summary answers the question. Verify workspace facts with a tool before stating them — never answer from memory or infer from the tool list.",
-    "- EVERY change to watched source goes through the AIMonitor staging workflow. The operator's Accept in the Merge Review dialog is the ONLY path that writes watched source; you cannot bypass it.",
-    // The procedure itself comes from the host (AgentGuidance.StagingGuide) so there is one
-    // copy of it in the product. Everything else in this card is a fact about the SDK
-    // environment the sidecar controls, which the host cannot know.
-    stagingGuide
-      ? `- When asked to change code, follow this workflow exactly:\n\n${stagingGuide}`
-      : "- When asked to change code, call get_staging_guide FIRST and follow it exactly. Do NOT call record_diff_decision — the operator drives the merge in the UI.",
-    "- The task board is OPTIONAL context, not a per-turn step. Work is free-flowing by default: do NOT tie a turn to a task automatically. ONLY when the operator's request clearly concerns a board task should you call get_current_task for that task's context and record progress with update_agent_notes. For ad-hoc requests, do not load or write task notes, and never fold an unrelated request into the Active task.",
-    "- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.",
-  ].join("\n");
+  // Authored in C# (AgentGuidance.ComposeGovernanceCard) and fetched by resolveGovernanceCard();
+  // the sidecar keeps ONLY this minimal fallback, used when the host card could not be reached.
+  return (
+    governanceCard ??
+    "This session runs inside ClaudeWorkbench as a GOVERNED coding agent over a watched project — a desktop CHAT UI (not a terminal) that renders Markdown and images. When asked to change code, call get_staging_guide FIRST and follow it exactly; watched source is only written by the operator's Accept in Merge Review. Inspect with the claude-workbench MCP tools. Do NOT call record_diff_decision."
+  );
 }
 
 void resolveWorkspaceCwd();
@@ -189,7 +167,7 @@ const bus = new EventBus();
 // Start fetching the host-authored staging procedure now so the first turn does not pay the
 // wait. Deliberately AFTER `bus` exists: resolveStagingGuide reports success/failure onto it,
 // and kicking it off earlier would hit the temporal dead zone.
-void resolveStagingGuide();
+void resolveGovernanceCard();
 const gate = new OperatorGate();
 let activeTurn: string | null = null;
 // Merge-review outcomes (build + index results) posted by the host after an accept,
@@ -211,6 +189,14 @@ const elicitations = new Map<string, { resolve: (answers: Record<string, unknown
 const ALWAYS_ALLOWED_NATIVE = ["ToolSearch", "TodoWrite"];
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 const BLOCKABLE_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
+// Web read tools the operator may also opt into. Unlike BLOCKABLE_TOOLS these reach OUTSIDE
+// the workspace (an outbound path), so they are deny-by-default and only enter the allow-set
+// when the operator explicitly enables them from Settings; canUseTool still gates every call.
+const OPTIONAL_WEB_TOOLS = ["WebFetch", "WebSearch"];
+// The full set an operator may re-enable from Settings. MUST stay in sync with the host's
+// OptionalAgentTools list (AgentToolPolicy.cs) -- anything the dialog offers but this rejects
+// is a toggle that silently no-ops (the "settings tab is a lie" bug).
+const ENABLEABLE_NATIVE = new Set<string>([...BLOCKABLE_TOOLS, ...OPTIONAL_WEB_TOOLS]);
 const WORKBENCH_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
 
 interface ToolPolicy {
@@ -238,6 +224,10 @@ let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOO
 // When on, claude-workbench mutations auto-allow instead of pausing at the operator
 // gate. Watched source is still only written by the operator's merge-review Accept.
 let activeAutoApprove = false;
+// Tools the operator chose "Allow all … this thread" for. Keyed by tool basename only
+// (argument-agnostic): a single click blanket-allows every future call to that tool, any
+// arguments, until New Thread. Never applied to NEVER_AUTO_APPROVED tools (see canUseTool).
+const sessionAllowed = new Set<string>();
 // The long-lived streaming query for the current thread + its input stream.
 let activeQuery: Query | null = null;
 let activeInput: InputStream | null = null;
@@ -344,6 +334,12 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
     return { behavior: "allow", updatedInput: input };
   }
 
+  // "Allow all <tool> this thread": auto-allow a tool the operator blanket-approved earlier
+  // in this thread. Argument-agnostic (keyed by basename). Never for irreversible tools.
+  if (sessionAllowed.has(baseName(toolName)) && !isNeverAutoApproved(toolName)) {
+    return { behavior: "allow", updatedInput: input };
+  }
+
   const { gateId, decided } = gate.request(
     baseName(toolName),
     input,
@@ -362,6 +358,11 @@ const canUseTool: CanUseTool = async (toolName, input, { signal }) => {
   signal.addEventListener("abort", onAbort, { once: true });
   const resolution = await decided;
   signal.removeEventListener("abort", onAbort);
+
+  // Remember an arg-agnostic session allow, unless this is a never-auto-approve tool.
+  if (resolution.decision === "allow" && resolution.remember && !isNeverAutoApproved(toolName)) {
+    sessionAllowed.add(baseName(toolName));
+  }
 
   bus.emit({
     type: "gate_resolved",
@@ -388,7 +389,7 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
   }
   await resolveWorkspaceCwd();
   // Must complete before buildGovernanceCard(): the card embeds the host-authored procedure.
-  await resolveStagingGuide();
+  await resolveGovernanceCard();
 
   const enabled = new Set(policy.enabledTools);
   activeAllowedNative = new Set<string>([
@@ -684,12 +685,12 @@ app.post("/prompt", (req, res) => {
   const policy: ToolPolicy = {
     allowNativeReads: raw.allowNativeReads !== false,
     strictMcpConfig: raw.strictMcpConfig !== false,
-    // H3: an operator may only re-enable tools from the blockable set (the writers/shells).
-    // Arbitrary names (Agent, WebFetch, Workflow, anything unknown) can NOT be spliced into
-    // the allow-set, so a /prompt body cannot widen the deny-by-default surface beyond the
-    // intended opt-ins.
+    // H3: an operator may only re-enable tools from the fixed ENABLEABLE_NATIVE set (writers/
+    // shells + the opt-in web read tools). Arbitrary names (Agent, Workflow, anything unknown)
+    // still can NOT be spliced in, so a /prompt body cannot widen the deny-by-default surface
+    // beyond the intended, per-call-gated opt-ins.
     enabledTools: Array.isArray(raw.enabledTools)
-      ? raw.enabledTools.map(String).filter((tool) => BLOCKABLE_TOOLS.includes(tool))
+      ? raw.enabledTools.map(String).filter((tool) => ENABLEABLE_NATIVE.has(tool))
       : [],
     autoApprove: raw.autoApprove === true,
     model: typeof raw.model === "string" ? raw.model : "",
@@ -720,7 +721,7 @@ app.post("/gates/:id", (req, res) => {
     res.status(400).json({ error: "decision must be 'allow' or 'deny'." });
     return;
   }
-  const ok = gate.resolve(req.params.id, decision, req.body?.reason);
+  const ok = gate.resolve(req.params.id, decision, req.body?.reason, req.body?.remember === true);
   res.status(ok ? 200 : 404).json({ resolved: ok });
 });
 
@@ -767,6 +768,7 @@ app.post("/new-thread", (_req, res) => {
   currentSessionId = null;
   pendingReviewOutcome = "";
   elicitations.clear();
+  sessionAllowed.clear();
   bus.clear();
   bus.emit({ type: "thread_reset", turnId: "thread" });
   res.json({ ok: true });

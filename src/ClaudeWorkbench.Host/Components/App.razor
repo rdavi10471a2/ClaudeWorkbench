@@ -27,6 +27,10 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
+    @* Mermaid, vendored locally (no CDN) so ```mermaid fences render inline as diagrams.
+       Served via an explicit /vendor route (see Program.cs) because MapStaticAssets 404s this
+       blob. The bundle sets window.mermaid; sourceResize.js initializes it lazily on first use. *@
+    <script src="vendor/mermaid.min.js"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 

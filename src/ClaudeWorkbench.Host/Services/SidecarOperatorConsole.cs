@@ -47,7 +47,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
                 .Where(evt => evt.Type is "assistant_text" or "tool_call_started" or "user_prompt")
                 .Select(evt => evt.Type switch
                 {
-                    "tool_call_started" => new TranscriptEntry(TranscriptKind.ToolCall, ApprovalFormatter.ShortLabel(evt.Tool ?? string.Empty, evt.Input), FormatTime(evt.Ts)),
+                    "tool_call_started" => ToolOrImageEntry(evt),
                     "user_prompt" => new TranscriptEntry(TranscriptKind.User, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
                     _ => new TranscriptEntry(TranscriptKind.Assistant, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
                 })
@@ -129,6 +129,59 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         return ts is long milliseconds
             ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
             : string.Empty;
+    }
+
+    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".avif",
+    };
+
+    // When the agent reads an image file that exists on disk, show it inline instead of a
+    // "-> Read" line; /local-file serves it (the read already put it in the touched-file set).
+    private static TranscriptEntry ToolOrImageEntry(SidecarEvent evt)
+    {
+        if (string.Equals(evt.Tool, "Read", StringComparison.OrdinalIgnoreCase))
+        {
+            string? path = FilePathOf(evt.Input);
+            if (path is not null
+                && ImageExtensions.Contains(Path.GetExtension(path))
+                && FileExists(path))
+            {
+                return new TranscriptEntry(TranscriptKind.Image, path, FormatTime(evt.Ts));
+            }
+        }
+
+        return new TranscriptEntry(TranscriptKind.ToolCall, ApprovalFormatter.ShortLabel(evt.Tool ?? string.Empty, evt.Input), FormatTime(evt.Ts));
+    }
+
+    private static bool FileExists(string path)
+    {
+        try { return File.Exists(path); }
+        catch (Exception) { return false; }
+    }
+
+    private static string? FilePathOf(System.Text.Json.JsonElement? input)
+    {
+        if (input is not System.Text.Json.JsonElement element
+            || element.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (string key in new[] { "file_path", "path", "sourceFilePath", "filePath" })
+        {
+            if (element.TryGetProperty(key, out System.Text.Json.JsonElement value)
+                && value.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                string? path = value.GetString();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    return path;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static string Truncate(string? text)
