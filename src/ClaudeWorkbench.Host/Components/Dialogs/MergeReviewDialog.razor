@@ -117,6 +117,16 @@
                               NewOnLeft="true" />
                 </section>
 
+                <label class="staged-review-reindex-toggle"
+                       title="@(IsTerminalAccept()
+                           ? "Rebuild the solution index after this accept. Uncheck to DEFER the (expensive) reindex — the change still writes, but the index stays stale until the next reindex. Useful for tight single-file/markup loops that don't need the cross-file graph yet."
+                           : "The session's index rebuild runs on the FINAL file — this toggle is only active there.")">
+                    <input type="checkbox"
+                           @bind="rebuildIndexOnAccept"
+                           disabled="@(!IsTerminalAccept() || actionBusy)" />
+                    <span>Rebuild index after accept@(IsTerminalAccept() ? string.Empty : " (set on the final file)")</span>
+                </label>
+
                 <div class="staged-review-detail-actions">
                     <button class="staged-review-primary-action"
                             type="button"

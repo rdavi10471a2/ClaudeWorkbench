@@ -74,7 +74,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         return Load(next.StagedRecordId);
     }
 
-    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation)
+    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true)
     {
         StagedEditRecord record = workspace.EditService.GetStagedRecord(stagedRecordId);
         EnsureValidatedAndLaunched(record);
@@ -274,6 +274,10 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                     deferIndexRefresh: true);
             }
 
+            // The terminal accept is the ONLY place the session's index refresh happens. When the
+            // operator unchecks "rebuild index" (honored only here, on the terminal file), defer it:
+            // the bytes are already on disk, but the index is left stale until the next reindex.
+            // deferIndexRefresh drives BOTH paths — the session refreshPlan and the single-file path.
             ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
                 workspace.Settings,
                 logger,
@@ -282,12 +286,15 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 "accepted",
                 record.StagedHash,
                 "ClaudeWorkbench",
-                deferIndexRefresh: false,
-                refreshPlan: refreshPlan);
+                deferIndexRefresh: !rebuildIndex,
+                refreshPlan: rebuildIndex ? refreshPlan : null);
 
+            string indexNote = rebuildIndex
+                ? "index rebuilt for the edit session"
+                : "index refresh DEFERRED — the change is on disk but the index is stale until the next reindex";
             string message = writtenPaths.Count == 1
-                ? $"Accepted. {record.RelativePath} written; index rebuilt for the edit session."
-                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); index rebuilt for the edit session.";
+                ? $"Accepted. {record.RelativePath} written; {indexNote}."
+                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.";
             return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild));
         }
         catch (Exception exception)
