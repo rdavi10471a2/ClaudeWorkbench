@@ -7,7 +7,11 @@
             <div class="staged-review-busy-card">
                 <div class="staged-review-busy-spinner"></div>
                 <strong>Applying review decision</strong>
-                <span>Submitting the accepted files, compiling, and rebuilding the solution index. Please wait…</span>
+                <span>
+                    @(rebuildIndexOnAccept
+                        ? "Submitting the accepted files, compiling, and rebuilding the solution index. Please wait…"
+                        : "Submitting the accepted files and compiling (index rebuild deferred). Please wait…")
+                </span>
             </div>
         </div>
     }

@@ -295,7 +295,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             string message = writtenPaths.Count == 1
                 ? $"Accepted. {record.RelativePath} written; {indexNote}."
                 : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.";
-            return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild));
+            return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex));
         }
         catch (Exception exception)
         {
@@ -341,7 +341,8 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
     private static string? BuildOutcomeSummary(
         ReviewDecisionWithIndexRefreshResult result,
         IReadOnlyCollection<string> writtenPaths,
-        PreMergeValidationResult? terminalBuild)
+        PreMergeValidationResult? terminalBuild,
+        bool rebuildIndex)
     {
         List<string> parts = new()
         {
@@ -358,7 +359,13 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 : "Build passed.");
         }
 
-        if (result.IndexRefresh is PostAcceptIndexRefreshResult index)
+        // The operator unchecked "rebuild index", so the refresh was intentionally deferred — the
+        // decision result carries a no-op IndexRefresh, but reporting it as "refreshed" would lie.
+        if (!rebuildIndex)
+        {
+            parts.Add("Index refresh DEFERRED (operator choice) — this file is stale in the index until the next reindex.");
+        }
+        else if (result.IndexRefresh is PostAcceptIndexRefreshResult index)
         {
             parts.Add(index.IsError
                 ? $"Index refresh failed: {index.Message}"
