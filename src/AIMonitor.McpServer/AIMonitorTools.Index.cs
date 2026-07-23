@@ -16,10 +16,13 @@ namespace AIMonitor.McpServer;
 
 public sealed partial class AIMonitorTools
 {
-    // ~4 chars per token. Past this a raw-index payload overflows the model's inline read and the
-    // harness spills it to a file the agent cannot chunk back — so the tree/query tools return a
-    // compact overflow envelope instead, mirroring get_source_map's graceful-truncation contract.
-    private const int IndexToolCharBudget = 80_000;
+    // Calibrated against a live run: get_solution_index_tree serialized to ~57k chars as ONE long
+    // JSON line and the harness spilled it to an unreadable file — even though that is well under
+    // get_source_map's ~20k-TOKEN (~80k-char) budget. Compact single-line index JSON spills on LINE
+    // LENGTH, not token count, so an 80k-char budget was too loose (it let the 57k tree through).
+    // Cap conservatively well below that observed spill; past this the tree/query tools return the
+    // compact overflow envelope instead of dumping.
+    private const int IndexToolCharBudget = 24_000;
 
     // Serialize once to measure; return the payload when it fits, otherwise the caller's envelope.
     private static object BudgetIndexPayload(object payload, Func<int, AIMonitorIndexOverflowEnvelope> overflow)
