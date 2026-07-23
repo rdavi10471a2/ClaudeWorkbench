@@ -20,6 +20,11 @@ public static class MarkdownRenderer
 {
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
+        // Model output is UNTRUSTED (it launders file/web content via indirect prompt injection)
+        // and we inject it as HTML, so raw HTML the model types is escaped, not rendered — no
+        // <script>, <iframe>, or <img onerror>. Markdown images still render as <img> (that path
+        // is not "raw HTML"); external image sources are neutralized in RewriteLocalLinks below.
+        .DisableHtml()
         .Build();
 
     // Rooted Windows path ("C:\..." or "C:/...") or UNC ("\\server\share\...").
@@ -64,6 +69,14 @@ public static class MarkdownRenderer
                 {
                     link.IsImage = true;
                 }
+            }
+            else if (link.IsImage && IsExternalHttp(link.Url))
+            {
+                // An EXTERNAL image auto-fetches on render — a tracking/exfil pixel if the model was
+                // steered by untrusted input it read. Downgrade it to a click-through link so nothing
+                // loads until the operator chooses; download_url is the way to actually show a web
+                // image (it lands local, then renders inline and safely).
+                link.IsImage = false;
             }
 
             // Anything that stays a link (local non-image, or an external URL) opens in a new

@@ -148,6 +148,30 @@ internal static class Program
             }));
         }
 
+        // Content-Security-Policy. Defense-in-depth behind the MarkdownRenderer (which already
+        // escapes raw HTML and neutralizes external images in the untrusted model output). Kept
+        // permissive where the app genuinely needs it — inline styles/scripts (Radzen/Blazor), the
+        // SignalR socket, and the Source tab's Monaco editor loaded from jsDelivr — while locking
+        // down object/embed, base-uri, form-action, and who may frame the app.
+        app.Use(async (context, next) =>
+        {
+            context.Response.Headers.Append(
+                "Content-Security-Policy",
+                "default-src 'self'; " +
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+                "img-src 'self' data: https://cdn.jsdelivr.net; " +
+                "font-src 'self' data: https://cdn.jsdelivr.net; " +
+                "connect-src 'self' ws: wss: https://cdn.jsdelivr.net; " +
+                "worker-src 'self' blob:; " +
+                "child-src 'self' blob:; " +
+                "object-src 'none'; " +
+                "base-uri 'self'; " +
+                "form-action 'self'; " +
+                "frame-ancestors 'none'");
+            await next();
+        });
+
         app.MapStaticAssets();
         app.UseAntiforgery();
 
