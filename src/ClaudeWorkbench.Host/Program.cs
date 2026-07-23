@@ -96,10 +96,6 @@ internal static class Program
         builder.Services.AddSingleton<GitService>();
         builder.Services.AddSingleton<GitWorkspaceService>();
         builder.Services.AddSingleton<IndexRebuildStatus>();
-        // Index warm-up runs once AFTER the Blazor circuit is up (not at startup), so a full
-        // reindex — or even the staleness check — never competes with the first page render.
-        builder.Services.AddSingleton<StartupIndexWarmup>();
-        builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, IndexWarmupCircuitHandler>();
 
         // Launcher-owned instance: shut down when the last browser tab closes (the tab
         // owns the instance's lifetime; graceful shutdown kills the sidecar too). Opt-in,
@@ -125,13 +121,31 @@ internal static class Program
         {
             app.Services.GetRequiredService<RuntimeProvisioner>().EnsureRuntime(startupWorkspace.Settings);
 
-            // The index warm-up used to run here at ApplicationStarted — a full MSBuild/Roslyn
-            // reindex (plus a staleness check that re-hashes every indexed file) kicked off exactly
-            // as the browser connected, starving Blazor's first prerender + hydration and giving a
-            // long blank screen on EVERY launch (it rebuilt unconditionally, even when nothing
-            // changed). It now runs once AFTER the circuit is up (IndexWarmupCircuitHandler ->
-            // StartupIndexWarmup) and only when the index is missing or stale, so a clean reopen
-            // does no indexing and loads instantly. EnsureRuntime above stays (it is cheap).
+            // Reopening the app with a solution attached would otherwise leave the index
+            // COLD until a manual Source-tab rebuild — which makes the first agent turn
+            // flaky (start_monitor_session can't prove the single owning project). Warm it
+            // here, but ONLY once Kestrel is up and ONLY in the background (a large solution
+            // can take a while to index), behind the IndexRebuildStatus spinner. Startup is
+            // never blocked; no solution attached => this never runs.
+            IndexRebuildStatus rebuildStatus = app.Services.GetRequiredService<IndexRebuildStatus>();
+            app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
+            {
+                using (rebuildStatus.Begin())
+                {
+                    try
+                    {
+                        await startupWorkspace.ProvisionAsync();
+                    }
+                    catch (Exception exception)
+                    {
+                        app.Services.GetRequiredService<IMonitorLogger>().Write(
+                            MonitorLogLevel.Warning,
+                            "Host",
+                            "startup-index-rebuild-failed",
+                            exception.Message);
+                    }
+                }
+            }));
         }
 
         // Content-Security-Policy. Defense-in-depth behind the MarkdownRenderer (which already
