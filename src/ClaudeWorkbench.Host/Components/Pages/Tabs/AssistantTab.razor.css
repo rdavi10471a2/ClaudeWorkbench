@@ -684,6 +684,25 @@
 .message-body ::deep pre code .hl-com { color: #7d8ca0; font-style: italic; }
 .message-body ::deep pre code .hl-num { color: #f0b072; }
 
+/* Rendered ```mermaid diagrams (renderMermaidBlocks in sourceResize.js replaces the <pre>
+   with this div). Mermaid's default theme is light, so give it its own light surface rather
+   than the dark code-block background, and keep the SVG inside the transcript column. */
+.message-body ::deep .mermaid-rendered {
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: #fbfdff;
+    border: 1px solid #e2e8f0;
+}
+
+.message-body ::deep .mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+}
+
 @keyframes assistant-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }

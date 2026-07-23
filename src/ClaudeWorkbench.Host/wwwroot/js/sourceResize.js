@@ -316,6 +316,10 @@ export function highlightCodeBlocks(container) {
             if (block.dataset.hl === "1") {
                 return;
             }
+            // A ```mermaid fence is a diagram, not code — renderMermaidBlocks owns it.
+            if (/\blanguage-mermaid\b/i.test(block.className || "")) {
+                return;
+            }
             block.dataset.hl = "1";
             const match = (block.className || "").match(/language-([a-z0-9#+]+)/i);
             let lang = match ? match[1].toLowerCase() : "";
@@ -358,4 +362,59 @@ function hlTokenize(code, lang) {
         }
     }
     return out;
+}
+
+// --- Mermaid diagrams -------------------------------------------------------
+// A ```mermaid fence in model output becomes <pre><code class="language-mermaid">.
+// We render it to inline SVG with the locally-vendored mermaid bundle (loaded as a
+// classic <script>, which sets window.mermaid). securityLevel:'strict' matters here:
+// the diagram source is UNTRUSTED model output, so labels are sanitized and click/script
+// directives are inert. On any parse error we leave the raw text visible, never a blank.
+let mermaidReady = false;
+let mermaidSeq = 0;
+
+function ensureMermaid() {
+    if (!window.mermaid) {
+        return false;
+    }
+    if (!mermaidReady) {
+        window.mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: "strict",
+            theme: "default",
+            fontFamily: "inherit",
+        });
+        mermaidReady = true;
+    }
+    return true;
+}
+
+export async function renderMermaidBlocks(container) {
+    if (!container || !ensureMermaid()) {
+        return;
+    }
+
+    const blocks = container.querySelectorAll("pre code.language-mermaid, pre code[class*='language-mermaid']");
+    for (const block of blocks) {
+        const pre = block.closest("pre");
+        if (!pre || pre.dataset.mermaid === "1") {
+            continue;
+        }
+        pre.dataset.mermaid = "1";
+
+        const source = block.textContent || "";
+        const host = document.createElement("div");
+        host.className = "mermaid-rendered";
+
+        try {
+            mermaidSeq += 1;
+            const { svg } = await window.mermaid.render("mmd-" + mermaidSeq, source);
+            host.innerHTML = svg;
+            pre.replaceWith(host);
+        } catch (e) {
+            // Bad diagram source: keep the raw fence so the operator can see/fix it.
+            pre.dataset.mermaid = "";
+            host.remove();
+        }
+    }
 }
