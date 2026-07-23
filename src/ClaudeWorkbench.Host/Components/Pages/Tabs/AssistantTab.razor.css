@@ -105,6 +105,39 @@
     cursor: pointer;
 }
 
+.composer-paste-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-height: 100px;
+    padding: 12px;
+    text-align: center;
+    border: 1.5px dashed #b9c8d8;
+    border-radius: 10px;
+    background: #f7fafd;
+    color: #526a82;
+    font-size: .82rem;
+    line-height: 1.3;
+    cursor: pointer;
+    outline: none;
+    transition: border-color .12s ease, background .12s ease, color .12s ease;
+}
+
+.composer-paste-zone:hover,
+.composer-paste-zone:focus {
+    border-color: #5b82f1;
+    background: #f0f5ff;
+}
+
+.composer-paste-zone.dragover {
+    border-color: #5b82f1;
+    background: #e8f0ff;
+    color: #2f5bd0;
+}
+
 .attach-error {
     color: #c0392b;
     font-size: .76rem;

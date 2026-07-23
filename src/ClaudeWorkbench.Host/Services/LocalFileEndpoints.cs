@@ -15,6 +15,21 @@ public static class LocalFileEndpoints
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
 
+    private const long MaxUploadBytes = 25L * 1024 * 1024;
+
+    private static readonly HashSet<string> UploadImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".avif", ".svg",
+    };
+
+    // Images plus the common text/data types an operator pastes or drops. Anything else is refused
+    // so the paste zone can't be used to smuggle arbitrary files into the workspace uploads folder.
+    private static readonly HashSet<string> AllowedUploadExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".avif", ".svg",
+        ".txt", ".log", ".md", ".markdown", ".csv", ".tsv", ".json", ".xml", ".yml", ".yaml",
+    };
+
     public static void MapLocalFiles(this WebApplication app)
     {
         app.MapGet("/local-file", (string path, UploadService uploads, AgentFileAccess fileAccess) =>
@@ -66,6 +81,74 @@ public static class LocalFileEndpoints
 
             return Results.File(full, contentType, enableRangeProcessing: true);
         });
+
+        // Pasted/dropped raw image or text data from the composer. The client POSTs the blob body
+        // with ?name=; we land it in the SAME uploads/ folder the file picker and download_url use
+        // (already agent-readable via additionalDirectories and served by /local-file above), then
+        // return the saved path so the composer adds it as a normal attachment. DisableAntiforgery:
+        // this is a localhost same-origin fetch of a raw body (no form), and the earlier /local-file
+        // GET is likewise tokenless; the extension allowlist + size cap are the real guards.
+        app.MapPost("/uploads/paste", async (HttpRequest request, UploadService uploads, CancellationToken cancellationToken) =>
+        {
+            if (!uploads.Available)
+            {
+                return Results.BadRequest(new { error = "No watched workspace is selected." });
+            }
+
+            if (request.ContentLength is long length && length > MaxUploadBytes)
+            {
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
+
+            string fileName = BuildUploadFileName(request.Query["name"].ToString(), request.ContentType);
+            if (!AllowedUploadExtensions.Contains(Path.GetExtension(fileName)))
+            {
+                return Results.BadRequest(new { error = "Unsupported attachment type." });
+            }
+
+            try
+            {
+                string saved = await uploads.SaveAsync(fileName, request.Body, cancellationToken);
+                return Results.Ok(new
+                {
+                    name = Path.GetFileName(saved),
+                    path = saved,
+                    isImage = UploadImageExtensions.Contains(Path.GetExtension(saved)),
+                });
+            }
+            catch (Exception exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        }).DisableAntiforgery();
+    }
+
+    // The client sends the pasted/dropped name in ?name= (file.name for a drop, a synthesized
+    // "pasted-..." for a clipboard blob). Fall back to a name derived from the Content-Type if it
+    // is ever missing. UploadService sanitizes and de-duplicates the final name.
+    private static string BuildUploadFileName(string? requestedName, string? contentType)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedName))
+        {
+            return requestedName;
+        }
+
+        string extension = (contentType?.Split(';')[0].Trim().ToLowerInvariant()) switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" => ".jpg",
+            "image/gif" => ".gif",
+            "image/webp" => ".webp",
+            "image/bmp" => ".bmp",
+            "image/svg+xml" => ".svg",
+            "image/x-icon" or "image/vnd.microsoft.icon" => ".ico",
+            "image/avif" => ".avif",
+            "text/markdown" => ".md",
+            "text/csv" => ".csv",
+            "application/json" => ".json",
+            _ => ".txt",
+        };
+        return $"pasted-{DateTime.UtcNow:yyyyMMdd-HHmmss}{extension}";
     }
 
     // GetFullPath has already resolved any '..' in the request, so a prefix check against

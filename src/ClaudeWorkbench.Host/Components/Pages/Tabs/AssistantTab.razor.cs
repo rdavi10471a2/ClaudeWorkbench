@@ -28,7 +28,10 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private ElementReference transcriptPanel;
     private ElementReference transcriptView;
     private ElementReference chatInput;
+    private ElementReference composerPasteZone;
     private IJSObjectReference? resizeModule;
+    private IJSObjectReference? attachModule;
+    private DotNetObjectReference<AssistantTab>? selfRef;
     private string draft = string.Empty;
     private bool autoApprove;
     private bool usageOpen;
@@ -165,6 +168,30 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private void RemoveAttachment(PendingAttachment attachment)
     {
         attachments.Remove(attachment);
+    }
+
+    // Called from composerAttach.js after a pasted/dropped blob is saved to uploads/. Same result
+    // as the file picker's OnFilesSelectedAsync: add it as a pending attachment and re-render.
+    // InvokeAsync marshals back onto the render thread (the JS callback is off it).
+    [JSInvokable]
+    public Task AddUploadedAttachment(string name, string path)
+    {
+        return InvokeAsync(() =>
+        {
+            uploadError = null;
+            attachments.Add(new PendingAttachment(name, path));
+            StateHasChanged();
+        });
+    }
+
+    [JSInvokable]
+    public Task ReportUploadError(string message)
+    {
+        return InvokeAsync(() =>
+        {
+            uploadError = message;
+            StateHasChanged();
+        });
     }
 
     private async Task SubmitAsync()
@@ -326,6 +353,12 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
                 transcriptPanel,
                 assistantSplitter);
             await resizeModule.InvokeVoidAsync("attachComposerAutoScroll", chatInput);
+
+            // Paste/drop attachments: capture raw image/text data in the composer and POST it to
+            // /uploads/paste, then AddUploadedAttachment marshals the saved path back here.
+            selfRef ??= DotNetObjectReference.Create(this);
+            attachModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/composerAttach.js");
+            await attachModule.InvokeVoidAsync("initComposerAttach", composerPasteZone, chatInput, selfRef);
         }
 
         // Transcript-wide JS runs ONLY when the transcript changed (streamed/new message via
@@ -359,5 +392,18 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             {
             }
         }
+
+        if (attachModule is not null)
+        {
+            try
+            {
+                await attachModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        selfRef?.Dispose();
     }
 }

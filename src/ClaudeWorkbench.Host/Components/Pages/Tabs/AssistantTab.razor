@@ -18,6 +18,11 @@
                     <span>Auto-approve</span>
                 </label>
             </div>
+            <div class="composer-paste-zone" @ref="composerPasteZone" tabindex="0"
+                 title="Paste a screenshot or text (Ctrl+V), or drop files here, to attach them for the agent to read.">
+                <RadzenIcon Icon="content_paste" />
+                <span>Paste an image or text, or drop files here — they attach for the agent to read.</span>
+            </div>
             @if (uploadError is not null)
             {
                 <div class="attach-error">@uploadError</div>
