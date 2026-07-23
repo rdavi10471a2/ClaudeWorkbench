@@ -26,21 +26,30 @@ export function initComposerAttach(dropZone, textarea, dotNetRef) {
         }
     });
 
-    // Paste INTO THE ZONE: images become image attachments, text becomes a .txt attachment. This
-    // is the "attach it as a file" surface, distinct from the textarea (which keeps native text
-    // paste straight into the prompt).
-    dropZone.addEventListener("paste", async (e) => {
-        if (await handleImageItems(e.clipboardData, dotNetRef)) {
-            e.preventDefault();
-            return;
-        }
-
-        const text = e.clipboardData?.getData("text/plain");
-        if (text && text.length > 0) {
-            e.preventDefault();
-            await uploadBlob(new Blob([text], { type: "text/plain" }), pastedName("text/plain"), dotNetRef);
-        }
-    });
+    // Paste INTO THE ZONE via a transparent <textarea> overlay: images become image attachments,
+    // text becomes a .txt attachment. The overlay is what makes the RIGHT-CLICK "Paste" menu item
+    // work — a browser only enables it for an editable target, so a bare div gets Ctrl+V but a
+    // greyed-out context menu. We swallow the paste so nothing is actually inserted, and keep the
+    // catcher empty so it never behaves like a text field. This is the "attach it as a file"
+    // surface, distinct from the message textarea (which keeps native text paste to the prompt).
+    const catcher = dropZone.querySelector(".paste-catch");
+    if (catcher) {
+        catcher.addEventListener("paste", async (e) => {
+            const hadImage = await handleImageItems(e.clipboardData, dotNetRef);
+            if (hadImage) {
+                e.preventDefault();
+            } else {
+                const text = e.clipboardData?.getData("text/plain");
+                if (text && text.length > 0) {
+                    e.preventDefault();
+                    await uploadBlob(new Blob([text], { type: "text/plain" }), pastedName("text/plain"), dotNetRef);
+                }
+            }
+            catcher.value = "";
+        });
+        catcher.addEventListener("input", () => { catcher.value = ""; });
+        dropZone.addEventListener("click", () => catcher.focus());
+    }
 
     // Convenience: pasting an IMAGE anywhere in the message box also attaches it (a screenshot has
     // no sensible text representation). Text paste in the textarea is left untouched — it goes into
