@@ -74,7 +74,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return the monitor-owned watched solution index tree as compact JSON: projects, namespaces, and files.")]
+    [Description("Return the monitor-owned watched solution index tree as compact JSON: projects, namespaces, and files. NO output budget: at solution scale this can exceed the token limit and spill to a file that cannot be read back inline — prefer get_source_map (folder/navigation) for structural discovery; use this only on a known-small solution.")]
     public AIMonitorSolutionIndexTree GetSolutionIndexTree()
     {
         runtimeState.Touch();
@@ -93,7 +93,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Query the monitor-owned watched solution index by scope. Scopes: solution, namespace, folder, file.")]
+    [Description("Query the monitor-owned watched solution index by scope. Scopes: solution, namespace, folder, file. NO output budget: a solution- or folder-scope query can exceed the token limit and spill to a file that cannot be read back inline — for structural discovery prefer get_source_map (folder/navigation, then file/selector), which is budgeted and truncates gracefully.")]
     public SolutionIndexQueryResult QuerySolutionIndex(
         [Description("Index scope: solution, namespace, folder, or file.")] string scope = "solution",
         [Description("Namespace text, folder path, or file path for scoped queries. Omit for solution scope.")] string? value = null,
