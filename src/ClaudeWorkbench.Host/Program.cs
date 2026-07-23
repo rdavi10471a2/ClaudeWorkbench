@@ -173,6 +173,22 @@ internal static class Program
         });
 
         app.MapStaticAssets();
+
+        // Vendored Monaco editor (read-only source viewer) served from wwwroot/lib/monaco. Local disk
+        // instead of the jsdelivr CDN: the CDN download was the ENTIRE slow-first-load cost on the
+        // launcher's cold, isolated browser profile (measured — host serves in ~1.2s; the rest was the
+        // browser fetching Monaco over the network). Like the mermaid blob, the MapStaticAssets
+        // manifest does not reliably serve this tree, so map an explicit static-file provider.
+        string monacoRoot = Path.Combine(app.Environment.WebRootPath, "lib", "monaco");
+        if (Directory.Exists(monacoRoot))
+        {
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(monacoRoot),
+                RequestPath = "/lib/monaco",
+            });
+        }
+
         app.UseAntiforgery();
 
         // Serves upload-folder files (images) referenced in chat markdown so the browser

@@ -1,15 +1,16 @@
 @using System.Text.Json
+@inject Microsoft.AspNetCore.Components.NavigationManager Nav
 
 @if (File is not null)
 {
-    <iframe class="source-webview" title="Read-only source viewer" srcdoc="@RenderWebViewHtml(File)"></iframe>
+    <iframe class="source-webview" title="Read-only source viewer" srcdoc="@RenderWebViewHtml(File, Nav.BaseUri)"></iframe>
 }
 
 @code {
     [Parameter]
     public SourceFileDocument? File { get; set; }
 
-    private static string RenderWebViewHtml(SourceFileDocument file)
+    private static string RenderWebViewHtml(SourceFileDocument file, string baseUri)
     {
         string payload = JsonSerializer.Serialize(new
         {
@@ -40,13 +41,12 @@
   <script>
     window.MonacoEnvironment = {
       getWorkerUrl: function (_, label) {
-        const workerMain = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/base/worker/workerMain.js';
-        const source = 'self.MonacoEnvironment={baseUrl:"https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/"};importScripts("' + workerMain + '");';
+        const source = 'self.MonacoEnvironment={baseUrl:"{{baseUri}}lib/monaco/"};importScripts("{{baseUri}}lib/monaco/vs/base/worker/workerMain.js");';
         return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
       }
     };
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+  <script src="{{baseUri}}lib/monaco/vs/loader.js"></script>
 </head>
 <body>
   <div id="container"></div>
@@ -57,7 +57,7 @@
       return monaco.Uri.parse('file:///' + String(path || 'source.txt').replaceAll('\\', '/'));
     }
 
-    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
+    require.config({ paths: { vs: '{{baseUri}}lib/monaco/vs' } });
     require(['vs/editor/editor.main'], function () {
       const model = monaco.editor.createModel(payload.text || '', payload.language || 'plaintext', uriFromPath(payload.path));
       const editor = monaco.editor.create(document.getElementById('container'), {
