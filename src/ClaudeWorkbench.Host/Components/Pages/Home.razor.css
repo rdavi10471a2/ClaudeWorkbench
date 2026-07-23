@@ -218,6 +218,26 @@
     animation: workspace-state-spin .8s linear infinite;
 }
 
+/* On-load "Indexing the solution" banner (see Home.razor). Prominent + non-blocking; reuses
+   the workspace-state spinner at a slightly larger size. */
+.workspace-indexing-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 4px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #eef4ff;
+    border: 1px solid #c6d8f8;
+    color: #24467e;
+    font-size: 0.9rem;
+}
+
+.workspace-indexing-banner .workspace-state-spinner {
+    width: 18px;
+    height: 18px;
+}
+
 .workspace-path strong {
     display: block;
     min-width: 0;

@@ -77,6 +77,17 @@ else
                 </div>
             </div>
 
+            @* Prominent on-load indexing notice. The top-right "Indexing" badge is easy to miss,
+               and prompting into a cold index makes the first turn flaky — this banner makes the
+               wait obvious. Clears automatically when IndexRebuildStatus goes idle. *@
+            @if (IndexStatus.IsRebuilding)
+            {
+                <div class="workspace-indexing-banner" role="status" aria-live="polite">
+                    <span class="workspace-state-spinner" aria-hidden="true"></span>
+                    <span><strong>Indexing the solution…</strong> The agent can reason over your code once this finishes — a prompt sent now may be less accurate.</span>
+                </div>
+            }
+
             <RadzenTabs RenderMode="TabRenderMode.Client">
                 <Tabs>
                     @* Tasks tab disabled until the thread<->task workflow is built (see
