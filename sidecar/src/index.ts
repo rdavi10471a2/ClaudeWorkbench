@@ -54,48 +54,40 @@ async function resolveWorkspaceCwd(): Promise<void> {
   }
 }
 
-// The governed role card, injected as the system prompt so the agent understands
-// its read-only + staging-workflow contract from turn one (instead of discovering
-// it by hitting a deny). This is the programmatic skill-card seam: no CLAUDE.md is
-// loaded (settingSources: []), so authored guidance is injected here.
-let stagingGuide: string | undefined;
-let stagingGuideWarned = false;
+// The governed role card is injected as the system prompt so the agent understands its contract
+// from turn one (instead of discovering it by hitting a deny). It is authored ONCE, in C#
+// (AgentGuidance.ComposeGovernanceCard), and served at GET /guidance/card. This file used to
+// restate the whole card as TypeScript literals, which is exactly the drift the C# single-source
+// prevents — so the sidecar now only FETCHES and injects it. No CLAUDE.md is loaded
+// (settingSources: []); this fetched card is the whole skill-card seam.
+let governanceCard: string | undefined;
+let governanceCardWarned = false;
 
-// The staging procedure is authored ONCE, in C# (AgentGuidance.StagingGuide), and served at
-// GET /guidance/staging. It used to be restated as literal steps in the card below, which
-// drifted: edf83c8 reworded the C# guide and left this copy describing a review path that no
-// longer existed, for weeks.
-//
-// The host starts this process, so it is normally already listening; 60s of retries covers a
-// cold start on a big solution. On failure we warn and fall back to POINTING at the tool
-// rather than re-inlining the steps — a stale copy is the exact bug being removed here.
-async function resolveStagingGuide(timeoutMs = 60_000): Promise<void> {
-  if (stagingGuide) {
+// The host starts this process, so it is normally already listening; 60s of retries covers a cold
+// start on a big solution. On failure we fall back to a MINIMAL card that points the agent at
+// get_staging_guide — never a second full copy of the card (a stale copy is the bug being avoided).
+async function resolveGovernanceCard(timeoutMs = 60_000): Promise<void> {
+  if (governanceCard) {
     return;
   }
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${HOST_BASE}/guidance/staging`);
+      const response = await fetch(`${HOST_BASE}/guidance/card`);
       if (response.ok) {
         const text = (await response.text()).trim();
         if (text) {
-          stagingGuide = text;
-          // Both channels on purpose: host.log is where a post-mortem looks (and the failure
-          // path already writes there via console.warn), the event bus is where the operator
-          // looks live. The bus replays history to late-connecting clients, so the host still
-          // sees this even though it subscribes to /events after startup.
+          governanceCard = text;
+          // Both channels on purpose: host.log is where a post-mortem looks, the event bus is
+          // where the operator looks live (it replays history to late-connecting clients).
           console.log(
-            `[sidecar] staging guide loaded from ${HOST_BASE} (${text.split("\n").length} lines).`,
+            `[sidecar] governance card loaded from ${HOST_BASE} (${text.split("\n").length} lines).`,
           );
-          // Say so in the operator's transcript, not just the log. Whether the agent's card
-          // carries the real procedure or the fallback pointer changes how it behaves, so it
-          // must be observable without reading host.log.
           bus.emit({
             type: "assistant_text",
             turnId: "startup",
-            text: `[governance] Staging guide loaded from the host (${text.split("\n").length} lines). The agent's card carries the host-authored procedure.`,
+            text: `[governance] Role card loaded from the host (${text.split("\n").length} lines). Authored in C#; the sidecar only injects it.`,
           });
           return;
         }
@@ -107,44 +99,29 @@ async function resolveStagingGuide(timeoutMs = 60_000): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  if (!stagingGuideWarned) {
-    stagingGuideWarned = true;
+  if (!governanceCardWarned) {
+    governanceCardWarned = true;
     console.warn(
-      `[sidecar] staging guide not available from ${HOST_BASE} after ${timeoutMs / 1000}s; ` +
-        "the card will tell the agent to call get_staging_guide itself.",
+      `[sidecar] governance card not available from ${HOST_BASE} after ${timeoutMs / 1000}s; ` +
+        "using a minimal fallback card.",
     );
-    // Surface the degraded card to the operator too — a warning only in host.log is a
-    // warning nobody reads.
     bus.emit({
       type: "assistant_text",
       turnId: "startup",
       text:
-        `[governance] WARNING: the staging guide could not be loaded from the host after ${timeoutMs / 1000}s. ` +
-        "The agent's card falls back to telling it to call get_staging_guide itself, so the workflow still holds — but check the host is healthy.",
+        `[governance] WARNING: the role card could not be loaded from the host after ${timeoutMs / 1000}s. ` +
+        "Using a minimal fallback — the workflow still holds (the agent is told to call get_staging_guide), but check the host is healthy.",
     });
   }
 }
 
 function buildGovernanceCard(): string {
-  const project = watchedSolutionPath ?? workspaceCwd ?? "(resolving)";
-  return [
-    "This session runs inside ClaudeWorkbench — a desktop CHAT app, NOT a terminal — as a GOVERNED coding agent over a watched project: you PROPOSE changes as staged candidates and the operator accepts them in Merge Review. You do real work within these rules (you are not a passive read-only assistant). Follow the rules exactly.",
-    "",
-    `WATCHED PROJECT: ${project}`,
-    "",
-    "- Which tools you have is set by the OPERATOR in Settings and can differ between turns. Read/Grep/Glob and the claude-workbench MCP tools are always available; others — web search/fetch, download_url, and sometimes Write/Edit/Bash/PowerShell — are OFF by default and present ONLY if the operator enabled them. Use the tools you ACTUALLY have this turn. NEVER refuse a request by claiming you lack a tool or 'never' have one — if a tool you would need is not available, say so plainly and suggest the operator enable it in Settings.",
-    "- DISPLAY: You are in a CHAT UI, NOT a terminal — the operator sees your replies as rendered Markdown, INCLUDING IMAGES. To show a LOCAL image, embed it as Markdown: ![alt](local-path). An EXTERNAL image URL (http/https) will NOT render inline — for safety it is shown only as a plain link. So to DISPLAY a web image you MUST first call download_url on it (it lands the file locally and returns a ready `markdown` field), then include that `markdown` value VERBATIM in your reply. Never say you cannot show or display images, and never claim you are in a terminal. When the operator asks you to find, get, fetch, or show an image, SHOW IT INLINE BY DEFAULT (download_url, then embed the returned `markdown`) — do not merely link to it or describe it, and do not wait to be told to render it inline.",
-    "- Inspect the workspace with the claude-workbench MCP tools FIRST — get_source_map, get_file_outline and the symbol/query tools return structure and summaries, not whole files — or Read/Grep/Glob only when you need raw text the MCP tools do not surface. Prefer the MCP tools; do not read a whole file when an outline or summary answers the question. Verify workspace facts with a tool before stating them — never answer from memory or infer from the tool list.",
-    "- EVERY change to watched source goes through the AIMonitor staging workflow. The operator's Accept in the Merge Review dialog is the ONLY path that writes watched source; you cannot bypass it — even if a Write/Edit/shell tool is enabled, NEVER use it to modify a watched file. (Those tools, when on, are for non-watched-source work like scratch files or downloads.)",
-    // The procedure itself comes from the host (AgentGuidance.StagingGuide) so there is one
-    // copy of it in the product. Everything else in this card is a fact about the SDK
-    // environment the sidecar controls, which the host cannot know.
-    stagingGuide
-      ? `- When asked to change code, follow this workflow exactly:\n\n${stagingGuide}`
-      : "- When asked to change code, call get_staging_guide FIRST and follow it exactly. Do NOT call record_diff_decision — the operator drives the merge in the UI.",
-    "- The task board is OPTIONAL context, not a per-turn step. Work is free-flowing by default: do NOT tie a turn to a task automatically. ONLY when the operator's request clearly concerns a board task should you call get_current_task for that task's context and record progress with update_agent_notes. For ad-hoc requests, do not load or write task notes, and never fold an unrelated request into the Active task.",
-    "- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.",
-  ].join("\n");
+  // Authored in C# (AgentGuidance.ComposeGovernanceCard) and fetched by resolveGovernanceCard();
+  // the sidecar keeps ONLY this minimal fallback, used when the host card could not be reached.
+  return (
+    governanceCard ??
+    "This session runs inside ClaudeWorkbench as a GOVERNED coding agent over a watched project — a desktop CHAT UI (not a terminal) that renders Markdown and images. When asked to change code, call get_staging_guide FIRST and follow it exactly; watched source is only written by the operator's Accept in Merge Review. Inspect with the claude-workbench MCP tools. Do NOT call record_diff_decision."
+  );
 }
 
 void resolveWorkspaceCwd();
@@ -190,7 +167,7 @@ const bus = new EventBus();
 // Start fetching the host-authored staging procedure now so the first turn does not pay the
 // wait. Deliberately AFTER `bus` exists: resolveStagingGuide reports success/failure onto it,
 // and kicking it off earlier would hit the temporal dead zone.
-void resolveStagingGuide();
+void resolveGovernanceCard();
 const gate = new OperatorGate();
 let activeTurn: string | null = null;
 // Merge-review outcomes (build + index results) posted by the host after an accept,
@@ -412,7 +389,7 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
   }
   await resolveWorkspaceCwd();
   // Must complete before buildGovernanceCard(): the card embeds the host-authored procedure.
-  await resolveStagingGuide();
+  await resolveGovernanceCard();
 
   const enabled = new Set(policy.enabledTools);
   activeAllowedNative = new Set<string>([

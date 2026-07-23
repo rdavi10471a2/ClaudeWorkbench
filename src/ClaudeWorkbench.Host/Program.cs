@@ -197,6 +197,12 @@ internal static class Program
         // source: the card used to restate these steps as TypeScript literals and drifted.
         app.MapGet("/guidance/staging", () => Results.Text(AgentGuidance.StagingGuide, "text/markdown"));
 
+        // The full governed role card, authored in C# (AgentGuidance.ComposeGovernanceCard) and
+        // fetched by the sidecar at startup — so the card's wording lives in one place, not
+        // restated in the sidecar's TypeScript.
+        app.MapGet("/guidance/card", (WorkspaceManager workspace) =>
+            Results.Text(AgentGuidance.ComposeGovernanceCard(workspace.WatchedSolutionPath ?? string.Empty), "text/markdown"));
+
         // --- test-only review HTTP surface -------------------------------------
         // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY
         // path that writes watched source. These endpoints expose the SAME
