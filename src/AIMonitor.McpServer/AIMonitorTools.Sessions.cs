@@ -19,7 +19,7 @@ public sealed partial class AIMonitorTools
     [McpServerTool]
     [Description("Get or create THE edit session for this run and declare the watched files it will touch. There is exactly ONE edit session per run: if one is already live, this returns it and MERGES the newly-planned files into its plan (it never mints a second session). Declare every file the change will touch — including files you will move code out of — before editing; call this again with any file you discover later to add it to the same session.")]
     public AIMonitorSessionState StartMonitorSession(
-        [Description("Planned watched files and their MSBuild owning projects. At least one file is required.")] IReadOnlyList<AIMonitorSessionPlannedFileInput> filesPlanned,
+        [Description("Planned watched files and their MSBuild owning projects. At least one file is required. Non-compiled files (docs/.md, .sql, .json), including at the solution root, belong to no project — omit owningProjectPath for them.")] IReadOnlyList<AIMonitorSessionPlannedFileInput> filesPlanned,
         [Description("Short purpose for this monitor session.")] string purpose = "monitor workflow")
     {
         runtimeState.Touch();
@@ -121,7 +121,7 @@ public sealed partial class AIMonitorTools
     [McpServerTool]
     [Description("Add ONE watched file to this run's edit-session plan, incrementally, without restating the whole list. Use this to declare files as you discover them — e.g. a file you must move code OUT of — and they join the single live session. Editing or staging a file that is not in the plan is refused, so add it here first. Defaults to this run's live session when sessionId is omitted.")]
     public AIMonitorSessionState AddMonitorSessionPlannedFile(
-        [Description("The watched file to add, with its MSBuild owning project when the index cannot prove a single owner.")] AIMonitorSessionPlannedFileInput file,
+        [Description("The watched file to add, with its MSBuild owning project when the index cannot prove a single owner. A non-compiled file (docs/.md, .sql, .json), including one at the solution root, has no owner — omit owningProjectPath for it.")] AIMonitorSessionPlannedFileInput file,
         [Description("Session handle. Defaults to this run's live edit session when omitted.")] string? sessionId = null)
     {
         runtimeState.Touch();

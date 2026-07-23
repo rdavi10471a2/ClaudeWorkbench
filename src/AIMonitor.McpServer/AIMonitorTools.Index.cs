@@ -16,6 +16,18 @@ namespace AIMonitor.McpServer;
 
 public sealed partial class AIMonitorTools
 {
+    // ~4 chars per token. Past this a raw-index payload overflows the model's inline read and the
+    // harness spills it to a file the agent cannot chunk back — so the tree/query tools return a
+    // compact overflow envelope instead, mirroring get_source_map's graceful-truncation contract.
+    private const int IndexToolCharBudget = 80_000;
+
+    // Serialize once to measure; return the payload when it fits, otherwise the caller's envelope.
+    private static object BudgetIndexPayload(object payload, Func<int, AIMonitorIndexOverflowEnvelope> overflow)
+    {
+        int approxChars = JsonSerializer.Serialize(payload, JsonOptions).Length;
+        return approxChars <= IndexToolCharBudget ? payload : overflow(approxChars);
+    }
+
     [McpServerTool]
     [Description("Rebuild the monitor-owned SQLite index for the watched solution.")]
     public async Task<AIMonitorRefreshIndexResult> RefreshSolutionIndex()
@@ -74,8 +86,8 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return the monitor-owned watched solution index tree as compact JSON: projects, namespaces, and files. NO output budget: at solution scale this can exceed the token limit and spill to a file that cannot be read back inline — prefer get_source_map (folder/navigation) for structural discovery; use this only on a known-small solution.")]
-    public AIMonitorSolutionIndexTree GetSolutionIndexTree()
+    [Description("Return the monitor-owned watched solution index tree as compact JSON: projects, namespaces, and files. Budgeted: when the tree is too large to read inline it returns a compact overflow envelope (counts + highest-symbol namespaces + ready-to-run narrower calls) instead of spilling to a file. For structural discovery prefer get_source_map (folder/navigation).")]
+    public object GetSolutionIndexTree()
     {
         runtimeState.Touch();
         IReadOnlyList<IndexedProjectRow> projects = queryService.ListProjects();
@@ -89,19 +101,50 @@ public sealed partial class AIMonitorTools
                 group.Count()))
             .ToArray();
 
-        return new AIMonitorSolutionIndexTree(projects, documents, namespaces);
+        AIMonitorSolutionIndexTree tree = new(projects, documents, namespaces);
+        return BudgetIndexPayload(tree, approxChars => new AIMonitorIndexOverflowEnvelope(
+            true,
+            $"The full index tree (~{approxChars} chars) exceeds the {IndexToolCharBudget}-char inline budget and would spill to a file you cannot read back. Narrow with the calls below, or use get_source_map for structural discovery.",
+            approxChars,
+            IndexToolCharBudget,
+            projects.Count,
+            documents.Count,
+            namespaces.Sum(ns => ns.SymbolCount),
+            namespaces
+                .OrderByDescending(ns => ns.SymbolCount)
+                .Take(10)
+                .Select(ns => $"{ns.Namespace} — {ns.SymbolCount} symbol(s)")
+                .ToArray(),
+            [
+                "get_source_map(scope: \"folder\", mode: \"navigation\", path: \"<folder>\")",
+                "query_solution_index(scope: \"namespace\", value: \"<namespace from suggestedNarrowing>\")",
+            ]));
     }
 
     [McpServerTool]
-    [Description("Query the monitor-owned watched solution index by scope. Scopes: solution, namespace, folder, file. NO output budget: a solution- or folder-scope query can exceed the token limit and spill to a file that cannot be read back inline — for structural discovery prefer get_source_map (folder/navigation, then file/selector), which is budgeted and truncates gracefully.")]
-    public SolutionIndexQueryResult QuerySolutionIndex(
+    [Description("Query the monitor-owned watched solution index by scope. Scopes: solution, namespace, folder, file. Budgeted: an over-large result is returned as a compact overflow envelope (counts + ready-to-run narrower calls) instead of spilling to a file that cannot be read back inline. For structural discovery prefer get_source_map (folder/navigation, then file/selector).")]
+    public object QuerySolutionIndex(
         [Description("Index scope: solution, namespace, folder, or file.")] string scope = "solution",
         [Description("Namespace text, folder path, or file path for scoped queries. Omit for solution scope.")] string? value = null,
         [Description("Maximum files to return.")] int maxFiles = 200,
         [Description("Maximum symbols to return.")] int maxSymbols = 500)
     {
         runtimeState.Touch();
-        return queryService.QueryIndex(scope, value, maxFiles, maxSymbols);
+        SolutionIndexQueryResult result = queryService.QueryIndex(scope, value, maxFiles, maxSymbols);
+        return BudgetIndexPayload(result, approxChars => new AIMonitorIndexOverflowEnvelope(
+            true,
+            $"This {scope} query (~{approxChars} chars) exceeds the {IndexToolCharBudget}-char inline budget and would spill to a file you cannot read back. Narrow the scope or lower maxSymbols, or use get_source_map.",
+            approxChars,
+            IndexToolCharBudget,
+            0,
+            result.Files.Count,
+            result.Symbols.Count,
+            [value is null ? $"scope={scope}" : $"scope={scope}, value={value}"],
+            [
+                "get_source_map(scope: \"folder\", mode: \"navigation\", path: \"<folder>\")",
+                "get_source_map(scope: \"file\", mode: \"selector\", path: \"<file>\")",
+                "query_solution_index(scope: \"file\", value: \"<file>\")",
+            ]));
     }
 
     [McpServerTool]
@@ -226,3 +269,17 @@ public sealed partial class AIMonitorTools
     }
 
 }
+
+// Returned by get_solution_index_tree / query_solution_index when the full payload would exceed the
+// inline token budget: the counts to orient on, the highest-symbol namespaces to drill into, and
+// exact narrower calls to run — the same "narrow, don't dump" contract get_source_map uses.
+public sealed record AIMonitorIndexOverflowEnvelope(
+    bool WasTruncated,
+    string Reason,
+    int ApproxChars,
+    int CharBudget,
+    int ProjectCount,
+    int FileCount,
+    int SymbolCount,
+    IReadOnlyList<string> SuggestedNarrowing,
+    IReadOnlyList<string> SuggestedNextCalls);

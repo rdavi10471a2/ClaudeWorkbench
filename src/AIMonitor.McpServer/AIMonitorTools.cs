@@ -423,12 +423,35 @@ public sealed partial class AIMonitorTools
         IndexedDocumentRow[] matches = queryService.ListDocuments(filePath: normalizedSourceFilePath)
             .Where(document => Path.GetFullPath(document.FilePath).Equals(normalizedSourceFilePath, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        if (matches.Length != 1)
+        if (matches.Length == 1)
         {
-            throw new InvalidOperationException("Planned file must include owningProjectPath when the existing index does not have exactly one owning project for: " + sourceFilePath);
+            return Path.GetFullPath(matches[0].ProjectPath);
         }
 
-        return Path.GetFullPath(matches[0].ProjectPath);
+        // A non-compiled watched file (docs/.md, .sql, .json, .txt, ...) — INCLUDING one at the
+        // solution root — belongs to no .csproj, so the index has no owner to prove. That is not an
+        // error: the overlay compile skips non-C# files and the post-accept refresh drops empty
+        // owners, so resolve it to "no owning project" instead of forcing the agent to invent a
+        // csproj. Only a genuinely ambiguous COMPILED file (0 or >1 owners) still needs an explicit
+        // owner from the caller.
+        if (matches.Length == 0 && !IsCompiledSource(normalizedSourceFilePath))
+        {
+            return string.Empty;
+        }
+
+        throw new InvalidOperationException("Planned file must include owningProjectPath when the existing index does not have exactly one owning project for: " + sourceFilePath);
+    }
+
+    // C# compilation inputs — the only files an owning project is meaningful for. Everything else
+    // (docs, data, config) is content the staging pipeline carries but never compiles, so it needs
+    // no project owner.
+    private static bool IsCompiledSource(string path)
+    {
+        string extension = Path.GetExtension(path);
+        return extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".razor", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".vb", StringComparison.OrdinalIgnoreCase);
     }
 
     private static AIMonitorFileHashInfo GetFileHashInfo(string path)
