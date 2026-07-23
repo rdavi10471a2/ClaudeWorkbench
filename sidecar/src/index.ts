@@ -87,7 +87,7 @@ async function resolveGovernanceCard(timeoutMs = 60_000): Promise<void> {
           bus.emit({
             type: "assistant_text",
             turnId: "startup",
-            text: `[governance] Role card loaded from the host (${text.split("\n").length} lines). Authored in C#; the sidecar only injects it.`,
+            text: `[governance] Role card loaded (${text.split("\n").length} lines).`,
           });
           return;
         }
