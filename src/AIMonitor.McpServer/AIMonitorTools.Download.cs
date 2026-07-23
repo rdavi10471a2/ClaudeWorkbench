@@ -2,6 +2,7 @@ using AIMonitor.Core;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Net.Http;
+using System.Net.Http.Headers;
 
 namespace AIMonitor.McpServer;
 
@@ -13,9 +14,14 @@ public sealed partial class AIMonitorTools
 
     private const long MaxDownloadBytes = 25L * 1024 * 1024;
 
+    private static readonly HashSet<string> DownloadImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".avif",
+    };
+
     [McpServerTool]
-    [Description("Download a file (e.g. an image) from an http/https URL into the workspace uploads folder so it can be shown in chat. The operator approves each download at the gate. Reference the returned savedPath in markdown to display it — for an image, ![alt](savedPath).")]
-    public async Task<AIMonitorDownloadResult> DownloadUrl(
+    [Description("Download a file (e.g. an image) from an http/https URL into the workspace uploads folder. Returns savedPath and a ready-to-embed `markdown` field. IMPORTANT: to actually SHOW the image to the user you MUST include the returned `markdown` value verbatim in your chat reply — that is the only way it appears in the chat. The operator approves each download at the gate.")]
+    public async Task<object> DownloadUrl(
         [Description("The http:// or https:// URL to download.")] string url,
         [Description("Optional file name to save as; a safe name is derived from the URL when omitted.")] string? fileName = null)
     {
@@ -25,44 +31,71 @@ public sealed partial class AIMonitorTools
             || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            throw new InvalidOperationException("A valid http:// or https:// URL is required.");
+            return DownloadError("A valid http:// or https:// URL is required.", url);
         }
 
-        // Land it in the workspace uploads folder, which the host already serves over /local-file
-        // (so the image auto-renders when referenced). Naming irony noted; folder can move later.
-        string uploadsDir = Path.Combine(MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(settings), "uploads");
-        Directory.CreateDirectory(uploadsDir);
-
-        using HttpResponseMessage response = await DownloadHttp.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-
-        if (response.Content.Headers.ContentLength is long declared && declared > MaxDownloadBytes)
+        try
         {
-            throw new InvalidOperationException($"Download exceeds the {MaxDownloadBytes / (1024 * 1024)} MB limit.");
+            // Land it in the workspace uploads folder, which the host already serves over
+            // /local-file (so the image renders when the markdown below is embedded).
+            string uploadsDir = Path.Combine(MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(settings), "uploads");
+            Directory.CreateDirectory(uploadsDir);
+
+            using HttpRequestMessage request = new(HttpMethod.Get, uri);
+            // Many image hosts 403 a request with no User-Agent.
+            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("ClaudeWorkbench", "1.0"));
+            using HttpResponseMessage response = await DownloadHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode)
+            {
+                return DownloadError($"The host {uri.Host} returned {(int)response.StatusCode} {response.ReasonPhrase}. Try a different direct file URL.", url);
+            }
+
+            if (response.Content.Headers.ContentLength is long declared && declared > MaxDownloadBytes)
+            {
+                return DownloadError($"Download exceeds the {MaxDownloadBytes / (1024 * 1024)} MB limit.", url);
+            }
+
+            string name = DownloadFileName(uri, fileName, response.Content.Headers.ContentType?.MediaType);
+            string target = UniqueDownloadPath(uploadsDir, name);
+
+            long written;
+            {
+                await using FileStream file = File.Create(target);
+                await using Stream source = await response.Content.ReadAsStreamAsync();
+                written = await CopyWithLimitAsync(source, file, MaxDownloadBytes);
+            }
+
+            if (written == 0)
+            {
+                TryDeleteFile(target);
+                return DownloadError("The download was empty (no bytes).", url);
+            }
+
+            // Forward slashes: a raw C:\ path gets mangled inside a markdown link, so the display
+            // path (and the ready markdown) use '/', which the renderer + /local-file both accept.
+            string displayPath = target.Replace('\\', '/');
+            string savedName = Path.GetFileName(target);
+            bool isImage = DownloadImageExtensions.Contains(Path.GetExtension(target));
+            string markdown = isImage
+                ? $"![{savedName}]({displayPath})"
+                : $"[{savedName}]({displayPath})";
+
+            return new AIMonitorDownloadResult(
+                displayPath,
+                savedName,
+                written,
+                response.Content.Headers.ContentType?.ToString(),
+                isImage,
+                markdown);
         }
-
-        string name = DownloadFileName(uri, fileName, response.Content.Headers.ContentType?.MediaType);
-        string target = UniqueDownloadPath(uploadsDir, name);
-
-        long written;
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
         {
-            await using FileStream file = File.Create(target);
-            await using Stream source = await response.Content.ReadAsStreamAsync();
-            written = await CopyWithLimitAsync(source, file, MaxDownloadBytes);
+            return DownloadError($"Download failed: {ex.Message}", url);
         }
-
-        if (written == 0)
-        {
-            TryDeleteFile(target);
-            throw new InvalidOperationException("The download was empty.");
-        }
-
-        return new AIMonitorDownloadResult(
-            target,
-            Path.GetFileName(target),
-            written,
-            response.Content.Headers.ContentType?.ToString());
     }
+
+    private static AIMonitorToolErrorResult DownloadError(string message, string url)
+        => new(true, message, "Provide a direct http(s) URL to a file (e.g. one ending in .jpg or .png).", url);
 
     // A safe file name: the requested name or the URL's last segment, sanitized; when it has no
     // extension, borrow one from the content type (image/png -> .png) so images render.
@@ -122,7 +155,7 @@ public sealed partial class AIMonitorTools
             total += read;
             if (total > maxBytes)
             {
-                throw new InvalidOperationException($"Download exceeds the {maxBytes / (1024 * 1024)} MB limit.");
+                throw new IOException($"Download exceeds the {maxBytes / (1024 * 1024)} MB limit.");
             }
 
             await destination.WriteAsync(buffer.AsMemory(0, read));
@@ -144,5 +177,12 @@ public sealed partial class AIMonitorTools
     }
 }
 
-// Result of download_url: where the file landed and what it is.
-public sealed record AIMonitorDownloadResult(string SavedPath, string FileName, long Bytes, string? ContentType);
+// Result of download_url: where the file landed, what it is, and ready-to-embed markdown that
+// (for an image) renders inline when the agent includes it verbatim in its reply.
+public sealed record AIMonitorDownloadResult(
+    string SavedPath,
+    string FileName,
+    long Bytes,
+    string? ContentType,
+    bool IsImage,
+    string Markdown);
