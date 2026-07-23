@@ -370,6 +370,33 @@
     color: transparent;
 }
 
+/* "Rebuild index after accept" toggle — sits just above the action buttons, right-aligned
+   to match. Muted + non-interactive on non-terminal files (see :has(input:disabled)). */
+.staged-review-reindex-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+    padding: 8px 12px 0;
+    font-size: 0.85rem;
+    color: #48586a;
+    cursor: pointer;
+    user-select: none;
+}
+
+.staged-review-reindex-toggle input {
+    cursor: pointer;
+}
+
+.staged-review-reindex-toggle:has(input:disabled) {
+    color: #9aa8b6;
+    cursor: default;
+}
+
+.staged-review-reindex-toggle:has(input:disabled) input {
+    cursor: default;
+}
+
 .staged-review-detail-actions {
     border-top: 1px solid #d7e1ea;
     display: flex;

@@ -74,7 +74,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         return Load(next.StagedRecordId);
     }
 
-    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation)
+    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true)
     {
         StagedEditRecord record = workspace.EditService.GetStagedRecord(stagedRecordId);
         EnsureValidatedAndLaunched(record);
@@ -274,6 +274,10 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                     deferIndexRefresh: true);
             }
 
+            // The terminal accept is the ONLY place the session's index refresh happens. When the
+            // operator unchecks "rebuild index" (honored only here, on the terminal file), defer it:
+            // the bytes are already on disk, but the index is left stale until the next reindex.
+            // deferIndexRefresh drives BOTH paths — the session refreshPlan and the single-file path.
             ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
                 workspace.Settings,
                 logger,
@@ -282,13 +286,16 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 "accepted",
                 record.StagedHash,
                 "ClaudeWorkbench",
-                deferIndexRefresh: false,
-                refreshPlan: refreshPlan);
+                deferIndexRefresh: !rebuildIndex,
+                refreshPlan: rebuildIndex ? refreshPlan : null);
 
+            string indexNote = rebuildIndex
+                ? "index rebuilt for the edit session"
+                : "index refresh DEFERRED — the change is on disk but the index is stale until the next reindex";
             string message = writtenPaths.Count == 1
-                ? $"Accepted. {record.RelativePath} written; index rebuilt for the edit session."
-                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); index rebuilt for the edit session.";
-            return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild));
+                ? $"Accepted. {record.RelativePath} written; {indexNote}."
+                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.";
+            return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex));
         }
         catch (Exception exception)
         {
@@ -334,7 +341,8 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
     private static string? BuildOutcomeSummary(
         ReviewDecisionWithIndexRefreshResult result,
         IReadOnlyCollection<string> writtenPaths,
-        PreMergeValidationResult? terminalBuild)
+        PreMergeValidationResult? terminalBuild,
+        bool rebuildIndex)
     {
         List<string> parts = new()
         {
@@ -351,7 +359,13 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 : "Build passed.");
         }
 
-        if (result.IndexRefresh is PostAcceptIndexRefreshResult index)
+        // The operator unchecked "rebuild index", so the refresh was intentionally deferred — the
+        // decision result carries a no-op IndexRefresh, but reporting it as "refreshed" would lie.
+        if (!rebuildIndex)
+        {
+            parts.Add("Index refresh DEFERRED (operator choice) — this file is stale in the index until the next reindex.");
+        }
+        else if (result.IndexRefresh is PostAcceptIndexRefreshResult index)
         {
             parts.Add(index.IsError
                 ? $"Index refresh failed: {index.Message}"

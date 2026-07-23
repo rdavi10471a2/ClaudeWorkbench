@@ -33,6 +33,11 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private bool autoApprove;
     private bool usageOpen;
     private bool wasWorking;
+    // True when the TRANSCRIPT changed and the per-render JS (scroll/highlight/mermaid) must run.
+    // Set in OnChanged (a streamed/new message); NOT set by composer keystrokes, so typing skips
+    // the transcript-wide JS that was yanking the view on every character. True initially so the
+    // first render processes existing content.
+    private bool transcriptDirty = true;
     private UsageSnapshot? usage;
     private readonly List<PendingAttachment> attachments = new();
     private bool uploading;
@@ -61,6 +66,9 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             }
 
             wasWorking = working;
+            // The session changed (message streamed/added/status) — the transcript may have grown,
+            // so the next render must re-run the transcript-wide JS.
+            transcriptDirty = true;
             StateHasChanged();
         });
     }
@@ -320,9 +328,18 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             await resizeModule.InvokeVoidAsync("attachComposerAutoScroll", chatInput);
         }
 
-        await resizeModule.InvokeVoidAsync("scrollElementToBottom", transcriptView);
-        await resizeModule.InvokeVoidAsync("highlightCodeBlocks", transcriptView);
-        await resizeModule.InvokeVoidAsync("renderMermaidBlocks", transcriptView);
+        // Transcript-wide JS runs ONLY when the transcript changed (streamed/new message via
+        // OnChanged), never on plain composer keystrokes. The composer textarea binds oninput, so
+        // it re-renders on every character; running scroll-to-bottom + highlight + mermaid per key
+        // yanked the view down and re-scanned the whole transcript each keystroke (the "screen
+        // resetting" while typing). Gate on transcriptDirty so typing is cheap and stays put.
+        if (firstRender || transcriptDirty)
+        {
+            transcriptDirty = false;
+            await resizeModule.InvokeVoidAsync("scrollElementToBottom", transcriptView);
+            await resizeModule.InvokeVoidAsync("highlightCodeBlocks", transcriptView);
+            await resizeModule.InvokeVoidAsync("renderMermaidBlocks", transcriptView);
+        }
     }
 
     public void Dispose()

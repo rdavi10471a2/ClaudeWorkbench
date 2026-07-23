@@ -38,6 +38,12 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // operator think the index rebuilt per file. It never did. See IsTerminalAccept.
     private bool building;
 
+    // "Rebuild index after accept" — honored only on the terminal accept (the one that reindexes).
+    // Checked by default preserves the current always-rebuild behavior; unchecking it on the last
+    // file defers the expensive index rebuild (files still write; the index goes stale until the
+    // next reindex). Disabled/ignored on non-terminal files, which never reindex anyway.
+    private bool rebuildIndexOnAccept = true;
+
     private bool UseSessionFlow => !string.IsNullOrWhiteSpace(SessionId);
     private string DialogTitle => UseSessionFlow ? "Merge Review" : "Merge Review Queue";
     private string DialogSubtitle => UseSessionFlow
@@ -122,7 +128,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
         {
             await InvokeAsync(StateHasChanged);
             string recordId = selectedRecordId;
-            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation));
+            // rebuildIndexOnAccept is honored only on the terminal accept; the workflow ignores it
+            // on non-terminal files (they never reindex). Pass the terminal-guarded value.
+            bool rebuildIndex = !IsTerminalAccept() || rebuildIndexOnAccept;
+            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex));
             errorMessage = result.Message;
             if (result.OverrideAvailable)
             {

@@ -275,6 +275,10 @@ public sealed class InstanceController : IDisposable
         startInfo.ArgumentList.Add($"--user-data-dir={profileDir}");
         startInfo.ArgumentList.Add("--no-first-run");
         startInfo.ArgumentList.Add("--no-default-browser-check");
+        // Without this, the --app window opens at a default that spills its bottom past the work
+        // area (behind the taskbar) — a "faux maximized" whose bottom edge is off-screen. Open it
+        // TRULY maximized so it respects the work area, exactly like clicking the maximize button.
+        startInfo.ArgumentList.Add("--start-maximized");
 
         Process process = new() { StartInfo = startInfo };
         process.Start();

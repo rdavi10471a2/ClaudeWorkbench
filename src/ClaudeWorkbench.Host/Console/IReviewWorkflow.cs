@@ -14,7 +14,11 @@ public interface IReviewWorkflow
 
     ReviewRecordModel LoadNextForSession(string sessionId);
 
-    ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation);
+    // rebuildIndex is honored ONLY on the terminal accept (the one that writes the session).
+    // Default true = current behavior. False defers the (expensive) post-accept index rebuild:
+    // the files still write, but the index goes stale until the next reindex — for tight
+    // single-file/markup loops where the cross-file graph isn't needed yet.
+    ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true);
 
     ReviewActionResult Reject(string stagedRecordId);
 }
