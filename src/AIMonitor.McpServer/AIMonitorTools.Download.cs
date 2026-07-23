@@ -20,7 +20,7 @@ public sealed partial class AIMonitorTools
     };
 
     [McpServerTool]
-    [Description("Download a file (e.g. an image) from an http/https URL into the workspace uploads folder. Returns savedPath and a ready-to-embed `markdown` field. IMPORTANT: to actually SHOW the image to the user you MUST include the returned `markdown` value verbatim in your chat reply — that is the only way it appears in the chat. The operator approves each download at the gate.")]
+    [Description("Download a file (e.g. an image) from an http/https URL into the workspace uploads folder. Returns `savedPath` and a ready-to-embed `markdown` field. TO SHOW THE IMAGE: copy the returned `markdown` value into your reply VERBATIM — do NOT retype the path, do NOT re-encode it (no %20), do NOT wrap it, do NOT 'fix' the spaces. The returned path is already clean and URL-safe; any hand-built ![alt](path) will break the inline render. Use `markdown` exactly as returned — that is the ONLY reliable way the image appears in the chat. The operator approves each download at the gate.")]
     public async Task<object> DownloadUrl(
         [Description("The http:// or https:// URL to download.")] string url,
         [Description("Optional file name to save as; a safe name is derived from the URL when omitted.")] string? fileName = null)
@@ -104,7 +104,7 @@ public sealed partial class AIMonitorTools
         string candidate = !string.IsNullOrWhiteSpace(requested)
             ? Path.GetFileName(requested)
             : Path.GetFileName(uri.LocalPath);
-        candidate = Sanitize(string.IsNullOrWhiteSpace(candidate) ? "download" : candidate);
+        candidate = SlugifyDownloadName(string.IsNullOrWhiteSpace(candidate) ? "download" : candidate);
 
         if (!Path.HasExtension(candidate) && !string.IsNullOrWhiteSpace(mediaType))
         {
@@ -125,6 +125,33 @@ public sealed partial class AIMonitorTools
         return candidate;
     }
 
+    // Downloads land in a markdown ![](path) link, so the file name must be URL-safe: spaces,
+    // parens, brackets and other link-breaking punctuation get collapsed to '-'. (Sanitize only
+    // removes filesystem-invalid chars, which lets spaces/parens through — exactly what mangles
+    // the embedded link. This is why "conan-best-in-life (2).gif" would not render.)
+    private static string SlugifyDownloadName(string value)
+    {
+        string cleaned = Sanitize(value);
+        string stem = Path.GetFileNameWithoutExtension(cleaned);
+        string extension = Path.GetExtension(cleaned);
+
+        char[] slug = stem.Select(c =>
+            char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' ? c : '-').ToArray();
+        string joined = new string(slug);
+        while (joined.Contains("--"))
+        {
+            joined = joined.Replace("--", "-");
+        }
+
+        joined = joined.Trim('-', '.');
+        if (string.IsNullOrWhiteSpace(joined))
+        {
+            joined = "download";
+        }
+
+        return joined + extension;
+    }
+
     private static string UniqueDownloadPath(string directory, string fileName)
     {
         string candidate = Path.Combine(directory, fileName);
@@ -137,7 +164,8 @@ public sealed partial class AIMonitorTools
         string extension = Path.GetExtension(fileName);
         for (int index = 2; ; index++)
         {
-            string next = Path.Combine(directory, $"{stem} ({index}){extension}");
+            // '-2' not ' (2)': the name goes into a markdown link, so keep it space/paren-free.
+            string next = Path.Combine(directory, $"{stem}-{index}{extension}");
             if (!File.Exists(next))
             {
                 return next;
