@@ -49,6 +49,16 @@ public static class LocalFileEndpoints
                 return Results.NotFound();
             }
 
+            // A file authorized only by the uploads prefix must still RESOLVE inside uploads: a
+            // symlink/junction planted in uploads/ would otherwise smuggle an out-of-tree file
+            // past the prefix check (Path.GetFullPath normalizes '..' but does not follow links).
+            // Files authorized via AgentFileAccess are intentionally allowed to live outside
+            // uploads, so they are exempt from this recheck.
+            if (underUploads && !IsUnderRoot(ResolveRealPath(full), root!))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
             if (!ContentTypes.TryGetContentType(full, out string? contentType))
             {
                 contentType = "application/octet-stream";
@@ -74,5 +84,33 @@ public static class LocalFileEndpoints
 
         return string.Equals(fullPath, normalizedRoot, StringComparison.OrdinalIgnoreCase)
             || fullPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Resolve symlinks/junctions to the real on-disk target so a link inside uploads/ cannot point
+    // out of the tree. Covers the file itself being a link and its immediate parent being a junction
+    // (the practical layouts: uploads/link.png and uploads/<junction>/file). Falls back to the
+    // original path when nothing is a reparse point or resolution fails.
+    private static string ResolveRealPath(string fullPath)
+    {
+        try
+        {
+            if (File.ResolveLinkTarget(fullPath, returnFinalTarget: true) is FileSystemInfo fileTarget)
+            {
+                return Path.GetFullPath(fileTarget.FullName);
+            }
+
+            string? directory = Path.GetDirectoryName(fullPath);
+            if (directory is not null
+                && Directory.ResolveLinkTarget(directory, returnFinalTarget: true) is FileSystemInfo directoryTarget)
+            {
+                return Path.GetFullPath(Path.Combine(directoryTarget.FullName, Path.GetFileName(fullPath)));
+            }
+
+            return fullPath;
+        }
+        catch (Exception)
+        {
+            return fullPath;
+        }
     }
 }

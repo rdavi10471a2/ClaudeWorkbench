@@ -1,8 +1,10 @@
 using AIMonitor.Core;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 
 namespace AIMonitor.McpServer;
 
@@ -10,7 +12,17 @@ public sealed partial class AIMonitorTools
 {
     // One shared client for the occasional gated download; the timeout keeps a hung host from
     // wedging the tool call. Downloads run in the Host process (MCP is mapped there).
-    private static readonly HttpClient DownloadHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
+    //
+    // AllowAutoRedirect is OFF on purpose: we follow redirects by hand (SendFollowingSafeRedirectsAsync)
+    // so EVERY hop is re-checked against the SSRF guard. A default HttpClient would silently chase a
+    // 302 from an operator-approved URL into a loopback/link-local/metadata address the operator never
+    // saw at the gate.
+    private static readonly HttpClient DownloadHttp = new(new SocketsHttpHandler { AllowAutoRedirect = false })
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+    };
+
+    private const int MaxDownloadRedirects = 5;
 
     private const long MaxDownloadBytes = 25L * 1024 * 1024;
 
@@ -41,10 +53,7 @@ public sealed partial class AIMonitorTools
             string uploadsDir = Path.Combine(MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(settings), "uploads");
             Directory.CreateDirectory(uploadsDir);
 
-            using HttpRequestMessage request = new(HttpMethod.Get, uri);
-            // Many image hosts 403 a request with no User-Agent.
-            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("ClaudeWorkbench", "1.0"));
-            using HttpResponseMessage response = await DownloadHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            using HttpResponseMessage response = await SendFollowingSafeRedirectsAsync(uri);
             if (!response.IsSuccessStatusCode)
             {
                 return DownloadError($"The host {uri.Host} returned {(int)response.StatusCode} {response.ReasonPhrase}. Try a different direct file URL.", url);
@@ -92,6 +101,114 @@ public sealed partial class AIMonitorTools
         {
             return DownloadError($"Download failed: {ex.Message}", url);
         }
+    }
+
+    // Fetch the URL, following redirects manually so the SSRF guard runs on the initial target AND
+    // every redirect hop. Blocks (loopback/private target, too many hops, non-http redirect) throw
+    // HttpRequestException, which DownloadUrl's catch turns into a clean tool error.
+    private static async Task<HttpResponseMessage> SendFollowingSafeRedirectsAsync(Uri uri)
+    {
+        Uri current = uri;
+        for (int hop = 0; ; hop++)
+        {
+            await GuardAgainstSsrfAsync(current);
+
+            using HttpRequestMessage request = new(HttpMethod.Get, current);
+            // Many image hosts 403 a request with no User-Agent.
+            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("ClaudeWorkbench", "1.0"));
+            HttpResponseMessage response = await DownloadHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+            if (!IsRedirect(response.StatusCode) || response.Headers.Location is null)
+            {
+                return response;
+            }
+
+            Uri next = new(current, response.Headers.Location); // resolve relative Location against current
+            response.Dispose();
+
+            if (next.Scheme != Uri.UriSchemeHttp && next.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new HttpRequestException($"Refusing to follow a redirect to a non-http(s) target ({next.Scheme}).");
+            }
+
+            if (hop >= MaxDownloadRedirects)
+            {
+                throw new HttpRequestException($"Too many redirects (more than {MaxDownloadRedirects}).");
+            }
+
+            current = next;
+        }
+    }
+
+    private static bool IsRedirect(HttpStatusCode status) => status is HttpStatusCode.MovedPermanently
+        or HttpStatusCode.Found
+        or HttpStatusCode.SeeOther
+        or HttpStatusCode.TemporaryRedirect
+        or HttpStatusCode.PermanentRedirect;
+
+    // SSRF guard: resolve the host and refuse if ANY resolved address is loopback, link-local,
+    // private, or otherwise internal. Rejecting when any address is blocked (not just the first)
+    // closes the DNS-rebinding gap where a host advertises one public and one internal address.
+    private static async Task GuardAgainstSsrfAsync(Uri uri)
+    {
+        IPAddress[] addresses;
+        if (IPAddress.TryParse(uri.Host, out IPAddress? literal))
+        {
+            addresses = [literal];
+        }
+        else
+        {
+            try
+            {
+                addresses = await Dns.GetHostAddressesAsync(uri.Host);
+            }
+            catch (Exception ex)
+            {
+                throw new HttpRequestException($"Could not resolve host {uri.Host}: {ex.Message}");
+            }
+        }
+
+        if (addresses.Length == 0 || addresses.Any(IsBlockedAddress))
+        {
+            throw new HttpRequestException(
+                $"Refusing to fetch {uri.Host}: it resolves to a loopback, link-local, or private address (SSRF guard).");
+        }
+    }
+
+    private static bool IsBlockedAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address))
+        {
+            return true;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            byte[] b = address.GetAddressBytes();
+            return b[0] == 0                                        // 0.0.0.0/8   this-network
+                || b[0] == 10                                       // 10.0.0.0/8  private
+                || b[0] == 127                                      // 127.0.0.0/8 loopback
+                || (b[0] == 169 && b[1] == 254)                     // 169.254/16  link-local (incl. cloud metadata)
+                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)        // 172.16/12   private
+                || (b[0] == 192 && b[1] == 168)                     // 192.168/16  private
+                || (b[0] == 100 && b[1] >= 64 && b[1] <= 127);      // 100.64/10   CGNAT
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            return address.IsIPv6LinkLocal
+                || address.IsIPv6UniqueLocal
+                || address.IsIPv6Multicast
+                || address.Equals(IPAddress.IPv6Any)
+                || address.Equals(IPAddress.IPv6Loopback);
+        }
+
+        return true; // unknown family -> refuse
     }
 
     private static AIMonitorToolErrorResult DownloadError(string message, string url)
