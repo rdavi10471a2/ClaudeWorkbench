@@ -21,7 +21,14 @@
 // handler per tab switch). Shrinking the window therefore pulls the divider back in rather than
 // shoving the trailing pane off-screen.
 function attachColumnSplitter(layout, leading, trailing, splitter, minLeading, minTrailing) {
-    if (!layout || !leading || !trailing || !splitter) {
+    // Every element must be a REAL DOM element, not just truthy. Radzen renders every tab's content
+    // (TabRenderMode.Client), so a hidden tab's OnAfterRender can fire with a ref that marshals to a
+    // truthy-but-not-Element value while the panel isn't realized yet — `splitter.dataset` is then
+    // undefined and the old `!splitter` check let it through, throwing into the shared circuit and
+    // taking the whole app down. instanceof Element rejects those; the splitter attaches on a later,
+    // real render instead.
+    if (!(layout instanceof Element) || !(leading instanceof Element)
+        || !(trailing instanceof Element) || !(splitter instanceof Element)) {
         return;
     }
 

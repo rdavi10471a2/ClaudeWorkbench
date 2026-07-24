@@ -77,11 +77,22 @@ public partial class GitTab : IAsyncDisposable
             return;
         }
 
-        resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+        // Radzen renders every tab in the background (TabRenderMode.Client), so this fires even
+        // when the Git tab is NOT visible. A JS interop failure here must NEVER throw into the
+        // shared circuit — an unhandled OnAfterRender exception tears the circuit down and, with
+        // CWB_EXIT_WITH_BROWSER, shuts the whole app (the crash-on-a-tab-you-are-not-using bug).
+        try
+        {
+            resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
 
-        // The splitter element itself carries the "already attached" guard (dataset flag),
-        // so collapsing and restoring re-attaches only when the element is genuinely new.
-        await resizeModule.InvokeVoidAsync("attachGitSplitter", gitBody, gitLeft, gitRight, gitSplitter);
+            // The splitter element itself carries the "already attached" guard (dataset flag),
+            // so collapsing and restoring re-attaches only when the element is genuinely new.
+            await resizeModule.InvokeVoidAsync("attachGitSplitter", gitBody, gitLeft, gitRight, gitSplitter);
+        }
+        catch (Exception)
+        {
+            // Non-fatal: the splitter just won't be draggable this render; it re-attaches next render.
+        }
     }
 
     private void ToggleLeft() => leftCollapsed = !leftCollapsed;
