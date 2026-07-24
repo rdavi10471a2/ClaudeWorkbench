@@ -415,31 +415,101 @@ internal sealed class CandidateEditValidator
         }
     }
 
+    // WinForms/WPF (Microsoft.WindowsDesktop.App) assemblies for a watched WinForms/WPF project. A
+    // framework-dependent desktop app does NOT copy these into its bin (they are shared-framework),
+    // and the host providing the overlay's TPA is a web app with no WinForms — so without this the
+    // overlay can't resolve types like System.Windows.Forms.Form (CS0246).
+    //
+    // The version MUST match the base runtime the overlay actually compiles against (the host's, via
+    // TPA): mixing e.g. WinForms 9 with a .NET 10 base leaves the WinForms type graph unresolvable.
+    // So derive the shared-framework root AND the base version from the TPA's Microsoft.NETCore.App
+    // entry (also robust to a non-Program-Files dotnet install), and pick the matching WindowsDesktop
+    // version — exact, else same major, else highest by real Version (NOT string: "10.0.8" must beat
+    // "9.0.8").
     private static IEnumerable<string> EnumerateWindowsDesktopReferences()
     {
-        string desktopRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            "dotnet",
-            "shared",
-            "Microsoft.WindowsDesktop.App");
+        string? sharedRoot = null;
+        string? baseVersion = null;
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string is { Length: > 0 } tpa)
+        {
+            string marker = $"{Path.DirectorySeparatorChar}Microsoft.NETCore.App{Path.DirectorySeparatorChar}";
+            foreach (string path in tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                int index = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                if (index < 0)
+                {
+                    continue;
+                }
+
+                sharedRoot = path[..index];
+                baseVersion = path[(index + marker.Length)..].Split(Path.DirectorySeparatorChar)[0];
+                break;
+            }
+        }
+
+        sharedRoot ??= Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared");
+        string desktopRoot = Path.Combine(sharedRoot, "Microsoft.WindowsDesktop.App");
         if (!Directory.Exists(desktopRoot))
         {
             yield break;
         }
 
-        DirectoryInfo? latest = Directory.EnumerateDirectories(desktopRoot)
-            .Select(path => new DirectoryInfo(path))
-            .OrderByDescending(directory => directory.Name, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-        if (latest is null)
+        DirectoryInfo? chosen = ChooseWindowsDesktopVersion(desktopRoot, baseVersion);
+        if (chosen is null)
         {
             yield break;
         }
 
-        foreach (string dllPath in Directory.EnumerateFiles(latest.FullName, "*.dll"))
+        foreach (string dllPath in Directory.EnumerateFiles(chosen.FullName, "*.dll"))
         {
             yield return dllPath;
         }
+    }
+
+    private static DirectoryInfo? ChooseWindowsDesktopVersion(string desktopRoot, string? baseVersion)
+    {
+        List<(DirectoryInfo Dir, Version Version)> versions = [];
+        foreach (string path in Directory.EnumerateDirectories(desktopRoot))
+        {
+            DirectoryInfo dir = new(path);
+            if (Version.TryParse(dir.Name, out Version? parsed))
+            {
+                versions.Add((dir, parsed));
+            }
+        }
+
+        if (versions.Count == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(baseVersion))
+        {
+            // Exact match to the base runtime version is the ideal (WinForms and base fully aligned).
+            (DirectoryInfo Dir, Version Version) exact = versions
+                .FirstOrDefault(candidate => string.Equals(candidate.Dir.Name, baseVersion, StringComparison.OrdinalIgnoreCase));
+            if (exact.Dir is not null)
+            {
+                return exact.Dir;
+            }
+
+            // Otherwise the highest sharing the base's MAJOR (same TFM generation).
+            if (Version.TryParse(baseVersion, out Version? parsedBase))
+            {
+                (DirectoryInfo Dir, Version Version) sameMajor = versions
+                    .Where(candidate => candidate.Version.Major == parsedBase.Major)
+                    .OrderByDescending(candidate => candidate.Version)
+                    .FirstOrDefault();
+                if (sameMajor.Dir is not null)
+                {
+                    return sameMajor.Dir;
+                }
+            }
+        }
+
+        // Last resort: highest by real Version (fixes the old ordinal-string bug that ranked 9.0.8 > 10.0.8).
+        return versions.OrderByDescending(candidate => candidate.Version).First().Dir;
     }
 
     private static void ConsiderReference(Dictionary<string, ReferenceCandidate> byName, string path, bool fromWatched)
