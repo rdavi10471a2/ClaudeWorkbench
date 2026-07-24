@@ -7,6 +7,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+    <!-- Pin the native SQLite bundle to the patched 2.1.12: Microsoft.Data.Sqlite 10.0.8
+         drags in SQLitePCLRaw.lib.e_sqlite3 2.1.11 transitively, which carries the
+         high-severity NU1903 advisory (GHSA-2m69-gcr7-jv3q). A direct top-level reference
+         wins over the transitive one and flows to the projects that reference this one. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
   <PropertyGroup>

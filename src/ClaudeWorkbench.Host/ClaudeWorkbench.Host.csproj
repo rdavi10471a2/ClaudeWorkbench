@@ -18,6 +18,9 @@
     <PackageReference Include="DiffPlex" Version="1.9.0" />
     <PackageReference Include="Markdig" Version="0.41.3" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+    <!-- Patched native SQLite bundle: overrides the transitive lib.e_sqlite3 2.1.11
+         (NU1903 / GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.8 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
   <ItemGroup>
