@@ -478,7 +478,11 @@ function handleMessage(message: SDKMessage): void {
   // Every SDK message carries the session id; capture it so the thread can resume.
   const sessionId = (message as { session_id?: string }).session_id;
   if (typeof sessionId === "string" && sessionId.length > 0) {
-    currentSessionId = sessionId;
+    // Emit only when it first appears or changes, so the host can persist/thread it.
+    if (sessionId !== currentSessionId) {
+      currentSessionId = sessionId;
+      bus.emit({ type: "session_started", turnId: activeTurn ?? "", sessionId });
+    }
   }
 
   const turnId = activeTurn ?? "";
@@ -772,6 +776,33 @@ app.post("/new-thread", (_req, res) => {
   bus.clear();
   bus.emit({ type: "thread_reset", turnId: "thread" });
   res.json({ ok: true });
+});
+
+// Reopen a stored thread: clear the live thread state (like /new-thread) but PRIME
+// currentSessionId so the next turn resumes that conversation instead of starting fresh.
+// The transcript itself is restored by the SDK from ~/.claude on the next turn's resume.
+app.post("/resume", (req, res) => {
+  if (activeTurn) {
+    res.status(409).json({ error: "Cannot resume a thread while a turn is active." });
+    return;
+  }
+  const body = req.body as { sessionId?: unknown } | undefined;
+  const sessionId = typeof body?.sessionId === "string" ? body.sessionId : "";
+  if (!sessionId) {
+    res.status(400).json({ error: "sessionId is required." });
+    return;
+  }
+  activeInput?.end();
+  activeQuery = null;
+  activeInput = null;
+  pendingReviewOutcome = "";
+  elicitations.clear();
+  sessionAllowed.clear();
+  bus.clear();
+  currentSessionId = sessionId;
+  bus.emit({ type: "thread_reset", turnId: "thread" });
+  bus.emit({ type: "session_started", turnId: "", sessionId });
+  res.json({ ok: true, sessionId });
 });
 
 app.listen(SIDECAR_PORT, "127.0.0.1", () => {

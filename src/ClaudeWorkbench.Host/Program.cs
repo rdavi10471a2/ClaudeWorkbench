@@ -79,6 +79,11 @@ internal static class Program
         builder.Services.AddSingleton<AgentFileAccess>();
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
+        // Conversation-thread persistence (own per-workspace threads.sqlite; NOT the index DB).
+        builder.Services.AddSingleton<Threads.ClaudeTranscriptStore>();
+        builder.Services.AddSingleton<Threads.IThreadWorkspace, Threads.WorkspaceThreadPaths>();
+        builder.Services.AddSingleton<ICurrentSession>(provider => provider.GetRequiredService<SidecarEventStream>());
+        builder.Services.AddSingleton<Threads.ThreadService>();
         builder.Services.AddSingleton<AuthStatusProbe>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<AuthStatusProbe>());
         builder.Services.AddScoped<SidecarOperatorConsole>();
@@ -114,6 +119,28 @@ internal static class Program
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
         WebApplication app = builder.Build();
+
+        // Autosave threads: when the sidecar reports a live/resumed SDK session, persist or touch
+        // its thread. Wrapped so a persistence hiccup can never break the event stream.
+        SidecarEventStream sessionStream = app.Services.GetRequiredService<SidecarEventStream>();
+        Threads.ThreadService threadService = app.Services.GetRequiredService<Threads.ThreadService>();
+        IMonitorLogger threadLogger = app.Services.GetRequiredService<IMonitorLogger>();
+        sessionStream.SessionStarted += sessionId =>
+        {
+            try
+            {
+                threadService.EnsureThreadForSession(sessionId);
+            }
+            catch (Exception exception)
+            {
+                threadLogger.Write(
+                    MonitorLogLevel.Warning,
+                    "ClaudeWorkbench.Host",
+                    "thread.autosave.failed",
+                    "Failed to persist thread for session.",
+                    new Dictionary<string, string> { ["sessionId"] = sessionId, ["error"] = exception.Message });
+            }
+        };
 
         // Ensure the already-configured workspace's runtime skeleton exists at startup.
         // Idempotent; the skeleton build is synchronous and cheap.

@@ -10,6 +10,14 @@ export type GateDecision = "allow" | "deny";
 export type SidecarEvent =
   | { type: "turn_started"; turnId: string }
   | { type: "thread_reset"; turnId: string }
+  | {
+      // The SDK assigned (or resumed) a conversation session id. Emitted when the id
+      // first appears or changes, so the host can persist/thread it. Purely additive:
+      // consumers that don't care ignore it.
+      type: "session_started";
+      turnId: string;
+      sessionId: string;
+    }
   | { type: "user_prompt"; turnId: string; text: string }
   | { type: "assistant_text"; turnId: string; text: string }
   | {

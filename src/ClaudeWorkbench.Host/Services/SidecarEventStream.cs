@@ -7,7 +7,7 @@ namespace ClaudeWorkbench.Host.Services;
 // Long-lived background reader of the sidecar's SSE /events stream. Maintains a
 // bounded event history, the pending-gate set, connection state, and the active
 // turn, and raises Changed so UI components can re-render. Reconnects on drop.
-public sealed class SidecarEventStream : BackgroundService
+public sealed class SidecarEventStream : BackgroundService, ICurrentSession
 {
     private readonly IHttpClientFactory httpClientFactory;
     private readonly SidecarOptions options;
@@ -28,9 +28,17 @@ public sealed class SidecarEventStream : BackgroundService
 
     public event Action? Changed;
 
+    // Raised when the sidecar reports a new/resumed SDK session id, so the thread layer
+    // can persist or touch the corresponding thread. Carries the session id.
+    public event Action<string>? SessionStarted;
+
     public bool Connected { get; private set; }
 
     public string? ActiveTurn { get; private set; }
+
+    // The live SDK conversation session id (null between threads). Threads use it to
+    // compute which stored thread is Active.
+    public string? CurrentSessionId { get; private set; }
 
     public IReadOnlyList<SidecarEvent> SnapshotEvents()
     {
@@ -225,6 +233,7 @@ public sealed class SidecarEventStream : BackgroundService
 
     private void Apply(SidecarEvent evt)
     {
+        string? sessionToAnnounce = null;
         lock (sync)
         {
             events.AddLast(evt);
@@ -241,6 +250,11 @@ public sealed class SidecarEventStream : BackgroundService
                     elicitations.Clear();
                     fileAccess.Clear();
                     ActiveTurn = null;
+                    CurrentSessionId = null;
+                    break;
+                case "session_started" when !string.IsNullOrWhiteSpace(evt.SessionId):
+                    CurrentSessionId = evt.SessionId;
+                    sessionToAnnounce = evt.SessionId;
                     break;
                 case "elicitation_request" when evt.ElicitationId is not null && evt.Questions is JsonElement questions:
                     elicitations[evt.ElicitationId] = questions;
@@ -269,6 +283,13 @@ public sealed class SidecarEventStream : BackgroundService
                 default:
                     break;
             }
+        }
+
+        // Fire outside the lock: the thread layer does DB work on this callback and
+        // must never run while the event lock is held.
+        if (sessionToAnnounce is not null)
+        {
+            SessionStarted?.Invoke(sessionToAnnounce);
         }
     }
 

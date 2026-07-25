@@ -57,6 +57,20 @@ public sealed class SidecarClient
         return response.IsSuccessStatusCode;
     }
 
+    // Reopen a stored thread: the sidecar clears the live thread state and PRIMES the
+    // given session id so the next turn resumes that conversation. Returns false if a
+    // turn is active (409) or the sidecar rejects it.
+    public async Task<bool> ResumeAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return false;
+        }
+
+        HttpResponseMessage response = await http.PostAsJsonAsync("/resume", new { sessionId }, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
     // Echo a merge-review outcome (build + index result) to the agent: the sidecar
     // surfaces it in the transcript and prepends it to the agent's next prompt.
     // Returns false when the agent was NOT told (sidecar down, or it rejected the

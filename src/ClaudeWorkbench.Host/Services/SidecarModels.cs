@@ -23,6 +23,14 @@ public sealed record SidecarEvent
     public long? Ts { get; init; }
     public string? ElicitationId { get; init; }
     public JsonElement? Questions { get; init; }
+    public string? SessionId { get; init; }
+}
+
+// The live SDK conversation session id, surfaced from the sidecar event stream.
+// Threads use it to compute which stored thread (if any) is currently Active.
+public interface ICurrentSession
+{
+    string? CurrentSessionId { get; }
 }
 
 public sealed record GateInfo(string GateId, string Tool, string? FilePath, JsonElement? Input);
