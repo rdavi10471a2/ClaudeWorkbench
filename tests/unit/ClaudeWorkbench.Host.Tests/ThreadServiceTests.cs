@@ -126,6 +126,31 @@ public sealed class ThreadServiceTests : IDisposable
     }
 
     [Fact]
+    public void Prepare_resume_restores_the_primary_from_the_mirror_and_returns_the_session()
+    {
+        (ThreadService service, _, string projectsRoot, string sessionsDir) = NewService();
+        ThreadRecord thread = service.EnsureThreadForSession("sess-1"); // Cwd = C:\watched\Solution
+        Directory.CreateDirectory(sessionsDir);
+        File.WriteAllText(Path.Combine(sessionsDir, "sess-1.jsonl"), "SAVED"); // our mirror, no ~/.claude primary
+
+        string? sid = service.PrepareResume(thread.ThreadId);
+
+        Assert.Equal("sess-1", sid);
+        // Restored under the encoded cwd (C:\watched\Solution -> C--watched-Solution).
+        string restored = Path.Combine(projectsRoot, "C--watched-Solution", "sess-1.jsonl");
+        Assert.True(File.Exists(restored));
+        Assert.Equal("SAVED", File.ReadAllText(restored));
+    }
+
+    [Fact]
+    public void Prepare_resume_returns_null_for_a_stub()
+    {
+        (ThreadService service, _, _, _) = NewService();
+        ThreadRecord stub = service.CreateStub("stub", null);
+        Assert.Null(service.PrepareResume(stub.ThreadId));
+    }
+
+    [Fact]
     public void Delete_thread_removes_the_row_the_primary_and_the_mirror()
     {
         (ThreadService service, _, string projectsRoot, string sessionsDir) = NewService();

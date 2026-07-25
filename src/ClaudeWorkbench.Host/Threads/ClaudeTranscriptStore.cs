@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace ClaudeWorkbench.Host.Threads;
 
 // Locates and hard-deletes Claude Agent SDK transcript files, which live OUTSIDE this app at
@@ -75,6 +77,53 @@ public sealed class ClaudeTranscriptStore
         {
             return null;
         }
+    }
+
+    // Restore the SDK's primary transcript FROM the app-owned mirror so resume reads exactly what we
+    // saved. The runtime mirror is authoritative: Claude may sweep (retention) or compact its own
+    // ~/.claude copy, so before a resume we overwrite the primary with ours. If a primary already
+    // exists we overwrite it in place (encoding-free); otherwise we recreate it under the SDK's
+    // per-cwd project dir. Best-effort: returns true if the primary now reflects the mirror.
+    public bool RestoreFromMirror(string sessionId, string cwd, string mirrorPath)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(mirrorPath) || !File.Exists(mirrorPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            // Prefer the exact existing path (no cwd-encoding guess); fall back to the computed
+            // project dir only when the SDK's copy is entirely gone.
+            string destination = Locate(sessionId).FirstOrDefault()
+                ?? Path.Combine(projectsRoot, EncodeCwd(cwd), sessionId + ".jsonl");
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(mirrorPath, destination, overwrite: true);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    // Reproduce the claude CLI's per-cwd project-folder name: the absolute cwd with path separators
+    // and drive punctuation folded to '-' (e.g. C:\App\Sln -> C--App-Sln). Only used when the SDK's
+    // own copy is gone, so the folder must be recreated from scratch.
+    internal static string EncodeCwd(string cwd)
+    {
+        string full = Path.GetFullPath(cwd);
+        StringBuilder builder = new(full.Length);
+        foreach (char character in full)
+        {
+            builder.Append(character is ':' or '\\' or '/' or '.' ? '-' : character);
+        }
+
+        return builder.ToString();
     }
 
     // Hard-delete the transcript(s) for a session to reclaim disk. Best-effort: returns how many

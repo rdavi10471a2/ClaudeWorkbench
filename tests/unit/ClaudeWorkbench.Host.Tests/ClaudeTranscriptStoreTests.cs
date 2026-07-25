@@ -77,6 +77,49 @@ public sealed class ClaudeTranscriptStoreTests : IDisposable
     }
 
     [Fact]
+    public void Restore_from_mirror_overwrites_the_existing_primary_in_place()
+    {
+        string root = NewProjectsRoot();
+        string primary = WriteTranscript(root, "some-encoded-cwd", "sess-1", "OLD");
+        ClaudeTranscriptStore store = new(root);
+        string mirror = NewMirrorFile("sess-1", "NEW");
+
+        Assert.True(store.RestoreFromMirror("sess-1", @"C:\whatever", mirror));
+        Assert.Equal("NEW", File.ReadAllText(primary)); // same path Locate found — overwritten in place
+    }
+
+    [Fact]
+    public void Restore_from_mirror_recreates_the_primary_under_the_encoded_cwd_when_gone()
+    {
+        string root = NewProjectsRoot(); // no primary at all
+        ClaudeTranscriptStore store = new(root);
+        string mirror = NewMirrorFile("sess-1", "SAVED");
+
+        Assert.True(store.RestoreFromMirror("sess-1", @"C:\App\Sln", mirror));
+        string expected = Path.Combine(root, "C--App-Sln", "sess-1.jsonl");
+        Assert.True(File.Exists(expected));
+        Assert.Equal("SAVED", File.ReadAllText(expected));
+    }
+
+    [Fact]
+    public void Restore_from_mirror_returns_false_when_there_is_no_mirror()
+    {
+        string root = NewProjectsRoot();
+        ClaudeTranscriptStore store = new(root);
+        Assert.False(store.RestoreFromMirror("sess-1", @"C:\App", Path.Combine(Path.GetTempPath(), "nope-" + Guid.NewGuid().ToString("N") + ".jsonl")));
+    }
+
+    private string NewMirrorFile(string sessionId, string content)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "cwb-mirrorsrc-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        tempDirs.Add(dir);
+        string path = Path.Combine(dir, sessionId + ".jsonl");
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    [Fact]
     public void Unknown_session_locates_nothing_and_deletes_nothing()
     {
         string root = NewProjectsRoot();

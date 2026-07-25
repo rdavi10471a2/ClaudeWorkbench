@@ -114,7 +114,10 @@ public partial class ThreadsTab : IDisposable
         }
 
         busy = true;
-        bool ok = await Sidecar.ResumeAsync(thread.SessionId!);
+        // Restore the SDK's primary transcript from our authoritative runtime mirror FIRST, then
+        // tell the sidecar to resume that session — so it continues from exactly what we saved.
+        string? sessionId = Threads.PrepareResume(thread.ThreadId);
+        bool ok = sessionId is not null && await Sidecar.ResumeAsync(sessionId);
         busy = false;
         if (ok)
         {

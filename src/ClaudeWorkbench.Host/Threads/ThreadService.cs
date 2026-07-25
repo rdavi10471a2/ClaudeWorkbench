@@ -134,6 +134,23 @@ public sealed class ThreadService
         return string.IsNullOrWhiteSpace(thread?.SessionId) ? null : thread!.SessionId;
     }
 
+    // Prepare a thread for resume: RESTORE the SDK's primary transcript from our app-owned mirror so
+    // resume reads exactly what we saved (Claude may have swept or compacted its own copy). Returns
+    // the session id to pass to SidecarClient.ResumeAsync, or null for a stub/unknown thread. No HTTP
+    // here — the caller performs the resume so this service stays transport-free.
+    public string? PrepareResume(string threadId)
+    {
+        ThreadRecord? thread = Repository().Get(threadId);
+        if (thread is null || string.IsNullOrWhiteSpace(thread.SessionId))
+        {
+            return null;
+        }
+
+        string mirror = Path.Combine(workspace.SessionsDirectory, thread.SessionId + ".jsonl");
+        transcripts.RestoreFromMirror(thread.SessionId, thread.Cwd, mirror);
+        return thread.SessionId;
+    }
+
     // Hard delete on demand: remove the DB row (+ provenance, cascade) AND the ~/.claude transcript
     // JSONL to reclaim disk. Not watched source => no governance gate. Returns false if unknown.
     public bool DeleteThread(string threadId)
