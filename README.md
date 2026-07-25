@@ -81,6 +81,8 @@ dotnet test  ClaudeWorkbench.slnx
 
 `tests/e2e` drives the **real Blazor UI** through Playwright — a scripted agent-loop that types a prompt, submits, watches tool calls stream in, and accepts in Merge Review, optionally recording video/trace. It is self-gating (skips cleanly when no Host or browsers are present), so it never breaks the main suite. See **[tests/e2e/ClaudeWorkbench.E2E.Tests/README.md](tests/e2e/ClaudeWorkbench.E2E.Tests/README.md)**.
 
+Requirements beyond `dotnet test`: a **one-time `playwright install`** for the browser binaries (Chromium etc., in `%LOCALAPPDATA%\ms-playwright`), a running Host, and — for the live driver — a Claude sign-in. Only a **minimal set of `data-testid` hooks** exists today (the composer → transcript → merge-review path); broader UI coverage (Source viewer, Tasks board, Git panel, Settings, the questions dialog, …) will need more hooks added per scenario.
+
 A recorded example — the multi-function-session prompt driven end to end through the real UI (edit → build → Merge Review → accept): **[docs/media/agent-loop-multi-function.mp4](docs/media/agent-loop-multi-function.mp4)**.
 
 The live driver runs the **real** agent, so it isn't fully deterministic — it can raise an unscripted prompt (e.g. an `AskUserQuestion` elicitation) and pause waiting on you. Monitor a live run rather than leaving it unattended.

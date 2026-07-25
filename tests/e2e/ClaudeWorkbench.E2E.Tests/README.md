@@ -3,6 +3,17 @@
 Black-box browser tests that drive the **real Blazor Assistant UI** through Playwright, so a human can
 watch the governed loop render. They reference no product code — they exercise what the user sees.
 
+## Requirements
+
+- **.NET 10 SDK** — the test project (`net10.0`).
+- **`Microsoft.Playwright`** — restored by `dotnet build` (already a `PackageReference`).
+- **Playwright browser binaries** — a **one-time** `playwright install` (below); Chromium etc. land in
+  `%LOCALAPPDATA%\ms-playwright` (~150 MB). Not committed, not restored by NuGet — install once per machine.
+- **A running Host** for the smoke + live tests (the driver talks to `AIMW_E2E_BASEURL`, default
+  `http://localhost:6100`); for the **live** driver, also a **Claude sign-in** (it runs the real agent).
+
+All of these are optional to the main suite: without them every e2e test **skips** rather than fails.
+
 ## One operator at a time (important)
 
 The driver drives your **running Host** at `AIMW_E2E_BASEURL`. That Host is single-operator: its agent
@@ -88,13 +99,20 @@ dialog, so the loop runs hands-free to Merge Review (the write to watched source
 human Accept). Recordings finalize when the run ends: video at `<artifacts>\video\*.webm`, trace at
 `<artifacts>\trace.zip`.
 
-## Stable selectors
+## Stable selectors — a minimal set (add more for deeper tests)
 
-The Assistant page (`AssistantTab.razor`) carries `data-testid` hooks: `composer-input`, `transcript`,
-`message-user`, `message-assistant`, `tool-call`, `auto-approve`, `turn-activity`. The Merge Review
-dialog (`MergeReviewDialog.razor`) carries `accept-proposed`, `accept-override`, `reject-proposed`,
-`review-busy`. The Radzen buttons (Submit Turn / Stop / New Thread / Copy / Pop Out) have no testid —
+Only the hooks the **current** smoke + agent-loop scenarios need have been added. The Assistant page
+(`AssistantTab.razor`) carries `data-testid`: `composer-input`, `transcript`, `message-user`,
+`message-assistant`, `tool-call`, `auto-approve`, `turn-activity`. The Merge Review dialog
+(`MergeReviewDialog.razor`) carries `accept-proposed`, `accept-override`, `reject-proposed`,
+`review-busy`. Radzen buttons (Submit Turn / Interrupt / New Thread / Copy / Pop Out) have no testid —
 target them by role + accessible name (`GetByRole(AriaRole.Button, name: "Submit Turn")`).
+
+**More advanced testing will require more `data-testid` hooks.** Anything beyond the composer →
+transcript → merge-review path is not yet instrumented — e.g. the Source viewer, the Tasks board, the
+Git panel, Settings, the workspace picker, the usage dropdown, attachments/upload, and the
+`AskUserQuestion` elicitation dialog. Add a `data-testid` on the specific element as you write each new
+scenario (role+name works for Radzen buttons but is brittle when labels change).
 
 ## Two test kinds here
 
