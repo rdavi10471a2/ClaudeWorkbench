@@ -41,7 +41,7 @@ active at a time.
 
 Everything the workbench owns for a watched solution lives under **`RuntimeRoot`** — the
 monitor-owned *Working* mirror (candidate edits), *staged* snapshots, the SQLite index,
-task board, logs, and uploads. **None of this is your source.** Your real files are only
+thread index, logs, and uploads. **None of this is your source.** Your real files are only
 written on an operator Accept.
 
 > `RuntimeRoot` resolves relative to the repo root when it isn't an absolute path. The

@@ -54,7 +54,7 @@ flowchart TB
 
     subgraph host["Blazor Host — .NET 10 process, :6100"]
         direction TB
-        ui["Blazor operator console<br/>Tasks (disabled) · Workbench · Source · Git · Activity"]
+        ui["Blazor operator console<br/>Workbench · Threads · Source · Git · Activity"]
         mcp[claude-workbench MCP server<br/>Streamable HTTP /mcp · ~72 tools]
         engine[AIMonitor.* engine<br/>Core · Logging · MSBuild · Data · Indexing · Workflow · McpServer]
         rev[EngineReviewWorkflow<br/>the ONLY watched-source writer]
@@ -69,7 +69,7 @@ flowchart TB
     end
 
     idx[(SQLite solution index)]
-    board[(SQLite task board)]
+    threads[(SQLite thread index<br/>+ ~/.claude transcript mirror)]
     watched[(Watched solution files)]
     claudecli([claude CLI → Claude])
     remote([GitHub])
@@ -81,7 +81,7 @@ flowchart TB
     sdk -->|MCP client over HTTP| mcp
     sdk --> claudecli
     engine --> idx
-    ui --> board
+    ui --> threads
     mcp --> engine
     rev -->|"on Accept: build passes, then atomic write"| watched
     engine -->|reads| watched

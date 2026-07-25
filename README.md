@@ -4,7 +4,7 @@ A Blazor operator console for **governed, watched-source AI edits**, driven by *
 
 An agent proposes changes to a watched .NET solution. Every change is composed against a local *Working* candidate, staged, and held at a human **accept / reject** gate before it ever touches real source. The engine that enforces this — Roslyn indexing, edit sessions, staging, two compile gates, and an MCP tool surface — runs UI-agnostic behind a Blazor host and a Node sidecar.
 
-**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, a Tasks board with an agent task-memory MCP loop (the board + MCP tools are live; the **board UI tab is currently disabled** pending the thread↔task workflow), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
+**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversation threads** (autosaved per session, with a Threads tab to resume/rename/promote/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
 
 ---
 
@@ -81,7 +81,7 @@ dotnet test  ClaudeWorkbench.slnx
 
 `tests/e2e` drives the **real Blazor UI** through Playwright — a scripted agent-loop that types a prompt, submits, watches tool calls stream in, and accepts in Merge Review, optionally recording video/trace. It is self-gating (skips cleanly when no Host or browsers are present), so it never breaks the main suite. See **[tests/e2e/ClaudeWorkbench.E2E.Tests/README.md](tests/e2e/ClaudeWorkbench.E2E.Tests/README.md)**.
 
-Requirements beyond `dotnet test`: a **one-time `playwright install`** for the browser binaries (Chromium etc., in `%LOCALAPPDATA%\ms-playwright`), a running Host, and — for the live driver — a Claude sign-in. Only a **minimal set of `data-testid` hooks** exists today (the composer → transcript → merge-review path); broader UI coverage (Source viewer, Tasks board, Git panel, Settings, the questions dialog, …) will need more hooks added per scenario.
+Requirements beyond `dotnet test`: a **one-time `playwright install`** for the browser binaries (Chromium etc., in `%LOCALAPPDATA%\ms-playwright`), a running Host, and — for the live driver — a Claude sign-in. Only a **minimal set of `data-testid` hooks** exists today (the composer → transcript → merge-review path); broader UI coverage (Source viewer, Git panel, Settings, the questions dialog, …) will need more hooks added per scenario. The **Threads** tab is instrumented (`threads-tab`, `thread-row`, resume/rename/delete hooks) and covered by a smoke test plus the live driver.
 
 A recorded example — the multi-function-session prompt driven end to end through the real UI (edit → build → Merge Review → accept): **[docs/media/agent-loop-multi-function.mp4](docs/media/agent-loop-multi-function.mp4)**.
 

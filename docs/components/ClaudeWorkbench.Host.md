@@ -17,7 +17,7 @@ The load-bearing invariant: the agent **never** writes watched source. It stages
 
 ## What it hosts (three surfaces in one process)
 
-- **MCP HTTP surface** — `app.MapMcp("/mcp")`. An `AddMcpServer(...).WithHttpTransport()` server named `claude-workbench` v0.1.0, composed from three tool types: `WithTools<AIMonitorTools>()` (the engine's edit/index/search surface, from `AIMonitor.McpServer`), `WithTools<Tasks.TaskMcpTools>()` (task board read + agent-notes write), and `WithTools<GitMcpTools>()` (governed git). Together these are the **71-tool surface** the sidecar's Claude Agent SDK query consumes = `AIMonitorTools` (60) + `TaskMcpTools` (3) + `GitMcpTools` (8). (Verified against a live `tools/list`.)
+- **MCP HTTP surface** — `app.MapMcp("/mcp")`. An `AddMcpServer(...).WithHttpTransport()` server named `claude-workbench` v0.1.0, composed from two tool types: `WithTools<AIMonitorTools>()` (the engine's edit/index/search surface plus the agent notes scratchpad, from `AIMonitor.McpServer`) and `WithTools<GitMcpTools>()` (governed git). Together these are the **72-tool surface** the sidecar's Claude Agent SDK query consumes = `AIMonitorTools` (68) + `GitMcpTools` (4). (The 3 former `TaskMcpTools` were removed with the Tasks board.)
 - **Blazor operator console** — `app.MapRazorComponents<App>().AddInteractiveServerRenderMode()`. Radzen + interactive Server components; the `Home` page hosts the tab shell (Tasks / Workbench / Source / Git / Activity).
 - **Sidecar supervisor** — `SidecarProcessHost` (an `IHostedService`) launches `node dist/index.js` as a child process, passing `SIDECAR_PORT` and `WORKBENCH_MCP_URL=http://localhost:6100/mcp` so the sidecar loops back to this process's MCP surface.
 
@@ -34,8 +34,7 @@ flowchart TD
     settings --> logger
 
     subgraph mcp["MCP server (/mcp)"]
-        aim["AIMonitorTools"]
-        task["TaskMcpTools"]
+        aim["AIMonitorTools\n(+ write_note scratchpad)"]
         gitmcp["GitMcpTools"]
     end
     wm --> aim
@@ -63,14 +62,15 @@ flowchart TD
     wm --> gws
     gws --> gitmcp
 
-    subgraph tasks["Task board"]
-        tf["TaskBoardRepositoryFactory"]
-        repo["WorkflowTaskBoardRepository\n(board.sqlite)"]
-        tvs["WorkflowTaskBoardViewService"]
+    subgraph threads["Threads seam"]
+        tsvc["ThreadService"]
+        trepo["ThreadRepository\n(threads.sqlite)"]
+        tstore["ClaudeTranscriptStore\n(~/.claude mirror)"]
     end
-    tf --> repo
-    tf --> task
-    tf --> tvs
+    tsvc --> trepo
+    tsvc --> tstore
+    ses --> tsvc
+    wm --> tsvc
 
     src["Source.SourceWorkspace"]
     wm --> src
@@ -95,14 +95,14 @@ flowchart TD
 | `EngineReviewWorkflow` | `Services/EngineReviewWorkflow.cs` | `IReviewWorkflow` (singleton). In-process adapter over the AIMonitor workflow engine that replaces the external WinMerge step. **The only place watched source is written** — temp-then-rename per file, on the **terminal** operator Accept only, covering every approved file in the session, after the GATE-2 build passes. |
 | `SidecarProcessHost` | `Services/SidecarProcessHost.cs` | `IHostedService` that launches + supervises `node dist/index.js`; skips launch if the port is already open; kills the child tree on shutdown. |
 | `SidecarEventStream` | `Services/SidecarEventStream.cs` | `BackgroundService` that reads the sidecar's SSE `/events`, maintaining bounded event history (max 500), the pending-gate set, elicitations, connection + active-turn state; raises `Changed`. Reconnects every 2 s on drop; re-seeds gates/elicitations on each connect. |
-| `SidecarClient` | `Services/SidecarClient.cs` | Typed `HttpClient` for the sidecar's control surface: `/prompt`, `/gates/{id}`, `/elicitations/{id}`, `/stop`, `/new-thread`, `/review-outcome`, `/usage`. |
+| `SidecarClient` | `Services/SidecarClient.cs` | Typed `HttpClient` for the sidecar's control surface: `/prompt`, `/gates/{id}`, `/elicitations/{id}`, `/stop`, `/new-thread`, `/resume`, `/review-outcome`, `/usage`. |
 | `SidecarOperatorConsole` (+ `.Approvals`) | `Services/SidecarOperatorConsole*.cs` | Scoped adapter implementing both `IOperatorConsole` (transcript/activity/status, SendAsync, StopAsync, NewThread, usage) and `IApprovalQueue` (pending gates → `ApprovalRequest`, elicitations, resolve). The one place aware of sidecar event shapes. |
 | `GitService` | `Services/GitService.cs` | Stateless wrapper that launches the `git` executable via `ProcessStartInfo.ArgumentList` (argv, `UseShellExecute=false`) — **no shell, no injection surface**. Never throws on non-zero exit; caller inspects `GitResult.Ok`. |
 | `GitWorkspaceService` | `Services/GitWorkspaceService.cs` | Singleton binding `GitService` to the current watched repo (resolves the repo root so porcelain paths line up). Shared by both the operator Git panel and the agent's `GitMcpTools`. |
-| `TaskMcpTools` | `Tasks/TaskMcpTools.cs` | MCP task surface: agent reads the Active task + notes and writes back agent-notes (durable memory) into the runtime task-memory store — never watched source. |
-| `WorkflowTaskBoardRepository` | `Tasks/WorkflowTaskBoardRepository.cs` | SQLite-backed (`board.sqlite`) task board + task-memory markdown store; created per-workspace via `TaskBoardRepositoryFactory`. |
+| `ThreadService` (+ `ThreadRepository` / `ThreadDatabase`) | `Threads/*.cs` | Conversation-thread lifecycle over the per-workspace `threads.sqlite` (own DB, not the index): autosave on `session_started`, computed Active, provenance, resume (restore-from-mirror), hard delete. |
+| `ClaudeTranscriptStore` | `Threads/ClaudeTranscriptStore.cs` | Locates / mirrors / restores / deletes the SDK `~/.claude` transcript JSONL; the runtime mirror (`runtime\<workspace>\sessions`) is authoritative for resume. |
 | `Source.SourceWorkspace` | `Source/SourceWorkspace.cs` | Builds the source-browser snapshot from the in-process AIMonitor index and rebuilds it; retargets when the watched workspace changes. |
-| `WorkspaceCoordinator` / `RuntimeProvisioner` | `Services/*.cs` | Selecting a watched solution: point the manager at it, persist the choice, provision its runtime skeleton + task DB (idempotent, also on startup). Persistence targets the registered `MonitorConfigPath` — **the same file the host was started with** (`--config`), not a default path, so reader and writer cannot drift. |
+| `WorkspaceCoordinator` / `RuntimeProvisioner` | `Services/*.cs` | Selecting a watched solution: point the manager at it, persist the choice, provision its runtime skeleton (idempotent, also on startup). Persistence targets the registered `MonitorConfigPath` — **the same file the host was started with** (`--config`), not a default path, so reader and writer cannot drift. |
 | `AgentSettingsService` / `UploadService` / `DirectoryBrowserService` | `Services/*.cs` | Operator tool-policy (persisted `AgentToolPolicy`), file attachments into the runtime `uploads/` folder, and filesystem navigation for the workspace picker (opening at the watched solution's folder, or the user profile on first run — never the process cwd, which under the Launcher is the install folder). |
 | `BrowserPresenceTracker` / `BrowserLifetimeCircuitHandler` | `Services/*.cs` | Opt-in browser-owned lifetime (`CWB_EXIT_WITH_BROWSER=1`, set by the Launcher): the circuit handler tracks live Blazor circuits and the tracker shuts the host down shortly after the last tab closes — so closing an instance's window stops its backend from the browser side. |
 
@@ -171,7 +171,7 @@ sequenceDiagram
 
 Hosted on `Components/Pages/Home.razor`:
 
-- **Tasks** (`Tabs/Tasks/*`) — the task board the operator curates; sets which task is Active, its state and notes. Backed by `WorkflowTaskBoardViewService` over `board.sqlite`.
+- **Threads** (`Tabs/ThreadsTab`) — the conversation-thread list (replaced the Tasks board): resume/rename/promote/abandon/restore/delete named, autosaved threads. Backed by `ThreadService` over the per-workspace `threads.sqlite`.
 - **Workbench / Assistant** (`Tabs/AssistantTab`) — the chat surface: prompt the agent, watch the transcript, resolve gates/elicitations via `AgentActionModal`, start a new thread.
 - **Source** (`Pages/Source/*`) — read-only browser of the watched solution from the in-process AIMonitor index (`SourceWorkspace`).
 - **Git** (`Tabs/GitTab`) — the operator's git panel over `GitWorkspaceService`: status, stage/unstage/discard, diff, commit, push, branches.

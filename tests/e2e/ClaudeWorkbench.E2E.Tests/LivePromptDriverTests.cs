@@ -101,6 +101,12 @@ public sealed class LivePromptDriverTests : IClassFixture<PlaywrightFixture>
             await ResolveReviewAsync(page);
         }
 
+        // Autosave -> UI: the driven conversation must have surfaced as a saved thread. Switch to the
+        // Threads tab and assert at least one thread row is present (this run created one per prompt).
+        await page.GetByText("Threads", new PageGetByTextOptions { Exact = true }).First.ClickAsync();
+        await Assertions.Expect(page.GetByTestId("thread-row").First)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
         if (E2EEnvironment.HoldSeconds > 0)
         {
             await Task.Delay(TimeSpan.FromSeconds(E2EEnvironment.HoldSeconds));
