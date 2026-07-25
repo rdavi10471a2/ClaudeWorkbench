@@ -170,7 +170,9 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
 
         using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using StreamReader reader = new(stream);
-        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        // Read to EOF via ReadLineAsync's null result (a null line = end of stream). Avoids the
+        // blocking, non-async reader.EndOfStream probe in an async method (CA2024).
+        while (!cancellationToken.IsCancellationRequested)
         {
             string? line = await reader.ReadLineAsync(cancellationToken);
             if (line is null)
