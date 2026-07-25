@@ -4,7 +4,7 @@ A Blazor operator console for **governed, watched-source AI edits**, driven by *
 
 An agent proposes changes to a watched .NET solution. Every change is composed against a local *Working* candidate, staged, and held at a human **accept / reject** gate before it ever touches real source. The engine that enforces this — Roslyn indexing, edit sessions, staging, two compile gates, and an MCP tool surface — runs UI-agnostic behind a Blazor host and a Node sidecar.
 
-**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, a Tasks board with an agent task-memory MCP loop, and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
+**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, a Tasks board with an agent task-memory MCP loop (the board + MCP tools are live; the **board UI tab is currently disabled** pending the thread↔task workflow), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
 
 ---
 
@@ -150,7 +150,7 @@ workflow rather than the whole product.
 
 ## Roadmap
 
-Done: engine + in-proc MCP endpoint (71-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); session continuity + New Thread; `AskUserQuestion` operator dialog; per-thread auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; a Tasks board with an agent task-memory MCP loop; single-start with the injected role card; and the Playwright E2E harness.
+Done: engine + in-proc MCP endpoint (71-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); session continuity + New Thread; `AskUserQuestion` operator dialog; per-thread auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; the Tasks board + agent task-memory MCP loop (board UI tab currently disabled, WIP); single-start with the injected role card; and the Playwright E2E harness.
 
 Next:
 
