@@ -274,6 +274,25 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                     deferIndexRefresh: true);
             }
 
+            // If a project/build file was accepted (e.g. a new <PackageReference>), restore the REAL
+            // solution before the reindex: the index loads via MSBuildWorkspace, which reads restored
+            // assets and never restores itself, so a newly-added package would otherwise fail to
+            // resolve. Best-effort — a restore failure never blocks the write/reindex, but its errors
+            // (NU1101 not-found, bad version, offline, …) are CAPTURED and surfaced below to both the
+            // operator and the agent so a package that did not restore is never silent.
+            SolutionRestoreService.RestoreResult? postAcceptRestore = null;
+            if (rebuildIndex && writtenPaths.Any(IsProjectOrBuildFile))
+            {
+                postAcceptRestore = new SolutionRestoreService().Restore(workspace.Settings);
+                logger.Write(
+                    postAcceptRestore.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
+                    "Host",
+                    "post-accept-restore",
+                    postAcceptRestore.IsError
+                        ? postAcceptRestore.Message + " " + string.Join(" | ", postAcceptRestore.Diagnostics)
+                        : postAcceptRestore.Message);
+            }
+
             // The terminal accept is the ONLY place the session's index refresh happens. When the
             // operator unchecks "rebuild index" (honored only here, on the terminal file), defer it:
             // the bytes are already on disk, but the index is left stale until the next reindex.
@@ -292,10 +311,17 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             string indexNote = rebuildIndex
                 ? "index rebuilt for the edit session"
                 : "index refresh DEFERRED — the change is on disk but the index is stale until the next reindex";
+            // Surface a failed package restore in BOTH channels: the operator's message and the agent
+            // summary. The write succeeded (the reference is in source), but the package did not
+            // restore — so the agent must fix the name/version and the index won't resolve it yet.
+            string restoreNote = postAcceptRestore is { IsError: true }
+                ? $" NuGet restore FAILED for the accepted project change — the reference is written but the package is NOT restored, so it will not resolve in the build or index until this is fixed: {string.Join("; ", postAcceptRestore.Diagnostics)}"
+                : string.Empty;
             string message = writtenPaths.Count == 1
-                ? $"Accepted. {record.RelativePath} written; {indexNote}."
-                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.";
-            return new ReviewActionResult(message, BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex));
+                ? $"Accepted. {record.RelativePath} written; {indexNote}.{restoreNote}"
+                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.{restoreNote}";
+            string agentSummary = BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex) + restoreNote;
+            return new ReviewActionResult(message, agentSummary);
         }
         catch (Exception exception)
         {
@@ -318,6 +344,20 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
     private static string DescribePaths(IReadOnlyCollection<string> paths)
     {
         return paths.Count == 0 ? "(none)" : string.Join(", ", paths);
+    }
+
+    // A written file that can change the package/dependency graph, so the real solution needs a
+    // restore before the index reloads it (project files, MSBuild props/targets, NuGet config).
+    private static bool IsProjectOrBuildFile(string path)
+    {
+        string name = Path.GetFileName(path);
+        return path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".props", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("packages.config", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void TryDeleteTemp(string tempPath)

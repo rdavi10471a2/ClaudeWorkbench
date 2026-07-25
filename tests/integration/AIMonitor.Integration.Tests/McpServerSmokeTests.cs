@@ -84,6 +84,7 @@ public sealed class McpServerSmokeTests
             "list_notes",
             "read_note",
             "delete_note",
+            "restore_solution",
             "shutdown_server"
         ];
         foreach (string expectedToolName in expectedToolNames)

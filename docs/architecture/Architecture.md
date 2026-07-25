@@ -55,7 +55,7 @@ flowchart TB
     subgraph host["Blazor Host — .NET 10 process, :6100"]
         direction TB
         ui["Blazor operator console<br/>Workbench · Source · Git · Activity + Conversations modal"]
-        mcp[claude-workbench MCP server<br/>Streamable HTTP /mcp · ~72 tools]
+        mcp[claude-workbench MCP server<br/>Streamable HTTP /mcp · ~73 tools]
         engine[AIMonitor.* engine<br/>Core · Logging · MSBuild · Data · Indexing · Workflow · McpServer]
         rev[EngineReviewWorkflow<br/>the ONLY watched-source writer]
         git[GitService<br/>argv git CLI, no shell]
@@ -298,8 +298,8 @@ in-proc over **Streamable HTTP** at `http://localhost:6100/mcp`, advertising
 `ai-monitor`). Tools appear to the agent as `mcp__claude-workbench__*`. `strictMcpConfig:
 true` exposes only `claude-workbench` — the machine's other MCP connectors don't leak in.
 
-The surface is **72 tools**: 68 `AIMonitorTools` (Status 13, Index 14, Editing 13,
-RoslynEdits 11, Sessions 8, Review 4, Download 1, Notes 4) + 4 `GitMcpTools`
+The surface is **73 tools**: 69 `AIMonitorTools` (Status 13, Index 14, Editing 13,
+RoslynEdits 11, Sessions 8, Review 4, Download 1, Notes 4, Nuget 1) + 4 `GitMcpTools`
 (all read-only: `GitStatus`, `GitDiff`, `GitLog`, `GitListBranches`). The `Notes` tools
 (`write_note`, `list_notes`, `read_note`, `delete_note`) are the agent's ungoverned scratchpad,
 path-confined to `runtime\<workspace>\agent-notes` — outside watched source. (The 3 former

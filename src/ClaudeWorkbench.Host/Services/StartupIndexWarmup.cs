@@ -2,6 +2,7 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Logging;
 using AIMonitor.McpServer;
+using AIMonitor.Workflow;
 
 namespace ClaudeWorkbench.Host.Services;
 
@@ -63,6 +64,18 @@ public sealed class StartupIndexWarmup
 
             using (rebuildStatus.Begin())
             {
+                // Restore NuGet packages before the (re)index. The index loads via MSBuildWorkspace,
+                // which reads restored assets and never restores itself — so a freshly-opened
+                // package-bearing project would fail to resolve types without this. No-op when current.
+                SolutionRestoreService.RestoreResult restore = new SolutionRestoreService().Restore(workspace.Settings);
+                logger.Write(
+                    restore.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
+                    "Host",
+                    "startup-restore",
+                    restore.IsError
+                        ? restore.Message + " " + string.Join(" | ", restore.Diagnostics)
+                        : restore.Message);
+
                 await workspace.ProvisionAsync();
             }
         }

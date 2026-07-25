@@ -76,7 +76,7 @@ still passing. This was verified by mutation — see the class comment.
 ## D. MCP tool surface (out-of-process)
 
 *Does the surface the agent actually speaks to behave?* These boot a real server process and speak
-real JSON-RPC across the MCP tool surface (72 tools: 68 `AIMonitorTools` + 4 `GitMcpTools`; the
+real JSON-RPC across the MCP tool surface (73 tools: 69 `AIMonitorTools` + 4 `GitMcpTools`; the
 3 former `TaskMcpTools` were removed with the Tasks board).
 
 | Suite | Tests | Covers |

@@ -17,7 +17,7 @@ The load-bearing invariant: the agent **never** writes watched source. It stages
 
 ## What it hosts (three surfaces in one process)
 
-- **MCP HTTP surface** — `app.MapMcp("/mcp")`. An `AddMcpServer(...).WithHttpTransport()` server named `claude-workbench` v0.1.0, composed from two tool types: `WithTools<AIMonitorTools>()` (the engine's edit/index/search surface plus the agent notes scratchpad, from `AIMonitor.McpServer`) and `WithTools<GitMcpTools>()` (governed git). Together these are the **72-tool surface** the sidecar's Claude Agent SDK query consumes = `AIMonitorTools` (68) + `GitMcpTools` (4). (The 3 former `TaskMcpTools` were removed with the Tasks board.)
+- **MCP HTTP surface** — `app.MapMcp("/mcp")`. An `AddMcpServer(...).WithHttpTransport()` server named `claude-workbench` v0.1.0, composed from two tool types: `WithTools<AIMonitorTools>()` (the engine's edit/index/search surface plus the agent notes scratchpad, from `AIMonitor.McpServer`) and `WithTools<GitMcpTools>()` (governed git). Together these are the **73-tool surface** the sidecar's Claude Agent SDK query consumes = `AIMonitorTools` (69) + `GitMcpTools` (4). (The 3 former `TaskMcpTools` were removed with the Tasks board.)
 - **Blazor operator console** — `app.MapRazorComponents<App>().AddInteractiveServerRenderMode()`. Radzen + interactive Server components; the `Home` page hosts the tab shell (Tasks / Workbench / Source / Git / Activity).
 - **Sidecar supervisor** — `SidecarProcessHost` (an `IHostedService`) launches `node dist/index.js` as a child process, passing `SIDECAR_PORT` and `WORKBENCH_MCP_URL=http://localhost:6100/mcp` so the sidecar loops back to this process's MCP surface.
 

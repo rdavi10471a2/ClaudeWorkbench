@@ -46,6 +46,7 @@ public static class AgentGuidance
         builder.AppendLine("- When asked to change code, follow this workflow exactly:");
         builder.AppendLine();
         builder.AppendLine(StagingGuide);
+        builder.AppendLine("- DEPENDENCIES (NuGet): you add a package the same governed way you change any code — add a `<PackageReference Include=\"Name\" Version=\"X.Y.Z\" />` to the OWNING project's .csproj as a planned file (if the repo uses central package management, i.e. a Directory.Packages.props with `<PackageVersion>` entries, put the version there and use a version-less `<PackageReference>` in the .csproj). Then call `restore_solution` so the host runs `dotnet restore` and the package is fetched for the pre-merge build and the index. You never run `dotnet`, `dotnet add package`, or any shell yourself — edit the .csproj and call restore_solution.");
         builder.AppendLine("- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.");
         return builder.ToString();
     }
