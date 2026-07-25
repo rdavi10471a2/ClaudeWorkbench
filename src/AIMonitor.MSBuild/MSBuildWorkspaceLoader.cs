@@ -1110,6 +1110,12 @@ internal sealed class ProjectSymbolIndex
         Compilation generatedCompilation = missingTrees.Length == 0
             ? compilation
             : compilation.AddSyntaxTrees(missingTrees);
+
+        // Multiple mapped references point back into the same .razor file. Read each one from disk at
+        // most once for this whole pass (null = missing/unreadable) instead of re-opening it per
+        // reference for both the @code-block classification and the snippet. See IsRazorCodeBlockMappedLine
+        // / GetFileLineSnippet.
+        Dictionary<string, string[]?> razorLineCache = new(StringComparer.OrdinalIgnoreCase);
         foreach (SyntaxTree tree in generatedRazorTrees)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1130,7 +1136,7 @@ internal sealed class ProjectSymbolIndex
                     continue;
                 }
 
-                string referenceKindPrefix = IsRazorCodeBlockMappedLine(mappedSpan.Path, mappedSpan.StartLinePosition.Line)
+                string referenceKindPrefix = IsRazorCodeBlockMappedLine(mappedSpan.Path, mappedSpan.StartLinePosition.Line, razorLineCache)
                     ? "razor"
                     : "razor-generated";
 
@@ -1142,7 +1148,7 @@ internal sealed class ProjectSymbolIndex
                     mappedSpan.StartLinePosition.Line + 1,
                     mappedSpan.StartLinePosition.Character + 1,
                     $"{referenceKindPrefix}:{node.Kind()}",
-                    GetFileLineSnippet(mappedSpan.Path, mappedSpan.StartLinePosition.Line));
+                    GetFileLineSnippet(mappedSpan.Path, mappedSpan.StartLinePosition.Line, razorLineCache));
             }
         }
     }
@@ -1470,24 +1476,42 @@ internal sealed class ProjectSymbolIndex
             && !MSBuildWorkspaceLoader.PathHasIgnoredDirectory(mappedSpan.Path);
     }
 
-    private static bool IsRazorCodeBlockMappedLine(string filePath, int zeroBasedLine)
+    // Reads a file's lines at most once per pass, memoised by path (null = missing/unreadable).
+    private static string[]? GetCachedFileLines(string filePath, Dictionary<string, string[]?> cache)
+    {
+        if (cache.TryGetValue(filePath, out string[]? cached))
+        {
+            return cached;
+        }
+
+        string[]? lines;
+        try
+        {
+            lines = File.Exists(filePath) ? File.ReadAllLines(filePath) : null;
+        }
+        catch
+        {
+            lines = null;
+        }
+
+        cache[filePath] = lines;
+        return lines;
+    }
+
+    private static bool IsRazorCodeBlockMappedLine(string filePath, int zeroBasedLine, Dictionary<string, string[]?> lineCache)
     {
         if (filePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        if (!filePath.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || !File.Exists(filePath))
+        if (!filePath.EndsWith(".razor", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        string[] lines;
-        try
-        {
-            lines = File.ReadAllLines(filePath);
-        }
-        catch
+        string[]? lines = GetCachedFileLines(filePath, lineCache);
+        if (lines is null)
         {
             return false;
         }
@@ -1547,36 +1571,15 @@ internal sealed class ProjectSymbolIndex
         return false;
     }
 
-    private static string GetFileLineSnippet(string filePath, int zeroBasedLine)
+    private static string GetFileLineSnippet(string filePath, int zeroBasedLine, Dictionary<string, string[]?> lineCache)
     {
-        if (!File.Exists(filePath))
+        string[]? lines = GetCachedFileLines(filePath, lineCache);
+        if (lines is null || zeroBasedLine < 0 || zeroBasedLine >= lines.Length)
         {
             return string.Empty;
         }
 
-        try
-        {
-            using StreamReader reader = File.OpenText(filePath);
-            for (int line = 0; line <= zeroBasedLine; line++)
-            {
-                string? text = reader.ReadLine();
-                if (text is null)
-                {
-                    return string.Empty;
-                }
-
-                if (line == zeroBasedLine)
-                {
-                    return text.Trim();
-                }
-            }
-        }
-        catch
-        {
-            return string.Empty;
-        }
-
-        return string.Empty;
+        return lines[zeroBasedLine].Trim();
     }
 
     private static bool TryGetSourceSymbol(
