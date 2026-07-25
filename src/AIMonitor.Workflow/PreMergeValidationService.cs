@@ -6,6 +6,10 @@ namespace AIMonitor.Workflow;
 
 public sealed class PreMergeValidationService
 {
+    // One file to overlay onto the mirrored validation tree: its path relative to the solution root, and the
+    // on-disk candidate (a staged file at accept, a working file at plan-complete) whose content to lay down.
+    public sealed record CandidateOverlay(string RelativePath, string CandidateFilePath);
+
     public PreMergeValidationResult ValidateStagedOverlay(
         StagedEditRecord record,
         IReadOnlyList<StagedEditRecord> stagedOverlayRecords)
@@ -52,6 +56,26 @@ public sealed class PreMergeValidationService
             }
         }
 
+        CandidateOverlay[] candidates = overlayRecords
+            .Select(overlayRecord => new CandidateOverlay(overlayRecord.RelativePath, overlayRecord.StagedFilePath))
+            .ToArray();
+        return ValidateCandidateOverlay(settings, candidates);
+    }
+
+    // Plan-complete gate: run the SAME real pre-merge build over the session's WORKING candidates (before
+    // staging) so the agent gets the authoritative, SDK-dynamic build result and self-corrects BEFORE the
+    // operator reviews - not only at accept. Each overlay is (relative-path-under-solution, candidate file).
+    public PreMergeValidationResult ValidateWorkingOverlay(
+        MonitorSettings settings,
+        IReadOnlyList<CandidateOverlay> candidates)
+    {
+        return ValidateCandidateOverlay(settings, candidates);
+    }
+
+    private PreMergeValidationResult ValidateCandidateOverlay(
+        MonitorSettings settings,
+        IReadOnlyList<CandidateOverlay> candidates)
+    {
         if (!File.Exists(settings.WatchedSolutionPath))
         {
             return new PreMergeValidationResult
@@ -88,13 +112,13 @@ public sealed class PreMergeValidationService
                 MirrorForValidation(sourceRoot, validationSourceRoot, excludedRoots);
                 CopyExternalValidationInputs(externalInputs, validationWorkspaceRoot, excludedRoots);
 
-                foreach (StagedEditRecord overlayRecord in overlayRecords)
+                foreach (CandidateOverlay candidate in candidates)
                 {
-                    string validationCandidatePath = Path.Combine(validationSourceRoot, overlayRecord.RelativePath);
+                    string validationCandidatePath = Path.Combine(validationSourceRoot, candidate.RelativePath);
                     Directory.CreateDirectory(Path.GetDirectoryName(validationCandidatePath) ?? validationSourceRoot);
-                    File.Copy(overlayRecord.StagedFilePath, validationCandidatePath, overwrite: true);
+                    File.Copy(candidate.CandidateFilePath, validationCandidatePath, overwrite: true);
                     // Stamp the overlaid file NEWER than any prior build output so MSBuild always recompiles its
-                    // project this run - a staged file's own timestamp can be older than the workspace's obj.
+                    // project this run - a candidate file's own timestamp can be older than the workspace's obj.
                     File.SetLastWriteTimeUtc(validationCandidatePath, DateTime.UtcNow);
                 }
 
@@ -123,10 +147,10 @@ public sealed class PreMergeValidationService
                     Diagnostics = errorDiagnostics,
                     ValidationWorkspacePath = validationWorkspaceRoot,
                     Message = build.TimedOut
-                        ? CreateValidationMessage("timed out", overlayRecords.Length)
+                        ? CreateValidationMessage("timed out", candidates.Count)
                         : failed
-                            ? CreateValidationMessage("failed", overlayRecords.Length)
-                            : CreateValidationMessage("passed", overlayRecords.Length)
+                            ? CreateValidationMessage("failed", candidates.Count)
+                            : CreateValidationMessage("passed", candidates.Count)
                 };
             }
             catch (Exception ex)
@@ -138,7 +162,7 @@ public sealed class PreMergeValidationService
                     DiagnosticCount = 1,
                     Diagnostics = [ex.Message],
                     ValidationWorkspacePath = validationWorkspaceRoot,
-                    Message = CreateValidationMessage("failed", overlayRecords.Length)
+                    Message = CreateValidationMessage("failed", candidates.Count)
                 };
             }
         }

@@ -139,7 +139,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Mark this run's edit plan COMPLETE and compile the overlay ONCE over the whole planned set. This is the ONLY point the overlay gate runs while editing — submit_file and the edit tools never compile it — so call this AFTER you have submitted every planned file and BEFORE staging. Returns the combined overlay result; errors name the specific file/line. If any planned file has no submitted candidate yet, it compiles nothing and tells you which files are still pending, so it is safe to call and re-call.")]
+    [Description("Mark this run's edit plan COMPLETE and run the REAL pre-merge build ONCE over the whole planned set (a full dotnet build of the solution with your working candidates overlaid - the same build the operator's Accept runs). This is the authoritative compile gate while editing - submit_file and the edit tools never build - so call this AFTER you have submitted every planned file and BEFORE staging. Returns the build result with the actual compiler error lines so you can fix them before review. If any planned file has no submitted candidate yet, it builds nothing and tells you which files are still pending, so it is safe to call and re-call.")]
     public PlanCompletionResult CompleteEditPlan(
         [Description("Session handle returned by start_monitor_session.")] string sessionId)
     {
@@ -164,26 +164,20 @@ public sealed partial class AIMonitorTools
                 $"Plan not complete: {unsubmitted.Count} planned file(s) have no submitted candidate yet. Submit them, then call complete_edit_plan again.");
         }
 
-        // One compile covers the whole overlay (any file compiles the full candidate set) and the
-        // validator caches it, so stamping every planned file's record is cheap and consistent.
-        List<string> diagnostics = new();
-        bool hasErrors = false;
-        foreach (AIMonitorSessionPlannedFile file in editPlan.FilesPlanned)
-        {
-            EditOverlayValidationResult result = workflowService.ValidateOverlayForFile(Path.GetFullPath(file.SourceFilePath));
-            if (result.HasErrors)
-            {
-                hasErrors = true;
-                diagnostics.AddRange(result.Diagnostics.Select(diagnostic =>
-                    $"{diagnostic.Path}({diagnostic.Line},{diagnostic.Column}): {diagnostic.Id} {diagnostic.Message}"));
-            }
-        }
+        // Run the REAL pre-merge build over the WHOLE planned set (working candidates) - the same
+        // authoritative, SDK-dynamic engine the accept gate uses - so the agent gets actual compiler errors
+        // (cross-project, Blazor, everything) BEFORE staging and before the operator reviews.
+        List<string> plannedPaths = editPlan.FilesPlanned
+            .Select(file => Path.GetFullPath(file.SourceFilePath))
+            .ToList();
+        var build = workflowService.ValidatePlannedOverlayBuild(plannedPaths);
+        bool hasErrors = build.IsError;
+        IReadOnlyList<string> distinctDiagnostics = build.Diagnostics.Distinct(StringComparer.Ordinal).Take(50).ToList();
 
-        IReadOnlyList<string> distinctDiagnostics = diagnostics.Distinct(StringComparer.Ordinal).Take(50).ToList();
         RecordMonitorSessionEvent(
             sessionId,
             "complete-edit-plan",
-            hasErrors ? $"overlay compiled with {distinctDiagnostics.Count} error(s)" : "overlay compiled clean",
+            hasErrors ? $"pre-merge build FAILED with {distinctDiagnostics.Count} error(s)" : "pre-merge build passed",
             JsonSerializer.Serialize(distinctDiagnostics, JsonOptions));
         return new PlanCompletionResult(
             true,
@@ -192,8 +186,10 @@ public sealed partial class AIMonitorTools
             distinctDiagnostics,
             [],
             hasErrors
-                ? $"Plan complete, but the overlay compiled WITH ERRORS ({distinctDiagnostics.Count}). Fix and re-submit the affected files, then call complete_edit_plan again."
-                : "Plan complete: the overlay compiled clean. Stage the planned files for review.");
+                // Echo the actual error lines, not just a count, so the agent can fix them directly.
+                ? $"Plan complete, but the full pre-merge build FAILED with {distinctDiagnostics.Count} error(s). "
+                    + "Fix these and call complete_edit_plan again:\n" + string.Join("\n", distinctDiagnostics)
+                : "Plan complete: the full pre-merge build passed. Stage the planned files for review.");
     }
 
     [McpServerTool]

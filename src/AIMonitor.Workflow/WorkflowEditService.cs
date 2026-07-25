@@ -592,6 +592,32 @@ public sealed class WorkflowEditService
         return result;
     }
 
+    // Plan-complete gate: run the REAL pre-merge dotnet build over the session's WORKING candidates - the same
+    // authoritative, SDK-dynamic engine the accept gate uses - so the agent sees actual compiler errors
+    // (cross-project, Blazor, everything) and self-corrects BEFORE the operator reviews, not only at accept.
+    // Each working file is snapshotted under its own manifest lock; the build copies them into the incremental
+    // validation workspace. Returns the real build result, whose Diagnostics carry the actual error lines.
+    public PreMergeValidationResult ValidatePlannedOverlayBuild(IReadOnlyList<string> watchedFilePaths)
+    {
+        List<PreMergeValidationService.CandidateOverlay> candidates = [];
+        foreach (string watchedFilePath in watchedFilePaths)
+        {
+            string fullWatchedPath = Path.GetFullPath(watchedFilePath);
+            using IDisposable manifestLock = AcquireManifestLock(fullWatchedPath);
+            EditSessionManifest manifest = LoadManifest(fullWatchedPath)
+                ?? throw new InvalidOperationException($"No edit session exists for {fullWatchedPath}. Run edit refresh first.");
+            if (!File.Exists(manifest.WorkingFilePath))
+            {
+                throw new InvalidOperationException(
+                    $"No Working candidate exists for {manifest.RelativePath}; submit it before completing the plan.");
+            }
+
+            candidates.Add(new PreMergeValidationService.CandidateOverlay(manifest.RelativePath, manifest.WorkingFilePath));
+        }
+
+        return new PreMergeValidationService().ValidateWorkingOverlay(paths.Settings, candidates);
+    }
+
     public CompareSnapshotResult Compare(string watchedFilePath, string? ledgerSummary = null)
     {
         string fullWatchedPath = Path.GetFullPath(watchedFilePath);
