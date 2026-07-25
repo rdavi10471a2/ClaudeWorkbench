@@ -92,6 +92,12 @@
         <section class="transcript-panel" @ref="transcriptPanel" aria-label="Chat history">
             <div class="transcript-header">
                 <span>Chat History</span>
+                <span class="thread-status-blurb" data-testid="thread-status"
+                      title="This conversation's saved thread. Rename it or add notes in the Threads tab.">
+                    @(currentThreadName is null
+                        ? "Unsaved"
+                        : $"Thread: {currentThreadName}")
+                </span>
                 <div class="transcript-actions">
                     <div class="usage-anchor">
                         <RadzenButton Icon="monitoring"

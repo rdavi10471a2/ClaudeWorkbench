@@ -819,3 +819,15 @@
 }
 
 .new-thread-name:disabled { opacity: 0.5; }
+
+/* Current-conversation thread status in the transcript header (right-aligned, truncates if long). */
+.thread-status-blurb {
+    margin-left: auto;
+    align-self: center;
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--rz-text-secondary-color, #52606d);
+    font-size: 0.8rem;
+}

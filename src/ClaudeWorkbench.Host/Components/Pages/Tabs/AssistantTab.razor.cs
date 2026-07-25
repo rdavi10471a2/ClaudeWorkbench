@@ -29,6 +29,9 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     [Inject]
     private NotificationService Notifications { get; set; } = default!;
 
+    [Inject]
+    private ICurrentSession CurrentSession { get; set; } = default!;
+
     private ElementReference assistantLayout;
     private ElementReference chatComposer;
     private ElementReference assistantSplitter;
@@ -42,6 +45,11 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private string draft = string.Empty;
     // Optional name the operator types before New Thread; applied to the next conversation's thread.
     private string newThreadName = string.Empty;
+    // The current conversation's saved-thread name (null = not saved yet -> "Unsaved"), shown in the
+    // transcript header. Cached; refreshed only when the live session id changes (avoids a per-render
+    // DB hit).
+    private string? currentThreadName;
+    private string? lastThreadSessionId;
     private bool autoApprove;
     private bool usageOpen;
     private bool wasWorking;
@@ -65,17 +73,37 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     {
         Session.Changed += OnChanged;
         ThreadStore.ThreadCreated += OnThreadCreated;
+        RefreshThreadName();
     }
 
-    // A new conversation was autosaved as a thread — toast its name (no dialog).
+    // A new conversation was autosaved as a thread — toast its name and reflect it in the header.
     private void OnThreadCreated(ThreadRecord thread) => InvokeAsync(() =>
+    {
+        currentThreadName = thread.Name;
+        lastThreadSessionId = thread.SessionId;
         Notifications.Notify(new NotificationMessage
         {
             Severity = NotificationSeverity.Info,
             Summary = "Thread saved",
             Detail = $"Saving thread as “{thread.Name}”",
             Duration = 4000,
-        }));
+        });
+        StateHasChanged();
+    });
+
+    // Refresh the header's thread name, but only when the live session actually changed (resume, new
+    // thread, first turn) — so it is not a DB query on every streamed chunk.
+    private void RefreshThreadName()
+    {
+        string? sessionId = CurrentSession.CurrentSessionId;
+        if (string.Equals(sessionId, lastThreadSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        lastThreadSessionId = sessionId;
+        currentThreadName = string.IsNullOrEmpty(sessionId) ? null : ThreadStore.ActiveThread()?.Name;
+    }
 
     private void OnChanged()
     {
@@ -89,6 +117,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             }
 
             wasWorking = working;
+            RefreshThreadName();
             // The session changed (message streamed/added/status) — the transcript may have grown,
             // so the next render must re-run the transcript-wide JS.
             transcriptDirty = true;
@@ -268,6 +297,10 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         // autosaves on its first turn. Blank => the default discussion-YYYY-MM-DD-N name.
         ThreadStore.SetPendingName(newThreadName);
         newThreadName = string.Empty;
+
+        // Fresh conversation: back to "Unsaved" until its first turn autosaves a thread.
+        currentThreadName = null;
+        lastThreadSessionId = null;
 
         // Auto-approve is per-thread; a fresh thread starts back at the gate.
         autoApprove = false;
