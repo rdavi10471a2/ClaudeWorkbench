@@ -182,6 +182,27 @@ public sealed class SolutionIndexStore
             reader.GetInt32(4));
     }
 
+    // Row counts for status/telemetry. These exist so callers can report table sizes without
+    // materialising every row into memory just to call .Count on the list — a real foot-gun for
+    // GetMonitorStatus on large solutions (symbols/references can be hundreds of thousands of rows).
+    public int CountSymbols() => CountRows("symbols");
+
+    public int CountReferences() => CountRows("symbol_references");
+
+    public int CountCallSites() => CountRows("call_sites");
+
+    public int CountRelationships() => CountRows("symbol_relationships");
+
+    private int CountRows(string table)
+    {
+        database.EnsureCreated();
+        using SqliteConnection connection = database.OpenConnection();
+        using SqliteCommand command = connection.CreateCommand();
+        // `table` is a fixed internal literal (never user input), so string-interpolating it is safe.
+        command.CommandText = $"select count(*) from {table};";
+        return Convert.ToInt32(command.ExecuteScalar() ?? 0);
+    }
+
     public IReadOnlyList<IndexedDocumentRow> ListDocuments()
     {
         database.EnsureCreated();
@@ -255,79 +276,64 @@ public sealed class SolutionIndexStore
         return rows;
     }
 
-    public IReadOnlyList<IndexedReferenceRow> ListReferences(string? stableKey = null)
+    public IReadOnlyList<IndexedReferenceRow> ListReferences(string? stableKey = null, string? filePath = null)
     {
         database.EnsureCreated();
         using SqliteConnection connection = database.OpenConnection();
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = string.IsNullOrWhiteSpace(stableKey)
-            ? """
-              select projects.project_path, symbol_references.target_stable_key,
-                     symbol_references.file_path, symbol_references.line, symbol_references.column,
-                     symbol_references.reference_kind, symbol_references.snippet,
-                     coalesce(target_symbols.name, '') as target_name,
-                     coalesce(target_symbols.kind, '') as target_kind,
-                     coalesce(caller_symbols.stable_key, '') as caller_stable_key,
-                     coalesce(caller_symbols.name, '') as caller_name,
-                     coalesce(caller_symbols.kind, '') as caller_kind,
-                     coalesce(documents.content_hash, '') as file_content_hash
-              from symbol_references
-              inner join projects on projects.id = symbol_references.project_id
-              left join symbols as target_symbols
-                     on target_symbols.project_id = symbol_references.project_id
-                    and target_symbols.stable_key = symbol_references.target_stable_key
-              left join documents
-                     on documents.project_id = symbol_references.project_id
-                    and documents.file_path = symbol_references.file_path
-              left join symbols as caller_symbols
-                     on caller_symbols.id = (
-                         select contained_symbols.id
-                         from symbols as contained_symbols
-                         where contained_symbols.project_id = symbol_references.project_id
-                           and contained_symbols.file_path = symbol_references.file_path
-                           and contained_symbols.start_line <= symbol_references.line
-                           and contained_symbols.end_line >= symbol_references.line
-                         order by contained_symbols.start_line desc, contained_symbols.end_line asc
-                         limit 1
-                     )
-              order by symbol_references.file_path, symbol_references.line, symbol_references.column;
-              """
-            : """
-              select projects.project_path, symbol_references.target_stable_key,
-                     symbol_references.file_path, symbol_references.line, symbol_references.column,
-                     symbol_references.reference_kind, symbol_references.snippet,
-                     coalesce(target_symbols.name, '') as target_name,
-                     coalesce(target_symbols.kind, '') as target_kind,
-                     coalesce(caller_symbols.stable_key, '') as caller_stable_key,
-                     coalesce(caller_symbols.name, '') as caller_name,
-                     coalesce(caller_symbols.kind, '') as caller_kind,
-                     coalesce(documents.content_hash, '') as file_content_hash
-              from symbol_references
-              inner join projects on projects.id = symbol_references.project_id
-              left join symbols as target_symbols
-                     on target_symbols.project_id = symbol_references.project_id
-                    and target_symbols.stable_key = symbol_references.target_stable_key
-              left join documents
-                     on documents.project_id = symbol_references.project_id
-                    and documents.file_path = symbol_references.file_path
-              left join symbols as caller_symbols
-                     on caller_symbols.id = (
-                         select contained_symbols.id
-                         from symbols as contained_symbols
-                         where contained_symbols.project_id = symbol_references.project_id
-                           and contained_symbols.file_path = symbol_references.file_path
-                           and contained_symbols.start_line <= symbol_references.line
-                           and contained_symbols.end_line >= symbol_references.line
-                         order by contained_symbols.start_line desc, contained_symbols.end_line asc
-                         limit 1
-                     )
-              where symbol_references.target_stable_key = $stableKey
-              order by symbol_references.file_path, symbol_references.line, symbol_references.column;
-              """;
+
+        // Optional predicates are composed here rather than duplicating the (large) projection/join
+        // block per combination. A file-scoped call is the hot path (find_references_in_file /
+        // get_file_detail): filtering in SQL — instead of reading every reference in the solution and
+        // filtering in memory — is what keeps that off a whole-table scan on large solutions. The
+        // file_path compare is `collate nocase` to mirror the case-insensitive PathEquals the callers
+        // previously used.
+        List<string> predicates = [];
         if (!string.IsNullOrWhiteSpace(stableKey))
         {
+            predicates.Add("symbol_references.target_stable_key = $stableKey");
             command.Parameters.AddWithValue("$stableKey", stableKey);
         }
+
+        if (!string.IsNullOrWhiteSpace(filePath))
+        {
+            predicates.Add("symbol_references.file_path = $filePath collate nocase");
+            command.Parameters.AddWithValue("$filePath", filePath);
+        }
+
+        string whereClause = predicates.Count == 0 ? string.Empty : "where " + string.Join(" and ", predicates);
+        command.CommandText = $"""
+              select projects.project_path, symbol_references.target_stable_key,
+                     symbol_references.file_path, symbol_references.line, symbol_references.column,
+                     symbol_references.reference_kind, symbol_references.snippet,
+                     coalesce(target_symbols.name, '') as target_name,
+                     coalesce(target_symbols.kind, '') as target_kind,
+                     coalesce(caller_symbols.stable_key, '') as caller_stable_key,
+                     coalesce(caller_symbols.name, '') as caller_name,
+                     coalesce(caller_symbols.kind, '') as caller_kind,
+                     coalesce(documents.content_hash, '') as file_content_hash
+              from symbol_references
+              inner join projects on projects.id = symbol_references.project_id
+              left join symbols as target_symbols
+                     on target_symbols.project_id = symbol_references.project_id
+                    and target_symbols.stable_key = symbol_references.target_stable_key
+              left join documents
+                     on documents.project_id = symbol_references.project_id
+                    and documents.file_path = symbol_references.file_path
+              left join symbols as caller_symbols
+                     on caller_symbols.id = (
+                         select contained_symbols.id
+                         from symbols as contained_symbols
+                         where contained_symbols.project_id = symbol_references.project_id
+                           and contained_symbols.file_path = symbol_references.file_path
+                           and contained_symbols.start_line <= symbol_references.line
+                           and contained_symbols.end_line >= symbol_references.line
+                         order by contained_symbols.start_line desc, contained_symbols.end_line asc
+                         limit 1
+                     )
+              {whereClause}
+              order by symbol_references.file_path, symbol_references.line, symbol_references.column;
+              """;
 
         List<IndexedReferenceRow> rows = [];
         using SqliteDataReader reader = command.ExecuteReader();
@@ -681,19 +687,20 @@ public sealed class SolutionIndexStore
         long projectId,
         IReadOnlyList<MSBuildDocumentSnapshot> documents)
     {
-        foreach (MSBuildDocumentSnapshot document in documents)
-        {
-            Execute(connection, transaction, """
-                insert into documents(project_id, stable_key, name, file_path, folders, content_hash)
-                values ($projectId, $stableKey, $name, $filePath, $folders, $contentHash);
-                """,
-                ("$projectId", projectId),
-                ("$stableKey", document.StableDocumentKey),
-                ("$name", document.Name),
-                ("$filePath", document.FilePath),
-                ("$folders", string.Join("/", document.Folders)),
-                ("$contentHash", document.ContentHash));
-        }
+        ExecuteMany(connection, transaction, """
+            insert into documents(project_id, stable_key, name, file_path, folders, content_hash)
+            values ($projectId, $stableKey, $name, $filePath, $folders, $contentHash);
+            """,
+            ["$projectId", "$stableKey", "$name", "$filePath", "$folders", "$contentHash"],
+            documents.Select(document => new object?[]
+            {
+                projectId,
+                document.StableDocumentKey,
+                document.Name,
+                document.FilePath,
+                string.Join("/", document.Folders),
+                document.ContentHash
+            }));
     }
 
     private static void InsertSymbols(
@@ -702,36 +709,40 @@ public sealed class SolutionIndexStore
         long projectId,
         IReadOnlyList<MSBuildSymbolSnapshot> symbols)
     {
-        foreach (MSBuildSymbolSnapshot symbol in symbols)
-        {
-            Execute(connection, transaction, """
-                insert into symbols(project_id, stable_key, name, kind, namespace, containing_type,
-                                    file_path, start_line, end_line, signature, accessibility,
-                                    is_static, is_abstract, is_sealed, is_virtual, is_override,
-                                    method_kind)
-                values ($projectId, $stableKey, $name, $kind, $namespace, $containingType,
-                        $filePath, $startLine, $endLine, $signature, $accessibility,
-                        $isStatic, $isAbstract, $isSealed, $isVirtual, $isOverride,
-                        $methodKind);
-                """,
-                ("$projectId", projectId),
-                ("$stableKey", symbol.StableKey),
-                ("$name", symbol.Name),
-                ("$kind", symbol.Kind),
-                ("$namespace", symbol.Namespace),
-                ("$containingType", symbol.ContainingType),
-                ("$filePath", symbol.FilePath),
-                ("$startLine", symbol.StartLine),
-                ("$endLine", symbol.EndLine),
-                ("$signature", symbol.Signature),
-                ("$accessibility", symbol.Accessibility),
-                ("$isStatic", symbol.IsStatic ? 1 : 0),
-                ("$isAbstract", symbol.IsAbstract ? 1 : 0),
-                ("$isSealed", symbol.IsSealed ? 1 : 0),
-                ("$isVirtual", symbol.IsVirtual ? 1 : 0),
-                ("$isOverride", symbol.IsOverride ? 1 : 0),
-                ("$methodKind", symbol.MethodKind));
-        }
+        ExecuteMany(connection, transaction, """
+            insert into symbols(project_id, stable_key, name, kind, namespace, containing_type,
+                                file_path, start_line, end_line, signature, accessibility,
+                                is_static, is_abstract, is_sealed, is_virtual, is_override,
+                                method_kind)
+            values ($projectId, $stableKey, $name, $kind, $namespace, $containingType,
+                    $filePath, $startLine, $endLine, $signature, $accessibility,
+                    $isStatic, $isAbstract, $isSealed, $isVirtual, $isOverride,
+                    $methodKind);
+            """,
+            ["$projectId", "$stableKey", "$name", "$kind", "$namespace", "$containingType",
+             "$filePath", "$startLine", "$endLine", "$signature", "$accessibility",
+             "$isStatic", "$isAbstract", "$isSealed", "$isVirtual", "$isOverride",
+             "$methodKind"],
+            symbols.Select(symbol => new object?[]
+            {
+                projectId,
+                symbol.StableKey,
+                symbol.Name,
+                symbol.Kind,
+                symbol.Namespace,
+                symbol.ContainingType,
+                symbol.FilePath,
+                symbol.StartLine,
+                symbol.EndLine,
+                symbol.Signature,
+                symbol.Accessibility,
+                symbol.IsStatic ? 1 : 0,
+                symbol.IsAbstract ? 1 : 0,
+                symbol.IsSealed ? 1 : 0,
+                symbol.IsVirtual ? 1 : 0,
+                symbol.IsOverride ? 1 : 0,
+                symbol.MethodKind
+            }));
     }
 
     private static void InsertReferences(
@@ -740,20 +751,21 @@ public sealed class SolutionIndexStore
         long projectId,
         IReadOnlyList<MSBuildReferenceSnapshot> references)
     {
-        foreach (MSBuildReferenceSnapshot reference in references)
-        {
-            Execute(connection, transaction, """
-                insert into symbol_references(project_id, target_stable_key, file_path, line, column, reference_kind, snippet)
-                values ($projectId, $targetStableKey, $filePath, $line, $column, $referenceKind, $snippet);
-                """,
-                ("$projectId", projectId),
-                ("$targetStableKey", reference.TargetStableKey),
-                ("$filePath", reference.FilePath),
-                ("$line", reference.Line),
-                ("$column", reference.Column),
-                ("$referenceKind", reference.ReferenceKind),
-                ("$snippet", reference.Snippet));
-        }
+        ExecuteMany(connection, transaction, """
+            insert into symbol_references(project_id, target_stable_key, file_path, line, column, reference_kind, snippet)
+            values ($projectId, $targetStableKey, $filePath, $line, $column, $referenceKind, $snippet);
+            """,
+            ["$projectId", "$targetStableKey", "$filePath", "$line", "$column", "$referenceKind", "$snippet"],
+            references.Select(reference => new object?[]
+            {
+                projectId,
+                reference.TargetStableKey,
+                reference.FilePath,
+                reference.Line,
+                reference.Column,
+                reference.ReferenceKind,
+                reference.Snippet
+            }));
     }
 
     private static void InsertCallSites(
@@ -763,31 +775,32 @@ public sealed class SolutionIndexStore
         IReadOnlyList<MSBuildSymbolSnapshot> symbols,
         IReadOnlyList<MSBuildReferenceSnapshot> references)
     {
-        foreach (MSBuildReferenceSnapshot reference in references.Where(IsCallReference))
-        {
-            MSBuildSymbolSnapshot? caller = FindContainingSymbol(symbols, reference.FilePath, reference.Line);
-            if (caller is null)
+        IEnumerable<object?[]> rows = references
+            .Where(IsCallReference)
+            .Select(reference => (reference, caller: FindContainingSymbol(symbols, reference.FilePath, reference.Line)))
+            .Where(pair => pair.caller is not null)
+            .Select(pair => new object?[]
             {
-                continue;
-            }
-
-            Execute(connection, transaction, """
-                insert into call_sites(project_id, caller_stable_key, caller_name, caller_kind, target_stable_key,
-                                       file_path, line, column, call_kind, snippet)
-                values ($projectId, $callerStableKey, $callerName, $callerKind, $targetStableKey,
-                        $filePath, $line, $column, $callKind, $snippet);
-                """,
-                ("$projectId", projectId),
-                ("$callerStableKey", caller.StableKey),
-                ("$callerName", caller.Name),
-                ("$callerKind", caller.Kind),
-                ("$targetStableKey", reference.TargetStableKey),
-                ("$filePath", reference.FilePath),
-                ("$line", reference.Line),
-                ("$column", reference.Column),
-                ("$callKind", reference.ReferenceKind),
-                ("$snippet", reference.Snippet));
-        }
+                projectId,
+                pair.caller!.StableKey,
+                pair.caller.Name,
+                pair.caller.Kind,
+                pair.reference.TargetStableKey,
+                pair.reference.FilePath,
+                pair.reference.Line,
+                pair.reference.Column,
+                pair.reference.ReferenceKind,
+                pair.reference.Snippet
+            });
+        ExecuteMany(connection, transaction, """
+            insert into call_sites(project_id, caller_stable_key, caller_name, caller_kind, target_stable_key,
+                                   file_path, line, column, call_kind, snippet)
+            values ($projectId, $callerStableKey, $callerName, $callerKind, $targetStableKey,
+                    $filePath, $line, $column, $callKind, $snippet);
+            """,
+            ["$projectId", "$callerStableKey", "$callerName", "$callerKind", "$targetStableKey",
+             "$filePath", "$line", "$column", "$callKind", "$snippet"],
+            rows);
     }
 
     private static void InsertRelationships(
@@ -798,40 +811,44 @@ public sealed class SolutionIndexStore
         IReadOnlyList<MSBuildReferenceSnapshot> references)
     {
         Dictionary<string, MSBuildSymbolSnapshot> symbolsByKey = symbols.ToDictionary(symbol => symbol.StableKey, StringComparer.Ordinal);
-        foreach (MSBuildReferenceSnapshot reference in references.Where(reference => IsRelationshipKind(reference.ReferenceKind)))
-        {
-            if (!symbolsByKey.TryGetValue(reference.TargetStableKey, out MSBuildSymbolSnapshot? target))
+        IEnumerable<object?[]> rows = references
+            .Where(reference => IsRelationshipKind(reference.ReferenceKind))
+            .Select(reference =>
             {
-                continue;
-            }
-
-            MSBuildSymbolSnapshot? source = FindRelationshipSource(symbols, reference.FilePath, reference.Line);
-            if (source is null)
+                symbolsByKey.TryGetValue(reference.TargetStableKey, out MSBuildSymbolSnapshot? target);
+                MSBuildSymbolSnapshot? source = target is null
+                    ? null
+                    : FindRelationshipSource(symbols, reference.FilePath, reference.Line);
+                return (reference, target, source);
+            })
+            .Where(item => item.target is not null && item.source is not null)
+            .Select(item => new object?[]
             {
-                continue;
-            }
-
-            Execute(connection, transaction, """
-                insert into symbol_relationships(project_id, source_stable_key, source_name, source_kind,
-                                                  target_stable_key, target_name, target_kind, relationship_kind,
-                                                  file_path, line, column, snippet)
-                values ($projectId, $sourceStableKey, $sourceName, $sourceKind,
-                        $targetStableKey, $targetName, $targetKind, $relationshipKind,
-                        $filePath, $line, $column, $snippet);
-                """,
-                ("$projectId", projectId),
-                ("$sourceStableKey", source.StableKey),
-                ("$sourceName", source.Name),
-                ("$sourceKind", source.Kind),
-                ("$targetStableKey", target.StableKey),
-                ("$targetName", target.Name),
-                ("$targetKind", target.Kind),
-                ("$relationshipKind", reference.ReferenceKind),
-                ("$filePath", reference.FilePath),
-                ("$line", reference.Line),
-                ("$column", reference.Column),
-                ("$snippet", reference.Snippet));
-        }
+                projectId,
+                item.source!.StableKey,
+                item.source.Name,
+                item.source.Kind,
+                item.target!.StableKey,
+                item.target.Name,
+                item.target.Kind,
+                item.reference.ReferenceKind,
+                item.reference.FilePath,
+                item.reference.Line,
+                item.reference.Column,
+                item.reference.Snippet
+            });
+        ExecuteMany(connection, transaction, """
+            insert into symbol_relationships(project_id, source_stable_key, source_name, source_kind,
+                                              target_stable_key, target_name, target_kind, relationship_kind,
+                                              file_path, line, column, snippet)
+            values ($projectId, $sourceStableKey, $sourceName, $sourceKind,
+                    $targetStableKey, $targetName, $targetKind, $relationshipKind,
+                    $filePath, $line, $column, $snippet);
+            """,
+            ["$projectId", "$sourceStableKey", "$sourceName", "$sourceKind",
+             "$targetStableKey", "$targetName", "$targetKind", "$relationshipKind",
+             "$filePath", "$line", "$column", "$snippet"],
+            rows);
     }
 
     private static void InsertProjectReferences(
@@ -921,6 +938,42 @@ public sealed class SolutionIndexStore
         }
 
         command.ExecuteNonQuery();
+    }
+
+    // Batch insert: prepare the statement ONCE and reuse it across every row, rebinding parameter
+    // values each iteration. The per-row Execute above builds and re-parses a fresh SqliteCommand for
+    // every row — fine for the handful-of-rows tables, but a real cost for symbols/references/call_sites
+    // on large solutions (thousands of rows = thousands of prepares). Values in each row array must be
+    // in the same order as parameterNames.
+    private static void ExecuteMany(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string commandText,
+        string[] parameterNames,
+        IEnumerable<object?[]> rows)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = commandText;
+        SqliteParameter[] parameters = new SqliteParameter[parameterNames.Length];
+        for (int index = 0; index < parameterNames.Length; index++)
+        {
+            SqliteParameter parameter = command.CreateParameter();
+            parameter.ParameterName = parameterNames[index];
+            command.Parameters.Add(parameter);
+            parameters[index] = parameter;
+        }
+
+        command.Prepare();
+        foreach (object?[] values in rows)
+        {
+            for (int index = 0; index < parameters.Length; index++)
+            {
+                parameters[index].Value = values[index] ?? DBNull.Value;
+            }
+
+            command.ExecuteNonQuery();
+        }
     }
 
     private static object? ExecuteScalar(

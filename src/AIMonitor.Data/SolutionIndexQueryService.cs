@@ -41,11 +41,14 @@ public sealed class SolutionIndexQueryService
         SolutionIndexSummary summary = databaseExists
             ? store.GetSummary()
             : new SolutionIndexSummary(string.Empty, DateTimeOffset.MinValue, 0, 0, 0);
+        // Counts come from SQL count(*), not from materialising every row and calling .Count — the
+        // latter turned a status poll into a full read of five tables. Documents are still read in
+        // full because StaleFileCount must hash each file on disk against its stored content hash.
         IReadOnlyList<IndexedDocumentRow> documents = databaseExists ? store.ListDocuments() : [];
-        IReadOnlyList<IndexedSymbolRow> symbols = databaseExists ? store.ListSymbols() : [];
-        IReadOnlyList<IndexedReferenceRow> references = databaseExists ? store.ListReferences() : [];
-        IReadOnlyList<IndexedCallSiteRow> callSites = databaseExists ? store.ListCallSites() : [];
-        IReadOnlyList<IndexedRelationshipRow> relationships = databaseExists ? store.ListRelationships() : [];
+        int symbolCount = databaseExists ? store.CountSymbols() : 0;
+        int referenceCount = databaseExists ? store.CountReferences() : 0;
+        int callSiteCount = databaseExists ? store.CountCallSites() : 0;
+        int relationshipCount = databaseExists ? store.CountRelationships() : 0;
         bool rebuildRequired = databaseExists && new SolutionIndexDatabase(DatabasePath).IsFullRebuildRequired();
 
         return new MonitorStatusResult
@@ -58,10 +61,10 @@ public sealed class SolutionIndexQueryService
             IndexedAtUtc = summary.IndexedAtUtc,
             ProjectCount = summary.ProjectCount,
             DocumentCount = summary.DocumentCount,
-            SymbolCount = symbols.Count,
-            ReferenceCount = references.Count,
-            CallSiteCount = callSites.Count,
-            RelationshipCount = relationships.Count,
+            SymbolCount = symbolCount,
+            ReferenceCount = referenceCount,
+            CallSiteCount = callSiteCount,
+            RelationshipCount = relationshipCount,
             StaleFileCount = documents.Count(IsStale),
             DiagnosticCount = summary.DiagnosticCount,
             RebuildRequired = rebuildRequired
@@ -302,9 +305,7 @@ public sealed class SolutionIndexQueryService
         }
 
         string fullPath = ResolveWatchedPath(filePath);
-        return store.ListReferences()
-            .Where(row => PathEquals(row.FilePath, fullPath))
-            .ToList();
+        return store.ListReferences(filePath: fullPath);
     }
 
     public IndexedFileDetailResult GetFileDetail(string path)

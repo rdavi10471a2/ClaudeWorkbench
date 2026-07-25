@@ -338,6 +338,10 @@ public sealed class SolutionIndexDatabase
         Execute(connection, transaction, "create index if not exists idx_symbols_project_id on symbols(project_id);");
         Execute(connection, transaction, "create index if not exists idx_symbols_name on symbols(name);");
         Execute(connection, transaction, "create index if not exists idx_symbols_file on symbols(file_path);");
+        // Supports the "containing symbol at this line" lookups: the correlated caller subquery in
+        // ListReferences/ListCallSites and FindContainingSymbol-style scans. Without it those degrade
+        // to a per-row table scan of symbols on large solutions.
+        Execute(connection, transaction, "create index if not exists idx_symbols_project_file_line on symbols(project_id, file_path, start_line, end_line);");
         Execute(connection, transaction, "create index if not exists idx_symbol_references_project_id on symbol_references(project_id);");
         Execute(connection, transaction, "create index if not exists idx_symbol_references_target on symbol_references(target_stable_key);");
         Execute(connection, transaction, "create index if not exists idx_symbol_references_file on symbol_references(file_path);");
