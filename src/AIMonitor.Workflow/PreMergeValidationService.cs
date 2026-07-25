@@ -62,10 +62,12 @@ public sealed class PreMergeValidationService
             };
         }
 
+        // Persistent per-solution validation workspace. Previously a fresh timestamped folder per call, which
+        // carried no obj/bin and so forced a full COLD `dotnet build` every time. Reusing ONE workspace with
+        // its obj/bin lets the build run INCREMENTALLY - only changed projects and their dependents recompile.
         string validationWorkspaceRoot = Path.Combine(
             MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(settings),
-            "validation",
-            $"{DateTimeOffset.UtcNow:yyyyMMddTHHmmssfff}-{Guid.NewGuid():N}"[..42]);
+            "validation-workspace");
         string sourceRoot = settings.WatchedProjectFolder;
         IReadOnlyList<string> excludedRoots = [settings.RuntimeRoot, validationWorkspaceRoot];
         ExternalValidationInputs externalInputs = CollectExternalValidationInputs(sourceRoot, excludedRoots);
@@ -73,60 +75,72 @@ public sealed class PreMergeValidationService
             validationWorkspaceRoot,
             Path.GetRelativePath(externalInputs.CommonRoot, sourceRoot));
         string validationSolutionPath = Path.Combine(validationSourceRoot, Path.GetRelativePath(sourceRoot, settings.WatchedSolutionPath));
-        try
+
+        // One persistent workspace per solution is shared across sessions, so serialize sync+overlay+build:
+        // two concurrent validations must not clobber each other's mirrored tree or obj mid-build.
+        lock (WorkspaceSyncRoot(validationWorkspaceRoot))
         {
-            CopyDirectoryForValidation(sourceRoot, validationSourceRoot, excludedRoots);
-            CopyExternalValidationInputs(externalInputs, validationWorkspaceRoot, excludedRoots);
-
-            foreach (StagedEditRecord overlayRecord in overlayRecords)
+            try
             {
-                string validationCandidatePath = Path.Combine(validationSourceRoot, overlayRecord.RelativePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(validationCandidatePath) ?? validationSourceRoot);
-                File.Copy(overlayRecord.StagedFilePath, validationCandidatePath, overwrite: true);
+                // Incremental mirror (copy-changed + purge-removed) instead of a full recopy, KEEPING the
+                // workspace's obj/bin so the build stays incremental. This also reverts any prior overlay
+                // (dest differs from source -> recopied from source) before the current overlays go on below.
+                MirrorForValidation(sourceRoot, validationSourceRoot, excludedRoots);
+                CopyExternalValidationInputs(externalInputs, validationWorkspaceRoot, excludedRoots);
+
+                foreach (StagedEditRecord overlayRecord in overlayRecords)
+                {
+                    string validationCandidatePath = Path.Combine(validationSourceRoot, overlayRecord.RelativePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(validationCandidatePath) ?? validationSourceRoot);
+                    File.Copy(overlayRecord.StagedFilePath, validationCandidatePath, overwrite: true);
+                    // Stamp the overlaid file NEWER than any prior build output so MSBuild always recompiles its
+                    // project this run - a staged file's own timestamp can be older than the workspace's obj.
+                    File.SetLastWriteTimeUtc(validationCandidatePath, DateTime.UtcNow);
+                }
+
+                ProcessResult build = RunProcess(
+                    "dotnet",
+                    // -nodeReuse:false + UseSharedCompilation=false: don't leave MSBuild worker nodes or
+                    // VBCSCompiler running after validation; they otherwise pin the validation copy's obj/bin
+                    // (and pile up per accept). Belt-and-suspenders with the process-wide env vars set in
+                    // MSBuildWorkspaceLoader. See the file-locking diagnosis.
+                    ["build", validationSolutionPath, "--nologo", "-v:minimal", "-nodeReuse:false", "-p:UseSharedCompilation=false"],
+                    validationWorkspaceRoot,
+                    TimeSpan.FromMinutes(3));
+                string output = string.Join(Environment.NewLine, [build.StandardOutput, build.StandardError]);
+                string[] errorDiagnostics = ExtractBuildErrors(output);
+                bool failed = build.TimedOut || build.ExitCode != 0;
+                if (failed && errorDiagnostics.Length == 0)
+                {
+                    errorDiagnostics = [$"dotnet build exited with code {build.ExitCode} but did not emit parseable error diagnostics."];
+                }
+
+                return new PreMergeValidationResult
+                {
+                    Status = build.TimedOut ? "timeout" : failed ? "failed" : "passed",
+                    IsError = failed,
+                    DiagnosticCount = errorDiagnostics.Length,
+                    Diagnostics = errorDiagnostics,
+                    ValidationWorkspacePath = validationWorkspaceRoot,
+                    Message = build.TimedOut
+                        ? CreateValidationMessage("timed out", overlayRecords.Length)
+                        : failed
+                            ? CreateValidationMessage("failed", overlayRecords.Length)
+                            : CreateValidationMessage("passed", overlayRecords.Length)
+                };
             }
-
-            ProcessResult build = RunProcess(
-                "dotnet",
-                // -nodeReuse:false + UseSharedCompilation=false: don't leave MSBuild worker nodes or
-                // VBCSCompiler running after validation; they otherwise pin the validation copy's obj/bin
-                // (and pile up per accept). Belt-and-suspenders with the process-wide env vars set in
-                // MSBuildWorkspaceLoader. See the file-locking diagnosis.
-                ["build", validationSolutionPath, "--nologo", "-v:minimal", "-nodeReuse:false", "-p:UseSharedCompilation=false"],
-                validationWorkspaceRoot,
-                TimeSpan.FromMinutes(3));
-            string output = string.Join(Environment.NewLine, [build.StandardOutput, build.StandardError]);
-            string[] errorDiagnostics = ExtractBuildErrors(output);
-            bool failed = build.TimedOut || build.ExitCode != 0;
-            if (failed && errorDiagnostics.Length == 0)
+            catch (Exception ex)
             {
-                errorDiagnostics = [$"dotnet build exited with code {build.ExitCode} but did not emit parseable error diagnostics."];
+                return new PreMergeValidationResult
+                {
+                    Status = "failed",
+                    IsError = true,
+                    DiagnosticCount = 1,
+                    Diagnostics = [ex.Message],
+                    ValidationWorkspacePath = validationWorkspaceRoot,
+                    Message = CreateValidationMessage("failed", overlayRecords.Length)
+                };
             }
-
-            return new PreMergeValidationResult
-            {
-                Status = build.TimedOut ? "timeout" : failed ? "failed" : "passed",
-                IsError = failed,
-                DiagnosticCount = errorDiagnostics.Length,
-                Diagnostics = errorDiagnostics,
-                ValidationWorkspacePath = validationWorkspaceRoot,
-                Message = build.TimedOut
-                    ? CreateValidationMessage("timed out", overlayRecords.Length)
-                    : failed
-                        ? CreateValidationMessage("failed", overlayRecords.Length)
-                        : CreateValidationMessage("passed", overlayRecords.Length)
-            };
-        }
-        catch (Exception ex)
-        {
-            return new PreMergeValidationResult
-            {
-                Status = "failed",
-                IsError = true,
-                DiagnosticCount = 1,
-                Diagnostics = [ex.Message],
-                ValidationWorkspacePath = validationWorkspaceRoot,
-                Message = CreateValidationMessage("failed", overlayRecords.Length)
-            };
         }
     }
 
@@ -337,7 +351,7 @@ public sealed class PreMergeValidationService
         foreach (string directory in inputs.Directories)
         {
             string destination = MapValidationPath(inputs.CommonRoot, validationWorkspaceRoot, directory);
-            CopyDirectoryForValidation(directory, destination, [.. excludedRoots, validationWorkspaceRoot]);
+            MirrorForValidation(directory, destination, [.. excludedRoots, validationWorkspaceRoot]);
         }
 
         foreach (string file in inputs.Files)
@@ -370,55 +384,49 @@ public sealed class PreMergeValidationService
         return common;
     }
 
-    private static void CopyDirectoryForValidation(
-        string sourceRoot,
-        string destinationRoot,
-        IReadOnlyList<string> excludedRoots)
+    // Serialize access to a single persistent validation workspace, interned per absolute path: two
+    // validations for the SAME solution must not clobber each other's mirrored tree/obj mid-build, while
+    // different solutions still run in parallel.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> WorkspaceLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static object WorkspaceSyncRoot(string validationWorkspaceRoot)
     {
-        Directory.CreateDirectory(destinationRoot);
-        CopyDirectoryContentsForValidation(sourceRoot, sourceRoot, destinationRoot, excludedRoots);
+        return WorkspaceLocks.GetOrAdd(Path.GetFullPath(validationWorkspaceRoot), _ => new object());
     }
 
-    private static void CopyDirectoryContentsForValidation(
-        string sourceRoot,
-        string currentRoot,
-        string destinationRoot,
-        IReadOnlyList<string> excludedRoots)
+    // Incrementally mirror source -> dest for validation: copy only changed/new files, purge files removed
+    // from source, but PRESERVE the workspace's own build outputs (bin/obj) and never descend into excluded
+    // roots. robocopy /MIR does exactly this by size+timestamp, and reverts a prior overlay (dest differs from
+    // source) by recopying source. Windows-only, consistent with the dotnet subprocess already used here.
+    private static void MirrorForValidation(string sourceRoot, string destinationRoot, IReadOnlyList<string> excludedRoots)
     {
-        foreach (string directoryPath in Directory.EnumerateDirectories(currentRoot))
+        Directory.CreateDirectory(destinationRoot);
+        List<string> arguments =
+        [
+            sourceRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            destinationRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            "/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/R:1", "/W:1",
+            // Exclude build/VCS dirs by NAME (preserves the workspace's own obj/bin from the /MIR purge), plus
+            // the excluded roots by FULL PATH (matches the old IsPathUnderAny/IsSkippedValidationDirectory set).
+            "/XD", ".git", ".vs", "bin", "obj", "node_modules", "packages"
+        ];
+        foreach (string excluded in excludedRoots)
         {
-            if (IsPathUnderAny(directoryPath, excludedRoots))
+            if (!string.IsNullOrWhiteSpace(excluded))
             {
-                continue;
+                arguments.Add(Path.GetFullPath(excluded));
             }
-
-            string directoryName = Path.GetFileName(directoryPath);
-            if (IsSkippedValidationDirectory(directoryName))
-            {
-                continue;
-            }
-
-            string relativePath = Path.GetRelativePath(sourceRoot, directoryPath);
-            Directory.CreateDirectory(Path.Combine(destinationRoot, relativePath));
-            CopyDirectoryContentsForValidation(sourceRoot, directoryPath, destinationRoot, excludedRoots);
         }
 
-        foreach (string filePath in Directory.EnumerateFiles(currentRoot))
+        ProcessResult result = RunProcess("robocopy", arguments, destinationRoot, TimeSpan.FromMinutes(3));
+        // robocopy exit codes 0-7 are success (bit flags: 1=copied, 2=extra purged, 4=mismatch, ...); >=8 is a
+        // real failure. Anything >=8 or a timeout means the mirror is untrustworthy - surface it, don't build.
+        if (result.TimedOut || result.ExitCode >= 8)
         {
-            if (IsPathUnderAny(filePath, excludedRoots))
-            {
-                continue;
-            }
-
-            string relativePath = Path.GetRelativePath(sourceRoot, filePath);
-            if (relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(IsSkippedValidationDirectory))
-            {
-                continue;
-            }
-
-            string destinationPath = Path.Combine(destinationRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? destinationRoot);
-            File.Copy(filePath, destinationPath, overwrite: true);
+            throw new InvalidOperationException(
+                $"Validation workspace mirror failed (robocopy exit {result.ExitCode}): "
+                + string.Join(" ", new[] { result.StandardOutput, result.StandardError }).Trim());
         }
     }
 
