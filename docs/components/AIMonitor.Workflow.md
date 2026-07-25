@@ -13,7 +13,7 @@ It is responsible for:
 - **Edit sessions** — a per-watched-file manifest tracking baseline hashes, refresh state, and the last staged record (`EditSessionManifest`, `WorkflowEditService.Refresh`/`NewFile`).
 - **The Working mirror** — a shadow copy of each watched file under a monitor-owned `working/` root that agents mutate via whole-file, find/replace, and span edits.
 - **Staging** — snapshotting a Working candidate into an immutable `StagedEditRecord` with a recorded hash, superseding any earlier active record for the same file.
-- **Two review gates** — pre-merge full-solution build validation (`PreMergeValidationService`) and the accept-time invariant checks + decision classification (`WorkflowEditService.RecordDecision` → `ReviewDecisionClassifier`).
+- **The pre-merge build** — a real, incremental `dotnet build` of the whole solution with the candidate set overlaid (`PreMergeValidationService`), run at **plan-complete** (working candidates) and again at the **terminal accept** (staged set) — plus the accept-time invariant checks + decision classification (`WorkflowEditService.RecordDecision` → `ReviewDecisionClassifier`).
 - **Hash integrity** — every state transition is gated on SHA-256 hashes so that what an operator accepts is provably identical to what they reviewed (`FileHash`).
 
 The safety invariants of the whole product live in this module; the layers above it (`AIMonitor.Indexing`, `ClaudeWorkbench.Host`, the MCP server) orchestrate it but do not re-implement its guarantees.
@@ -26,32 +26,34 @@ The safety invariants of the whole product live in this module; the layers above
 | `EditSessionManifest` | `EditSessionManifest.cs` | Per-file session state persisted as JSON: baseline hashes, `RequiresRefresh`, `IndexStale`, last staged record, validation results. |
 | `StagedEditRecord` | `StagedEditRecord.cs` | Immutable snapshot metadata: staged file path, `StagedHash`, launch/validation status, decision, supersession chain. |
 | `ReviewDecisionClassifier` | `ReviewDecisionClassifier.cs` | Pure function mapping (operator decision, hashes, new-file flag) → `accepted` / `accepted-normalized` / `rejected` / `dirty-unexpected`. |
-| `PreMergeValidationService` | `PreMergeValidationService.cs` | GATE 1. Re-hashes staged files, copies source into an isolated validation workspace, and runs a full-solution `dotnet build`. |
-| `CandidateEditValidator` | `CandidateEditValidator.cs` | Roslyn syntax check + overlay compilation of the candidate against the observed source tree (runs on every Working write). |
+| `PreMergeValidationService` | `PreMergeValidationService.cs` | The real pre-merge build. Mirrors source into a PERSISTENT per-solution `validation-workspace` incrementally (`robocopy /MIR`, keeping `obj`/`bin`), overlays the candidate set, runs a real `dotnet build`. `Validate` (staged/accept) + `ValidateWorkingOverlay` (plan-complete) share a private core; `ValidateStagedOverlay` is a no-build hash-readiness check. Per-solution lock serializes the shared workspace. |
+| `CandidateEditValidator` | `CandidateEditValidator.cs` | C# **syntax-only** check of a candidate (`ValidateSyntaxIfCSharp`), run on every Working write. The old in-memory flat overlay compile was removed — a single flat compilation couldn't model per-project refs/SDKs/`.razor`; the real build is the compile gate. |
 | `WorkflowEditPaths` | `WorkflowEditPaths.cs` | Computes all workspace paths (working, metadata, staged files/records, history, retrieval backups) and enforces the watched-root containment check. |
 | `FileHash` | `FileHash.cs` | SHA-256 over raw file bytes (`Compute`) and over line-ending-normalized text (`ComputeText`/`ComputeNormalizedFile`). |
 | `WorkflowRunRecorder` | `WorkflowRunRecorder.cs` | Append-only run log + telemetry for compare/stage runs (atomic write pattern). |
 | `FileLedgerWriter` | `FileLedgerWriter.cs` | Appends a per-file Markdown ledger entry on each compare snapshot. |
 | `EditSessionStatus` / `CompareSnapshotResult` / `StagedEditSummary` / `ReplaceTextResult` / `TextSpanResult` | (respective files) | DTOs returned to callers. |
-| `EditSyntaxValidationResult` / `EditOverlayValidationResult` | `EditValidationResult.cs` | Candidate validation results embedded in the manifest. |
+| `EditSyntaxValidationResult` / `EditSyntaxDiagnostic` | `EditValidationResult.cs` | Per-candidate **syntax** validation result embedded in the manifest (`LastSyntaxValidation`). |
 
 ## The governed edit lifecycle
 
 An edit begins with a session. For an existing file, `Refresh(path)` copies the watched file into the Working mirror, records `OriginalHash` (raw) and `OriginalNormalizedHash` (line-ending-normalized), and writes a timestamped **retrieval backup** of the source. For a not-yet-existing target, `NewFile(path)` seeds an empty Working file and marks the manifest `IsNewFile`. `EnsureEditableSession` picks the right one automatically, but refuses if the manifest is `RequiresRefresh` (set after a prior accept).
 
-Agents then mutate the Working candidate through `SubmitFile` / `WriteWorkingCandidate` (whole file), `ReplaceText` (find/replace with match-count and hash guards), or `ReplaceSpan` / `FindTextSpan` (line/column spans). Every write funnels through `WriteCandidateContent`, which **rejects C# syntax errors up front** (`CandidateEditValidator.ValidateSyntaxIfCSharp`), preserves the file's dominant line ending, optionally runs an overlay compile, and bumps `OperationCount`.
+Agents then mutate the Working candidate through `SubmitFile` / `WriteWorkingCandidate` (whole file), `ReplaceText` (find/replace with match-count and hash guards), or `ReplaceSpan` / `FindTextSpan` (line/column spans). Every write funnels through `WriteCandidateContent`, which **rejects C# syntax errors up front** (`CandidateEditValidator.ValidateSyntaxIfCSharp`), preserves the file's dominant line ending, writes the candidate **atomically** (temp + `File.Move`), and bumps `OperationCount`. There is no per-write semantic/overlay compile — semantic validation is the real build at plan-complete and accept.
 
-`Stage` freezes the candidate: it verifies the watched file is unchanged since refresh (raw hash equals `OriginalHash`), copies the Working file to an immutable per-record path, records `StagedHash` and `StagedNormalizedHash`, and **supersedes** any earlier active record for the same watched file. From there the two gates run — GATE 1 (`PreMergeValidationService.Validate`, a full-solution build in an isolated workspace) and, only after a review launch has been recorded, GATE 2 inside `RecordDecision`, which re-checks every invariant before writing the decision.
+`Stage` freezes the candidate: it verifies the watched file is unchanged since refresh (raw hash equals `OriginalHash`), copies the Working file to an immutable per-record path, records `StagedHash` and `StagedNormalizedHash`, and **supersedes** any earlier active record for the same watched file. The real compile gate runs the pre-merge `dotnet build` against the shared persistent workspace **twice**: once at **plan-complete** over the session's *working* candidates (`WorkflowEditService.ValidatePlannedOverlayBuild` → `PreMergeValidationService.ValidateWorkingOverlay`, so the agent self-corrects before the operator reviews), and again at the **terminal accept** over the *staged* set (`PreMergeValidationService.Validate`), before `RecordDecision` re-checks every invariant. The review-launch readiness check (`ValidateStagedOverlay`) is hash-only and does **not** build.
 
 ```mermaid
 flowchart TD
     A[refresh_file / new_file] --> B[EnsureEditableSession]
     B --> C[Working candidate in monitor-owned mirror]
     C --> D[edit: SubmitFile / ReplaceText / ReplaceSpan]
-    D -->|syntax + overlay validate| C
-    D --> E[Stage: immutable snapshot + StagedHash]
+    D -->|syntax-only validate| C
+    D --> P[plan-complete: real dotnet build over working candidates]
+    P -->|errors -> fix & re-run| D
+    P --> E[Stage: immutable snapshot + StagedHash]
     E -->|supersede prior active record| E
-    E --> F[GATE 1: PreMergeValidationService - full-solution build]
+    E --> F[terminal accept: real dotnet build over staged set - PreMergeValidationService]
     F -->|RecordPreMergeValidation| G[Review launch recorded - RecordDiffLaunch]
     G --> H{operator accept?}
     H -->|accept| I[GATE 2: RecordDecision - re-check all invariants]
@@ -65,7 +67,7 @@ flowchart TD
 
 ### (a) Stage a candidate — hash and supersede
 
-`WorkflowEditService.Stage` (lines 641-717). Note that the immutable `StagedHash` is computed from the **copied staged file**, not the live Working file, so it is stable for the record's lifetime.
+`WorkflowEditService.Stage` (lines 690-771). Note that the immutable `StagedHash` is computed from the **copied staged file**, not the live Working file, so it is stable for the record's lifetime.
 
 ```mermaid
 sequenceDiagram
@@ -89,7 +91,7 @@ sequenceDiagram
 
 ### (b) RecordDecision("accepted") — the enforced invariants, in order
 
-`WorkflowEditService.RecordDecision` (lines 833-931). The order below is exact; each check throws `InvalidOperationException` (or `FileNotFoundException`) and aborts before any state is written.
+`WorkflowEditService.RecordDecision` (lines 902-966); the ordered guards live in the shared `EnsureAcceptanceGuardsPass` (also used by `RecordSessionApproval` for per-file approval in multi-file sessions). The order below is exact; each check throws `InvalidOperationException` (or `FileNotFoundException`) and aborts before any state is written.
 
 ```mermaid
 sequenceDiagram
@@ -135,8 +137,8 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 - Edit-session manifests and staged-record persistence (their JSON shape and file layout under the workspace root).
 - Hashing of watched / working / staged files (`FileHash`) and all hash-equality gating.
 - Staging, supersession, and the accept/reject decision path.
-- GATE 1 pre-merge full-solution build validation and GATE 2 accept-time invariant enforcement + classification.
-- Per-candidate Roslyn syntax + overlay compilation feedback.
+- The pre-merge `dotnet build` (persistent incremental workspace) at plan-complete and accept, plus accept-time invariant enforcement + classification.
+- Per-candidate Roslyn **syntax** feedback (semantic validation is the real pre-merge build, not a per-edit overlay).
 - Compare snapshots, run/telemetry logs, and per-file ledgers.
 
 **Does Not Own:**
@@ -149,9 +151,8 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 ## Gotchas & invariants
 
 - **Staged records are held in memory, guarded by one lock.** `WorkspaceManager` builds one `WorkflowEditService` per workspace and hands it to every caller (the agent stages through the in-process MCP surface; the operator accepts through the Blazor host — same instance). The records are the in-memory source of truth under a single `recordSync` lock, lazily rehydrated from disk on first use, and every read returns an isolated clone so a caller mutating a returned record cannot reach into the cache. This replaced the old read-file/mutate/write-file-per-step design, which threw "the record .json is being used by another process" when an accept overlapped a supersede or list. Individual record operations are now safe; a *compound* read-modify-write spanning separate `GetStagedRecord` → mutate → `SaveStagedRecord` calls is still last-writer-wins.
-- **`CandidateEditValidator` cache is not thread-safe.** `overlayValidationCache` is a plain `Dictionary` mutated without synchronization inside a service that is shared across callers; concurrent overlay validations can corrupt it or throw.
-- **Staged records persist atomically; the manifest still does not.** `SaveStagedRecord` writes a sibling `<record>.json.writing` temp and `File.Move`-swaps it (the temp name is not `*.json`, so rehydration ignores it), and a torn file left by an older build is skipped on rehydrate rather than making the record blink out of `ListStagedRecords`. `SaveManifest` is still a bare `File.WriteAllText`, so a crash mid-write can leave a truncated/corrupt JSON manifest — the `WorkflowRunRecorder.WriteAllTextAtomically` pattern has not been applied there.
-- **Residual WinMerge language.** Review is now in-app (`EngineReviewWorkflow` records `RecordDiffLaunch(..., "in-app merge review")`), but user-facing messages still say "snapshotted for WinMerge review" (`Stage`, `StagedEditRecord.Message`) and "ready for WinMerge review" (`PreMergeValidationService`). Cosmetic, but misleading.
+- **The pre-merge validation workspace is shared and serialized.** `PreMergeValidationService` reuses one persistent `validation-workspace` per solution so builds are incremental; a process-wide static per-solution lock (`WorkspaceLocks`) serializes every build against it (plan-complete + accept), and each build full-mirrors source first (reverting any prior overlay) before applying the current candidates — so concurrent sessions cannot contaminate each other. `RuntimeRoot` is per host instance, so different instances use different workspaces.
+- **All persisted state now writes atomically.** `SaveStagedRecord`, `SaveManifest`, and `WriteCandidateFile` (the working candidate) each write a sibling `.writing` temp then `File.Move`-swap it (the temp name is not `*.json`, so rehydration/overlay scans ignore it). This guards a lock-free reader (e.g. `GetStatus`) or an out-of-sequence agent from ever seeing a truncated manifest/working file, and a crash mid-write leaves the prior version intact.
 - **Accept requires the merge to already be applied.** GATE 2's `dirty-unexpected` guard compares the *watched* file to the staged hash. `RecordDecision` does not itself write the watched file (except deleting a blank new-file target on reject); the caller must have applied the merge first, or an "accepted" decision will be rejected.
 - **`RequiresRefresh` latch after accept.** An accepted/normalized-accepted decision sets `RequiresRefresh = true` and `IndexStale = true` on the manifest. Further edits/staging are blocked (`EnsureSessionCanEdit`) until `Refresh` is re-run, guaranteeing hashes and saved line endings reflect the new watched source.
 - **New-file staging refuses if the target has appeared.** `Stage` throws if `IsNewFile` but the watched path now exists; `PrepareReviewFileForLaunch`/`RecordDecision` also guard against a non-blank pre-existing target.
@@ -160,19 +161,20 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 
 ## Where to start reading
 
-1. `WorkflowEditService.RecordDecision` (lines 833-931) — the accept-time gate; read this first, it is the crux.
-2. `WorkflowEditService.Stage` (641-717) — how an immutable hashed record is created and prior records superseded.
+1. `WorkflowEditService.RecordDecision` (lines 902-966) + `EnsureAcceptanceGuardsPass` — the accept-time gate; read this first, it is the crux.
+2. `WorkflowEditService.Stage` (690-771) — how an immutable hashed record is created and prior records superseded.
 3. `ReviewDecisionClassifier.Classify` — the pure decision function the whole safety story reduces to.
-4. `WorkflowEditService.WriteCandidateContent` (509-542) — the common path for every Working edit (syntax gate, line-ending preservation, overlay validation).
-5. `PreMergeValidationService.Validate` — GATE 1's isolated-workspace full-solution build.
+4. `WorkflowEditService.WriteCandidateContent` (507-537) — the common path for every Working edit (syntax gate, atomic BOM-preserving write, line-ending preservation).
+5. `PreMergeValidationService` — the persistent incremental workspace + the shared `Validate`/`ValidateWorkingOverlay` real-build core; `ValidatePlannedOverlayBuild` (in `WorkflowEditService`) is the plan-complete entry.
 6. `EditSessionManifest` / `StagedEditRecord` — the persisted state shapes everything else reads and writes.
 
 ## Tests
 
 `tests/unit/AIMonitor.Workflow.Tests` — **46 tests**. Highlights:
 
-- `WorkflowEditServiceSafetyTests` (23) — the bulk of the invariant coverage: staging, supersession, hash-mismatch rejection, the accept-gate ordering, and `dirty-unexpected` handling.
+- `WorkflowEditServiceSafetyTests` — the bulk of the invariant coverage: staging, supersession, hash-mismatch rejection, the accept-gate ordering, `dirty-unexpected` handling, and that per-edit validation is syntax-only (a semantically-wrong-but-parseable edit is written, not blocked — the real build catches it).
 - `WorkflowEditServiceRecordStoreTests` (4) — the in-memory staged-record store: durability across a service restart, the atomic temp-then-rename write, clone isolation, and the concurrent accept/supersede that used to throw a file-sharing violation.
 - `ReviewDecisionClassifierTests` (3) — the classifier's four outcomes.
-- `ClaudeSmokes*` suites — end-to-end "smoke" flows exercising authoring, materialization, the Phase 2 `dirty-unexpected` path, Phase 6 validation, and WinForms source-map handling over fixtures under `samples/`.
+- `ClaudeSmokes*` suites — authoring, materialization, the Phase 2 `dirty-unexpected` path, Phase 6 (per-edit is syntax-only: syntax errors rejected, semantic errors pass through to the build), and WinForms source-map handling over `samples/` fixtures.
 - `RoslynEditService*Tests` — outline/source-map behavior for the Roslyn edit helpers.
+- The real plan-complete build is exercised end-to-end against the samples (Calculator, Blazor, and cross-DLL `MixedTfmSample`) by `AgentLoopSampleWorkflowTests` in `tests/integration/AIMonitor.Integration.Tests` — each scenario emits reviewable code + workflow output files.

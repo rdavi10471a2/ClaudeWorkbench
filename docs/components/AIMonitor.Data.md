@@ -2,7 +2,7 @@
 
 > SQLite persistence for the Roslyn-extracted solution index — the "downstream truth" written after an accepted edit and read back to answer structural queries.
 
-**Project:** `src/AIMonitor.Data/AIMonitor.Data.csproj` · **Depends on:** `AIMonitor.Core` (settings/paths, `StableIdentifier`), `AIMonitor.MSBuild` (snapshot DTOs + `MSBuildWorkspaceLoader`), `Microsoft.Data.Sqlite` 10.0.8 · **Depended on by:** `AIMonitor.Indexing`, `AIMonitor.McpServer`, `ClaudeWorkbench.Host`, plus the integration/unit test suites (the language corpus fixtures live in `tests/unit/AIMonitor.Data.Tests/Corpus`)
+**Project:** `src/AIMonitor.Data/AIMonitor.Data.csproj` · **Depends on:** `AIMonitor.Core` (settings/paths, `StableIdentifier`), `AIMonitor.MSBuild` (snapshot DTOs + `MSBuildWorkspaceLoader`), `Microsoft.Data.Sqlite` 10.0.8 · `Microsoft.Data.Sqlite` 10.0.8, and a direct top-level pin of `SQLitePCLRaw.bundle_e_sqlite3` 2.1.12 (see the security note) · **Depended on by:** `AIMonitor.Indexing`, `AIMonitor.McpServer`, `ClaudeWorkbench.Host`, plus the integration/unit test suites (the language corpus fixtures live in `tests/unit/AIMonitor.Data.Tests/Corpus`)
 
 ## Purpose
 
@@ -180,7 +180,7 @@ sequenceDiagram
 - **Full-table reads:** `GetMonitorStatus`/`QueryIndex` load *entire* documents+symbols (+references/call-sites/relationships) tables into memory and filter/scope in LINQ, not SQL. `SymbolCount`/`ReferenceCount` etc. are `List.Count` of materialized rows, not `SELECT count(*)`.
 - **Staleness re-hashes files on disk:** `GetMonitorStatus.StaleFileCount` and `GetFileDetail` open and SHA-256 every indexed file on each call — I/O-bound and unbounded by index size.
 - **Correlated subquery:** the no-filter `ListReferences` resolves each row's containing "caller" symbol via a correlated `select ... limit 1` per reference row — a foot-gun on large reference tables.
-- **`SQLitePCLRaw` advisory (NU1903):** `Microsoft.Data.Sqlite` 10.0.8 pulls in `SQLitePCLRaw.bundle_e_sqlite3` 2.1.11, which carries a transitive advisory. **Not exploitable here** — the app creates a local database it fully controls and every query uses bound parameters (no attacker-controlled SQL string, no untrusted DB file). Remediation if flagged: pin `SQLitePCLRaw.bundle_e_sqlite3 >= 3.50.3`.
+- **`SQLitePCLRaw` advisory (NU1903) — already remediated.** `Microsoft.Data.Sqlite` 10.0.8 drags in the transitive native `SQLitePCLRaw.lib.e_sqlite3` 2.1.11 (GHSA-2m69-gcr7-jv3q). It is fixed by a direct top-level pin of `SQLitePCLRaw.bundle_e_sqlite3` **2.1.12** (`AIMonitor.Data.csproj:14`), whose patched native lib wins over the transitive resolution and flows to dependents. (Even unpatched it was not exploitable here — local DB the app fully controls, all queries bound-parameterized.)
 
 ## Where to start reading
 

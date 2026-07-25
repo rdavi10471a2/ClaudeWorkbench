@@ -74,16 +74,16 @@ Watched-source mutations require an active session whose declared plan includes 
 
 - `start_monitor_session(filesPlanned)` requires a non-empty planned list and persists an `AIMonitorSessionEditPlan` of `AIMonitorSessionPlannedFile` entries (each resolved + given an owning MSBuild project) to session JSON under the workspace `workflow/sessions` root.
 - `EnsurePlannedMutationAllowed(sessionId, sourceFilePath)` is invoked at the top of every mutating tool (`submit_file`, `replace_text_in_file`, `replace_span_in_file`, all Roslyn edits, `stage_candidate_for_review`). A missing/blank `sessionId` throws (`Session edit scope is required…`); otherwise `RequireSessionEditPlan` loads the plan and `EnsurePlannedFile` throws `Source file is not in the session edit plan` unless the target's full path matches a planned file.
-- **Planned-session deferral:** while not all planned Working files exist yet, `ShouldDeferPlannedOverlayValidation` suppresses per-edit overlay validation; `ShouldDeferBuildValidationUntilAccept` and `BuildPlannedSessionDecisionOptions` defer the expensive build/index pass until every planned file has reached a terminal decision, then drive a `PostAcceptIndexRefreshPlan`.
+- **Plan-complete build + deferred index refresh:** there is no per-edit overlay validation — each candidate write is syntax-only. Once every planned file has a submitted candidate, `complete_edit_plan(sessionId)` runs the REAL pre-merge `dotnet build` once over the whole working set (`WorkflowEditService.ValidatePlannedOverlayBuild`) and echoes the actual compiler error lines back so the agent fixes and re-runs before staging. Separately, `BuildPlannedSessionDecisionOptions` (at `record_diff_decision`) defers the expensive post-accept index rebuild via a `PostAcceptIndexRefreshPlan` until every planned file reaches a terminal decision. (Dead plumbing: `ShouldDeferPlannedOverlayValidation` / the `deferOverlayValidation` → `validateOverlay` chain is now a no-op — the receiving parameter is ignored end-to-end; scheduled for removal. `ShouldDeferBuildValidationUntilAccept` does not exist.)
 
 ## Owns / Does Not Own
 
 **Owns:**
-- The MCP tool surface (~60 methods) and its snake_case naming.
+- The MCP tool surface (64 `[McpServerTool]` tools across seven partial-class files — including the semantic Roslyn edit tools `submit_symbol` / `add_method` / `add_symbol` / `add_field` / `add_property` / `add_constructor` / `add_nested_type` / `remove_symbol` / `add_using` / `remove_using` / `set_type_partial`, and the gated `download_url`) and its snake_case naming.
 - `WorkspaceManager` (current watched workspace + per-workspace engine service graph, runtime switching).
 - `AIMonitorMcpRuntimeState` (activity/shutdown) and the tool-call telemetry line.
 - The MCP tool DTO contracts (`AIMonitorToolContracts.cs`).
-- Session-scope enforcement (`EnsurePlannedMutationAllowed`), path resolution into the watched root, self-check guardrails, and the tool manifest / staging guide text.
+- Session-scope enforcement (`EnsurePlannedMutationAllowed`), path resolution into the watched root, self-check guardrails, and the tool manifest. The staging guide + sidecar governance card are authored in `AgentGuidance.cs` (single source, served at `GET /guidance/staging` and `/guidance/card`); `ComposeStagingGuide` just delegates to `AgentGuidance.StagingGuide`. The card includes the session-splitting rule (one interdependent change → one session).
 - The stdio console entrypoint (`Program.cs`).
 
 **Does not own:**

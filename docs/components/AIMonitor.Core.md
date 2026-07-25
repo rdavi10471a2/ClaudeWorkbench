@@ -10,8 +10,8 @@ AIMonitor.Core answers one question for every other module: *"Given a repository
 ## Key types
 | Type | File | Role |
 |---|---|---|
-| `MonitorSettings` | `MonitorSettings.cs` | Immutable `record` holding the resolved `RepositoryRoot`, `RuntimeRoot`, `WatchedSolutionPath`, and `WinMergeCandidatePaths`. `Create(...)` factory normalizes all inputs to absolute paths. |
-| `MonitorSettingsLoader` | `MonitorSettingsLoader.cs` | Static loader/saver. `Load` parses the `Monitor` JSON element into `MonitorSettings`; `SaveLocal` writes a local settings file, preserving existing WinMerge paths. |
+| `MonitorSettings` | `MonitorSettings.cs` | Immutable `record` holding the resolved `RepositoryRoot`, `RuntimeRoot`, and `WatchedSolutionPath`. `Create(repositoryRoot, watchedSolutionPath, runtimeRoot?)` normalizes all inputs to absolute paths. |
+| `MonitorSettingsLoader` | `MonitorSettingsLoader.cs` | Static loader/saver. `Load` parses the `Monitor` JSON element (`WatchedSolutionPath` + `RuntimeRoot`) into `MonitorSettings`; `SaveLocal` writes the two-field local settings file. |
 | `MonitorWorkspacePaths` | `MonitorWorkspacePaths.cs` | Static helper that derives the per-solution workspace root under `RuntimeRoot/watched-solutions/` and sanitizes path segments. |
 | `WatchedSolutionInfo` | `WatchedSolutionInfo.cs` | Immutable `record` describing the watched solution — path, project folder, and whether the `.sln` exists on disk. `FromSettings` probes the filesystem. |
 | `StableIdentifier` | `StableIdentifier.cs` | Static utility producing deterministic `prefix:hex` identifiers from normalized parts via SHA-256. |
@@ -20,7 +20,7 @@ AIMonitor.Core answers one question for every other module: *"Given a repository
 ## How it works
 `MonitorSettings` is the central value object; everything else either produces it, consumes it, or derives values from it. All path normalization funnels through `Path.GetFullPath` / `Path.Combine`, so downstream modules never see a relative path.
 
-`MonitorSettingsLoader.Load` reads the `Monitor` object from `config/appsettings.json` (override path allowed). It requires `WatchedSolutionPath`, defaults `RuntimeRoot` to the literal `"runtime"` when absent, and resolves both relative to the correct base directory before handing off to `MonitorSettings.Create`. `WinMergeCandidatePaths` are read from the settings file, or — when absent — seeded from `config/appsettings.template.json`.
+`MonitorSettingsLoader.Load` reads the `Monitor` object from `config/appsettings.json` (override path allowed). It requires `WatchedSolutionPath`, defaults `RuntimeRoot` to the literal `"runtime"` when absent, and resolves both relative to the correct base directory before handing off to `MonitorSettings.Create`. The `Monitor` section carries only `WatchedSolutionPath` and `RuntimeRoot`.
 
 `MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot` combines a filesystem-safe solution name with a short SHA-256 fingerprint of the *absolute, upper-cased* solution path, giving a collision-resistant per-solution folder under `RuntimeRoot`. `StableIdentifier.FromParts` applies the same normalization philosophy to produce stable IDs for arbitrary key parts.
 
@@ -35,11 +35,9 @@ flowchart TD
     end
 
     appsettings[("config/appsettings.json\n(Monitor section)")]
-    template[("config/appsettings.template.json")]
     disk[("Filesystem: .sln, runtime/")]
 
     appsettings -->|parse Monitor| loader
-    template -.->|seed WinMerge paths when absent| loader
     loader -->|Create resolves absolute paths| settings
     settings --> wsinfo
     settings --> paths
@@ -69,8 +67,7 @@ sequenceDiagram
     Loader->>FS: read + JsonDocument.Parse
     Loader->>Loader: RequireString WatchedSolutionPath
     Loader->>Loader: RuntimeRoot ?? "runtime"
-    Loader->>Loader: WinMergeCandidatePaths (file, else template)
-    Loader->>Settings: Create(repoRoot, watchedSln, runtimeRoot, winMerge)
+    Loader->>Settings: Create(repoRoot, watchedSln, runtimeRoot)
     Settings->>Settings: GetFullPath each; RuntimeRoot ?? repoRoot/runtime
     Settings-->>Caller: MonitorSettings (all paths absolute)
 ```
@@ -103,19 +100,18 @@ sequenceDiagram
 - **Workspace identity is case-insensitive but content-addressable.** `GetPathIdentity` upper-cases and full-paths before hashing (6 bytes → 12 hex chars), so `C:\Foo\App.sln` and `c:\foo\APP.SLN` map to the same folder; different real paths get distinct suffixes.
 - **`StableIdentifier.FromParts` normalizes aggressively:** backslashes → forward slashes, trim, upper-case, joined with the ASCII unit-separator ``, SHA-256, first 12 bytes → 24 hex chars, prefixed `prefix:`. Nulls are treated as empty strings.
 - **`GetSafePathSegment` never returns empty:** invalid filename chars become `_`, leading/trailing dots and spaces are trimmed, and an otherwise-blank result falls back to `"solution"`.
-- **`SaveLocal` preserves existing WinMerge candidate paths** — it reads them back from the existing file (or the template when the file is absent) rather than dropping them, so saving does not clobber operator-tuned diff-tool paths.
 - **`WatchedSolutionInfo.FromSettings` performs a live `File.Exists` probe** — its `SolutionExists` is a point-in-time snapshot, not a watched/reactive value.
 
 ## Where to start reading
 1. `MonitorSettings.cs` — the value object and its `Create` normalization; understand this first.
-2. `MonitorSettingsLoader.cs` — `Load` and `ResolvePath`/`ResolveSettingsPath` show the base-directory anchoring rules; `SaveLocal` shows the round-trip and WinMerge preservation.
+2. `MonitorSettingsLoader.cs` — `Load` and `ResolvePath`/`ResolveSettingsPath` show the base-directory anchoring rules; `SaveLocal` shows the two-field round-trip.
 3. `MonitorWorkspacePaths.cs` — `GetWatchedSolutionWorkspaceRoot` + `GetPathIdentity` for the per-solution folder convention.
 4. `StableIdentifier.cs` — the shared hashing/normalization pattern reused across the engine.
 
 ## Tests
 Covered by the unit project **`tests/unit/AIMonitor.Core.Tests`**:
 - `MonitorSettingsTests.cs` — `Create` normalization / default runtime-root behavior.
-- `MonitorSettingsLoaderTests.cs` — load/save, path anchoring, WinMerge template seeding.
+- `MonitorSettingsLoaderTests.cs` — load/save round-trip and path anchoring.
 - `MonitorWorkspacePathsTests.cs` — safe-segment sanitization and workspace-root derivation.
 
 Also exercised indirectly through `tests/integration/AIMonitor.Integration.Tests` and the smoke test projects, which reference AIMonitor.Core to construct settings for end-to-end scenarios.
