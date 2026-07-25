@@ -162,8 +162,6 @@ public sealed class MSBuildWorkspaceLoader
                 return;
             }
 
-            registrationAttempted = true;
-
             // Set BEFORE the first workspace/BuildHost is created so every child MSBuild inherits it.
             // Persistent build-server children (MSBuild worker nodes, the dotnet MSBuild server, and
             // VBCSCompiler for shared compilation) otherwise outlive an index/build and keep OS file
@@ -185,6 +183,12 @@ public sealed class MSBuildWorkspaceLoader
             {
                 MSBuildLocator.RegisterDefaults();
             }
+
+            // Set the "done" flag only AFTER registration succeeds. If RegisterDefaults throws, the exception
+            // surfaces to the caller and the flag stays false, so a later call can retry — rather than
+            // short-circuiting here and proceeding with MSBuild unregistered (confusing downstream failures).
+            // The env-var + job-object steps above are idempotent, so re-running them on a retry is harmless.
+            registrationAttempted = true;
         }
     }
 
@@ -709,7 +713,11 @@ internal sealed record MSBuildEvaluatedProject(
         }
         finally
         {
+            // ProjectCollection is IDisposable (it owns a logging service and registers global build event
+            // handlers); UnloadAllProjects() alone releases the loaded projects but not the collection's own
+            // resources. Dispose it too, or these leak per project evaluation and compound across reindexes.
             collection.UnloadAllProjects();
+            collection.Dispose();
         }
     }
 

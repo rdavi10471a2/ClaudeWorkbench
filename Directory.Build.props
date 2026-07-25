@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    Dead-code / code-quality analysis for the ClaudeWorkbench build.
+
+    .NET's built-in Roslyn analyzers (EnableNETAnalyzers, on by default) plus the IDE code-style
+    analyzers carry the dead-code rules (unused private members/fields, unused parameters, unused
+    values). Those IDE00xx rules normally run only in the editor; EnforceCodeStyleInBuild makes them
+    run at BUILD time too, so `dotnet build` surfaces dead code. Severities are set in .editorconfig.
+
+    Deliberately WARNINGS, not errors: there is no TreatWarningsAsErrors, so this reports dead code
+    without failing the build or the inner loop. Turn a specific rule into an error in .editorconfig
+    once the existing warnings are burned down, if desired.
+
+    Watched-solution fixtures under samples/ opt out via their own Directory.Build.props - they are
+    intentionally minimal and are built/validated by the agent-loop tests and the app itself.
+  -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+</Project>

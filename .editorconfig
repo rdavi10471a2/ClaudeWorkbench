@@ -1,0 +1,16 @@
+root = true
+
+[*.cs]
+# --- Dead-code analysis (run at build via EnforceCodeStyleInBuild in Directory.Build.props) ---
+# These are the meaningful "this code is never used" rules. Kept at WARNING (no TreatWarningsAsErrors),
+# so the build reports dead code without failing.
+
+# Unused private members / methods / types
+dotnet_diagnostic.IDE0051.severity = warning
+# Private field written but never read
+dotnet_diagnostic.IDE0052.severity = warning
+# Value assigned but never used
+dotnet_diagnostic.IDE0059.severity = warning
+# Unused parameters - "all" so dead public/internal params are caught too (not just private)
+dotnet_diagnostic.IDE0060.severity = warning
+dotnet_code_quality_unused_parameters = all

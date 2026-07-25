@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    Watched-solution FIXTURES opt out of the engine's dead-code / code-style analysis. They are
+    deliberately minimal sample solutions (some carry intentionally-unused members for edit scenarios),
+    and they are built/validated by the agent-loop tests and the app itself - not part of the product
+    build's quality gate. This resets EnforceCodeStyleInBuild inherited from the repo-root Directory.Build.props.
+  -->
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

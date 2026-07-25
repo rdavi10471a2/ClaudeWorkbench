@@ -430,9 +430,9 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         }
         else
         {
-            // The record already carries a verdict — staging stamped the candidate's overlay
-            // COMPILE result. Prepare the review file, but do not run GATE 1 over the top:
-            // its readiness check would report "staged-file-ready" and erase the compile error.
+            // The record already carries a pre-merge verdict (from a prior validation or a force-approve).
+            // Per-edit staging no longer stamps any compile result, so do NOT run the GATE-1 readiness check
+            // over the top: it would report "staged-file-ready" and erase the recorded verdict.
             workspace.EditService.PrepareReviewFileForLaunch(record.StagedRecordId);
         }
 

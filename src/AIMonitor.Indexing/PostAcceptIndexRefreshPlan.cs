@@ -8,7 +8,8 @@ public sealed class PostAcceptIndexRefreshPlan
 
     // Engine-derived refresh closure beyond the edited project: the OTHER projects that hold inbound references
     // (symbol_references / call_sites / symbol_relationships) into a symbol declared in the edited project. When this
-    // is non-empty, a project-scoped refresh would cascade-delete those inbound rows, so the engine falls back to a
-    // full rebuild (MVP). Populated at refresh time from the index so it is inspectable in indexRefresh telemetry.
+    // is non-empty, a project-scoped refresh would leave those inbound rows pointing at now-stale target keys
+    // (schema v2 has no cross-symbol cascade), so the engine falls back to a full rebuild (MVP). Populated at
+    // refresh time from the index so it is inspectable in indexRefresh telemetry.
     public IReadOnlyList<string> InboundReferencingProjects { get; set; } = [];
 }

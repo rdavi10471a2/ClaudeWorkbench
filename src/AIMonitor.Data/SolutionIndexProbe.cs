@@ -61,7 +61,8 @@ public sealed class SolutionIndexProbe
     }
 
     // Number of reference rows that cross a project boundary: the referencing project differs from the project that
-    // declares the target symbol. This is exactly the population endangered by a project-scoped delete + ON DELETE CASCADE.
+    // declares the target symbol. This is the population a project-scoped refresh must keep consistent — their target
+    // keys can go stale when the referenced project is re-indexed in isolation (schema v2 has no cross-symbol cascade).
     public int GetCrossProjectReferenceCount()
     {
         using (SqliteConnection connection = database.OpenConnection())
@@ -81,7 +82,9 @@ public sealed class SolutionIndexProbe
 
     // The inbound-reference closure for a project: the distinct OTHER projects that reference (via references,
     // call sites, or relationships) a symbol declared in the given project. A project-scoped refresh of `projectPath`
-    // must also refresh these (or fall back to a full rebuild), or their inbound rows are cascade-deleted and lost.
+    // must also refresh these (or fall back to a full rebuild): a scoped re-index re-inserts only the refreshed
+    // project's own rows, so other projects' inbound rows would keep pointing at now-STALE target keys. (Schema v2 has
+    // no ON DELETE CASCADE across symbols — the risk is stale keys, not cascade deletion.)
     public IReadOnlyList<string> GetInboundDependentProjectPaths(string projectPath)
     {
         List<string> projects = new();
@@ -107,7 +110,11 @@ public sealed class SolutionIndexProbe
                     join symbols s on s.stable_key = edges.key
                     join projects sp on sp.id = s.project_id
                     join projects rp on rp.id = edges.project_id
-                    where sp.project_path = $p
+                    -- Case-insensitive: the caller passes a Path.GetFullPath-normalized path, but project_path is
+                    -- stored as MSBuild reported it. A casing mismatch under SQLite's default (case-sensitive) '='
+                    -- would silently return empty and bypass the scoped->full-rebuild guard, running a scoped refresh
+                    -- when a full rebuild was required. (Two Windows paths differing only by case are the same file.)
+                    where sp.project_path = $p collate nocase
                       and edges.project_id <> s.project_id;
                     """;
                 command.Parameters.AddWithValue("$p", projectPath);

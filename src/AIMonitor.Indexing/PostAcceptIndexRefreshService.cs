@@ -36,11 +36,13 @@ public sealed class PostAcceptIndexRefreshService
         string[] inboundDependents = [];
         if (useFileRefresh)
         {
-            // HIGH #1: a project-scoped refresh of A deletes A's symbol rows; the cross-project ON DELETE CASCADE then
-            // drops other projects' inbound reference/call-site/relationship rows that target A's symbols, and the
-            // re-insert only restores A's own rows — silently orphaning inbound cross-project references. If any other
-            // project holds inbound references into A, fall back to a full solution rebuild (MVP) so those rows are
-            // re-extracted. (Optimization for later: refresh only the closure = A union its inbound dependents.)
+            // HIGH #1: a project-scoped refresh of A re-inserts only A's own rows. Other projects' inbound
+            // reference/call-site/relationship rows that target A's symbols are then left pointing at target keys
+            // that may now be STALE (A's symbols can change stable_key on re-index) — silently orphaning inbound
+            // cross-project references. (Schema v2 removed the cross-symbol ON DELETE CASCADE, so this is a
+            // stale-key hazard, not a cascade-delete one.) If any other project holds inbound references into A,
+            // fall back to a full solution rebuild (MVP). (Optimization for later: refresh only the closure = A
+            // union its inbound dependents.)
             SolutionIndexProbe probe = new(new SolutionIndexDatabase(databasePath));
             inboundDependents = probe.GetInboundDependentProjectPaths(projectPaths[0]).ToArray();
             if (inboundDependents.Length > 0)

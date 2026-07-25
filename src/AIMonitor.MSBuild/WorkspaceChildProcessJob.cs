@@ -51,8 +51,12 @@ internal static class WorkspaceChildProcessJob
     private static bool attempted;
 
     // Held for the process lifetime on purpose. Never dispose it — closing the handle is precisely
-    // what kills the members, so it must stay open until the process itself goes away.
+    // what kills the members, so it must stay open until the process itself goes away. The dead-code
+    // analyzer (IDE0052) flags it as "never read": that is a deliberate lifetime hold of the Job Object
+    // handle, not dead state — do NOT remove it.
+#pragma warning disable IDE0052 // Intentional: retain the job handle for the process lifetime.
     private static IntPtr jobHandle;
+#pragma warning restore IDE0052
 
     public static void EnsureCurrentProcessIsJobbed()
     {
