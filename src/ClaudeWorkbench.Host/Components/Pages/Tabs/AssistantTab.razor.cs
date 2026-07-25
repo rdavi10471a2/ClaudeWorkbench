@@ -1,6 +1,7 @@
 using System.Text;
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
+using ClaudeWorkbench.Host.Threads;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
@@ -22,6 +23,12 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     [Inject]
     private DialogService Dialogs { get; set; } = default!;
 
+    [Inject]
+    private ThreadService ThreadStore { get; set; } = default!;
+
+    [Inject]
+    private NotificationService Notifications { get; set; } = default!;
+
     private ElementReference assistantLayout;
     private ElementReference chatComposer;
     private ElementReference assistantSplitter;
@@ -33,6 +40,8 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private IJSObjectReference? attachModule;
     private DotNetObjectReference<AssistantTab>? selfRef;
     private string draft = string.Empty;
+    // Optional name the operator types before New Thread; applied to the next conversation's thread.
+    private string newThreadName = string.Empty;
     private bool autoApprove;
     private bool usageOpen;
     private bool wasWorking;
@@ -55,7 +64,18 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     protected override void OnInitialized()
     {
         Session.Changed += OnChanged;
+        ThreadStore.ThreadCreated += OnThreadCreated;
     }
+
+    // A new conversation was autosaved as a thread — toast its name (no dialog).
+    private void OnThreadCreated(ThreadRecord thread) => InvokeAsync(() =>
+        Notifications.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Info,
+            Summary = "Thread saved",
+            Detail = $"Saving thread as “{thread.Name}”",
+            Duration = 4000,
+        }));
 
     private void OnChanged()
     {
@@ -244,6 +264,11 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             return;
         }
 
+        // Name the upcoming conversation (optional): the pending name is applied to the thread that
+        // autosaves on its first turn. Blank => the default discussion-YYYY-MM-DD-N name.
+        ThreadStore.SetPendingName(newThreadName);
+        newThreadName = string.Empty;
+
         // Auto-approve is per-thread; a fresh thread starts back at the gate.
         autoApprove = false;
         await Session.NewThreadAsync();
@@ -378,6 +403,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     public void Dispose()
     {
         Session.Changed -= OnChanged;
+        ThreadStore.ThreadCreated -= OnThreadCreated;
     }
 
     public async ValueTask DisposeAsync()

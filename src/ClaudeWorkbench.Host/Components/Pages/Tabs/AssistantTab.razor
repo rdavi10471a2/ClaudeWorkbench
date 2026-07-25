@@ -150,11 +150,18 @@
                             </div>
                         }
                     </div>
+                    <input class="new-thread-name"
+                           @bind="newThreadName"
+                           @bind:event="oninput"
+                           placeholder="Name next thread (optional)"
+                           title="Optional name for your next conversation; applied when it's saved. Leave blank for the default."
+                           disabled="@(Session.Status.Working)"
+                           data-testid="new-thread-name" />
                     <RadzenButton Icon="add_comment"
                                   Text="New Thread"
                                   ButtonStyle="ButtonStyle.Light"
                                   Size="ButtonSize.Small"
-                                  Title="Start a fresh conversation (resets auto-approve)"
+                                  Title="Start a fresh conversation (resets auto-approve). Uses the name typed at left, or a default."
                                   Click="@NewThreadAsync"
                                   Disabled="@(Session.Status.Working)" />
                     <RadzenButton Icon="content_copy"

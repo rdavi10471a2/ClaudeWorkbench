@@ -805,3 +805,17 @@
         width: auto !important;
     }
 }
+
+/* Optional name for the next conversation, beside the New Thread button. */
+.new-thread-name {
+    max-width: 12rem;
+    padding: 4px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #333);
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.new-thread-name:disabled { opacity: 0.5; }

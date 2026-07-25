@@ -25,9 +25,20 @@ public sealed class ThreadService
         this.currentSession = currentSession;
     }
 
+    // A name the operator typed at New Thread, applied to the NEXT thread that autosaves (consumed
+    // once). Null => the deterministic default name is used.
+    private string? pendingName;
+
+    // Raised when a NEW thread is autosaved (not on touch/resume), so the UI can toast its name.
+    public event Action<ThreadRecord>? ThreadCreated;
+
+    // Set the name for the next conversation, from New Thread. Blank clears it (default name applies).
+    public void SetPendingName(string? name) =>
+        pendingName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+
     // Called when the sidecar reports a live/resumed session id. If a thread already owns this
-    // session (either autosaved earlier or a resumed one), touch it; otherwise persist a new
-    // thread with the deterministic default name. Idempotent.
+    // session (either autosaved earlier or a resumed one), touch it; otherwise persist a new thread
+    // using the operator's pending name (if any) or the deterministic default. Idempotent.
     public ThreadRecord EnsureThreadForSession(string sessionId)
     {
         ThreadRepository repository = Repository();
@@ -39,9 +50,12 @@ public sealed class ThreadService
         }
 
         DateTime now = DateTime.UtcNow;
+        string? pending = pendingName;
+        pendingName = null;
+        string name = string.IsNullOrWhiteSpace(pending) ? repository.NextDefaultName(now) : pending;
         ThreadRecord created = new(
             Guid.NewGuid().ToString("N"),
-            repository.NextDefaultName(now),
+            name,
             Description: null,
             UserNote: null,
             SessionId: sessionId,
@@ -51,6 +65,7 @@ public sealed class ThreadService
             UpdatedAtUtc: now,
             AcceptedEditRefs: []);
         repository.Upsert(created);
+        ThreadCreated?.Invoke(created);
         return created;
     }
 

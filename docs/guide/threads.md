@@ -38,8 +38,12 @@ description/note, **Abandon/Restore**, and **hard-delete**.
 ## Autosave — no save button
 
 Persistence is automatic. When the sidecar reports a session id (the new `session_started` event on
-the agent's first message), the host creates the thread row; later turns just touch it. Nothing is
-lost if the app closes mid-conversation.
+the agent's first message), the host creates the thread row and shows a toast — *"Saving thread as
+…"* — no dialog. Later turns just touch it; nothing is lost if the app closes mid-conversation.
+
+To name a conversation up front, type a name in the **"Name next thread"** field beside **New
+Thread** before you start; it's applied to that conversation when it saves (blank → the default
+`discussion-YYYY-MM-DD-N`). You can always rename later from the thread's details pane.
 
 ## Where it is stored
 

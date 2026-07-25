@@ -50,6 +50,35 @@ public sealed class ThreadServiceTests : IDisposable
     }
 
     [Fact]
+    public void Pending_name_is_applied_to_the_next_thread_then_consumed()
+    {
+        (ThreadService service, _, _, _) = NewService();
+        service.SetPendingName("my refactor");
+
+        ThreadRecord first = service.EnsureThreadForSession("sess-1");
+        Assert.Equal("my refactor", first.Name);
+
+        // Consumed once: the next new thread falls back to the default name.
+        ThreadRecord second = service.EnsureThreadForSession("sess-2");
+        Assert.StartsWith("discussion-", second.Name);
+    }
+
+    [Fact]
+    public void Thread_created_event_fires_only_when_a_new_thread_is_created()
+    {
+        (ThreadService service, _, _, _) = NewService();
+        int count = 0;
+        ThreadRecord? last = null;
+        service.ThreadCreated += thread => { count++; last = thread; };
+
+        service.EnsureThreadForSession("sess-1"); // creates -> fires
+        service.EnsureThreadForSession("sess-1"); // touch -> no fire
+
+        Assert.Equal(1, count);
+        Assert.Equal("sess-1", last!.SessionId);
+    }
+
+    [Fact]
     public void Active_thread_is_the_one_matching_the_live_session()
     {
         (ThreadService service, FakeCurrentSession session, _, _) = NewService();
