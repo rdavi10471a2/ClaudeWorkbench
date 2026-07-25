@@ -65,10 +65,10 @@
                 @if (Working)
                 {
                     <RadzenButton Icon="stop"
-                                  Text="Stop"
+                                  Text="Interrupt"
                                   Class="chat-send-button"
-                                  ButtonStyle="ButtonStyle.Danger"
-                                  Title="Interrupt the current turn"
+                                  ButtonStyle="ButtonStyle.Warning"
+                                  Title="Interrupt the current turn. The conversation is kept — your next prompt resumes it. (Use New Thread to end the conversation.)"
                                   Click="@StopAsync" />
                 }
                 else

@@ -83,6 +83,8 @@ dotnet test  ClaudeWorkbench.slnx
 
 A recorded example — the multi-function-session prompt driven end to end through the real UI (edit → build → Merge Review → accept): **[docs/media/agent-loop-multi-function.mp4](docs/media/agent-loop-multi-function.mp4)**.
 
+The live driver runs the **real** agent, so it isn't fully deterministic — it can raise an unscripted prompt (e.g. an `AskUserQuestion` elicitation) and pause waiting on you. Monitor a live run rather than leaving it unattended.
+
 ## Deploy — publish a live install
 
 ```powershell
@@ -100,7 +102,18 @@ C:\ClaudeWorkBenchLive\
   runtime\    one folder per workspace, created on first Start
 ```
 
-The **Launcher** runs several watched solutions side by side — each with its own port, runtime, and index, held in one Windows Job Object so an instance's host + sidecar + browser start and die together. The install is location-independent, and re-running the script updates it **without touching `runtime\`** (workspaces and indexes survive). Full detail: **[docs/guide/deploying.md](docs/guide/deploying.md)**.
+Re-running the script updates an install **without touching `runtime\`** (workspaces and indexes survive).
+
+### The Launcher
+
+`ClaudeWorkbench.Launcher` is a small WinForms control panel — the normal way to start the app. It runs **several watched solutions side by side, one window per solution, each fully isolated** (its own port, runtime, and index).
+
+- **Workspaces** — **Add workspace** (pick a `.sln`/`.slnx`; it gets a free port and an isolated runtime), **Start** (launches that workspace's host + sidecar and opens a browser window), **Stop**, **Remove**, and **Settings** (host exe path, sidecar folder, runtime folder, browser choice).
+- **Sign in (Claude / GitHub)** — buttons that open a terminal on each CLI's own login flow (Sign in / Check status / Sign out). Sign-in is **machine-wide, not per-workspace**: Claude caches under `~/.claude` (the sidecar inherits it) and `gh` under the user profile (the Git panel uses it), so it's once per machine until the credential expires. Force a fresh login by signing out first.
+- **Lifecycle — kill one, kill all.** Closing the browser window stops that instance's backend on its own; **Stop** (or closing the Launcher) terminates that instance's host + sidecar + browser together; and a Launcher crash can't orphan a backend, because every instance is held in a **Windows Job Object** that dies with the Launcher.
+- **Isolation & placement.** Each instance provisions into `<workbench>\runtime\<workspace>` — its index, config, and `host.log` live there; the folder is claimed on first Start and kept, so renaming a workspace never strands its index. The Launcher exe can live anywhere (shortcut, Release build, publish folder); it finds the workbench from the host exe in Settings, so instances land next to the code they watch. Browser choice: Chrome/Edge open a clean `--app` window that closes as a unit; a custom Chromium path is supported; the default browser just opens a tab.
+
+Full detail: **[docs/guide/deploying.md](docs/guide/deploying.md)**.
 
 ## Repository layout
 

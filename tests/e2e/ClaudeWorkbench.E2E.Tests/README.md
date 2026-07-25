@@ -12,6 +12,17 @@ session and the app can hang. **While a driver run is going, don't touch the app
 the Chromium window Playwright opened. (A future option is a dedicated, isolated Host instance on its own
 port + workspace so the two never share state.)
 
+## The live driver is not fully deterministic — monitor it
+
+`LivePromptDriverTests` drives the **real Claude agent**, so it can do things the script does not
+anticipate. The driver only handles the expected flow (auto-approve on, auto-click **Allow**, Accept /
+Reject in Merge Review). The agent can still raise a prompt the driver does **not** script — most often an
+**`AskUserQuestion` elicitation** (the questions dialog), but also a tool the auto-Allow doesn't cover, or
+simply a different edit path than the prompt implies. When that happens the run **pauses waiting on a human
+and will eventually time out** if left alone. So a live run is **watch-and-be-ready**, not fire-and-forget:
+stay at the keyboard, and answer/approve in the Chromium window if it stops. This is inherent to driving a
+real agent — only the deterministic-replay approach (canned turns) would remove it.
+
 ## Self-gating
 
 Every test **skips** (never fails) when its prerequisites are missing, so `dotnet test ClaudeWorkbench.slnx`

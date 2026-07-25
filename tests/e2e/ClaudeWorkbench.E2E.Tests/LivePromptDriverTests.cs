@@ -16,6 +16,11 @@ namespace ClaudeWorkbench.E2E.Tests;
 // The driver types/submits/accepts; it does not switch workspaces or sign you in. Don't touch the app
 // yourself while it runs (single-operator - see README).
 //
+// NOT FULLY DETERMINISTIC: this drives the REAL agent, so it can raise a prompt the driver does not
+// script - most often an AskUserQuestion elicitation (the questions dialog), or a tool the auto-Allow
+// doesn't cover - and then pause waiting on a human (eventually timing out). Monitor a live run and
+// answer/approve in the browser if it stops.
+//
 //   $env:AIMW_E2E_LIVE="1"; $env:AIMW_E2E_HEADED="1"; $env:AIMW_E2E_SLOWMO="500"
 //   $env:AIMW_E2E_ACCEPT="1"; $env:AIMW_E2E_VIDEO="1"
 //   dotnet test tests/e2e/ClaudeWorkbench.E2E.Tests --filter "FullyQualifiedName~LivePromptDriver"
