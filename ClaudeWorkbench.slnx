@@ -8,6 +8,7 @@
   <Project Path="src/AIMonitor.Workflow/AIMonitor.Workflow.csproj" />
   <Project Path="src/ClaudeWorkbench.Host/ClaudeWorkbench.Host.csproj" />
   <Project Path="src/ClaudeWorkbench.Launcher/ClaudeWorkbench.Launcher.csproj" />
+  <Project Path="tests/e2e/ClaudeWorkbench.E2E.Tests/ClaudeWorkbench.E2E.Tests.csproj" />
   <Project Path="tests/integration/AIMonitor.Integration.Tests/AIMonitor.Integration.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Core.Tests/AIMonitor.Core.Tests.csproj" />
   <Project Path="tests/unit/AIMonitor.Data.Tests/AIMonitor.Data.Tests.csproj" />

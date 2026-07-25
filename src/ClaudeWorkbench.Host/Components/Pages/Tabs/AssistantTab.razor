@@ -14,7 +14,7 @@
                 </button>
                 <label class="composer-check"
                        title="Auto-approve claude-workbench edits for THIS thread only. The merge review still gates every write to watched source; New Thread turns it back off.">
-                    <input type="checkbox" @bind="autoApprove" />
+                    <input type="checkbox" data-testid="auto-approve" @bind="autoApprove" />
                     <span>Auto-approve</span>
                 </label>
             </div>
@@ -46,7 +46,7 @@
             }
             @if (Working)
             {
-                <div class="assistant-turn-activity" role="status" aria-live="polite">
+                <div class="assistant-turn-activity" data-testid="turn-activity" role="status" aria-live="polite">
                     <span class="assistant-turn-spinner" aria-hidden="true"></span>
                     <div class="assistant-turn-copy">
                         <strong>Thinking...</strong>
@@ -56,6 +56,7 @@
             }
             <textarea @ref="chatInput"
                       class="chat-composer-input"
+                      data-testid="composer-input"
                       @bind="draft"
                       @bind:event="oninput"
                       placeholder="Inspect the current workspace..."></textarea>
@@ -172,7 +173,7 @@
                                   Disabled="@(!HasTranscript)" />
                 </div>
             </div>
-            <div class="transcript-view" @ref="transcriptView" role="log" aria-label="Chat history">
+            <div class="transcript-view" @ref="transcriptView" data-testid="transcript" role="log" aria-label="Chat history">
                 <div class="transcript-body">
                     @if (!HasTranscript)
                     {
@@ -201,12 +202,12 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="message-body">@entry.Text</div>
+                                    <div class="message-body" data-testid="message-user">@entry.Text</div>
                                 </div>
                             }
                             else if (entry.Kind == TranscriptKind.ToolCall)
                             {
-                                <div class="tool-line">
+                                <div class="tool-line" data-testid="tool-call">
                                     <span>&#8594; @entry.Text</span>
                                     @if (!string.IsNullOrEmpty(entry.Time))
                                     {
@@ -226,7 +227,7 @@
                                             }
                                         </div>
                                     </div>
-                                    <div class="message-body">
+                                    <div class="message-body" data-testid="message-assistant">
                                         <a href="@LocalFileUrl(entry.Text)" target="_blank" rel="noopener" title="@entry.Text">
                                             <img class="chat-inline-image" src="@LocalFileUrl(entry.Text)" alt="@System.IO.Path.GetFileName(entry.Text)" />
                                         </a>
@@ -249,7 +250,7 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="message-body">@RenderMarkdown(entry.Text)</div>
+                                    <div class="message-body" data-testid="message-assistant">@RenderMarkdown(entry.Text)</div>
                                 </div>
                             }
                         }

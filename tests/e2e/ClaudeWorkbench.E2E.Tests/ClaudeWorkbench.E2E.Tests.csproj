@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Human-visible, black-box browser tests. These drive the REAL Blazor Assistant UI through a real
+    browser (Playwright), so you can watch the governed loop render. They reference no product code on
+    purpose - the whole point is to exercise what a human actually sees.
+
+    They are SELF-GATING: every test skips (does not fail) when its prerequisites are absent - the Host
+    is not reachable at the base URL, or the Playwright browser binaries are not installed. That keeps
+    `dotnet test ClaudeWorkbench.slnx` green on a machine that has neither, while still running (and
+    being watchable) the moment the Host is up. See README.md for the two setup steps.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
