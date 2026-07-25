@@ -1,0 +1,135 @@
+@using ClaudeWorkbench.Host.Threads
+
+<div class="threads-tab" data-testid="threads-tab">
+    <div class="threads-toolbar">
+        <div class="threads-title">
+            <RadzenIcon Icon="forum" />
+            <span>Conversation threads</span>
+            <span class="threads-count">@threads.Count</span>
+        </div>
+        <div class="threads-toolbar-actions">
+            <RadzenButton Icon="add" Text="New stub" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                          Disabled="@busy" Click="@NewStub"
+                          Title="Create a planned, pre-conversation thread stub (a named intent with no session yet)."
+                          data-testid="thread-new-stub" />
+            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                          Disabled="@busy" Click="@Refresh" data-testid="threads-refresh" />
+        </div>
+    </div>
+
+    @if (message is not null)
+    {
+        <div class="threads-message @(messageIsError ? "error" : "ok")" data-testid="threads-message">@message</div>
+    }
+
+    @if (threads.Count == 0)
+    {
+        <div class="threads-empty">
+            No threads yet. Start a conversation in the Workbench tab — it is saved automatically as a thread,
+            or create a planned stub above to name an intent before you begin.
+        </div>
+    }
+    else
+    {
+        <div class="threads-list">
+            @foreach (ThreadRecord thread in threads)
+            {
+                bool active = IsActive(thread);
+                <div class="thread-row" data-testid="thread-row">
+                    <div class="thread-main">
+                        <div class="thread-name-line">
+                            <span class="thread-status @StatusCss(thread, active)">@StatusLabel(thread, active)</span>
+                            @if (thread.Kind == ThreadKind.Task)
+                            {
+                                <span class="thread-kind task" title="Promoted to a task">task</span>
+                            }
+                            @if (editingNameId == thread.ThreadId)
+                            {
+                                <input class="thread-name-input" @bind="editingName" @bind:event="oninput"
+                                       @onkeydown="@(e => { if (e.Key == "Enter") SaveRename(thread); })" />
+                                <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall"
+                                              Click="@(() => SaveRename(thread))" Title="Save name" />
+                                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                              Click="@CancelRename" Title="Cancel" />
+                            }
+                            else
+                            {
+                                <span class="thread-name" data-testid="thread-name">@thread.Name</span>
+                                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                              Click="@(() => BeginRename(thread))" Title="Rename" data-testid="thread-rename" />
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(thread.Description))
+                        {
+                            <div class="thread-description">@thread.Description</div>
+                        }
+                        <div class="thread-meta">
+                            <span title="Created">@thread.CreatedAtUtc.ToLocalTime().ToString("g")</span>
+                            @if (!thread.IsStub)
+                            {
+                                <span class="thread-session" title="SDK session id">session @thread.SessionId![..8]</span>
+                            }
+                            @if (thread.AcceptedEditRefs.Count > 0)
+                            {
+                                <span class="thread-edits" title="Accepted edits this thread produced">@thread.AcceptedEditRefs.Count edit(s)</span>
+                            }
+                        </div>
+                        @if (editingDetailsId == thread.ThreadId)
+                        {
+                            <div class="thread-details-editor">
+                                <label>Description</label>
+                                <input class="thread-detail-input" @bind="editingDescription" placeholder="What this thread is about" />
+                                <label>Note</label>
+                                <textarea class="thread-note-input" @bind="editingNote" rows="2" placeholder="Freeform notes"></textarea>
+                                <div class="thread-details-actions">
+                                    <RadzenButton Icon="check" Text="Save" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall"
+                                                  Click="@(() => SaveDetails(thread))" />
+                                    <RadzenButton Icon="close" Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                                  Click="@CancelDetails" />
+                                </div>
+                            </div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(thread.UserNote))
+                        {
+                            <div class="thread-note">@thread.UserNote</div>
+                        }
+                    </div>
+
+                    <div class="thread-actions">
+                        @if (!thread.IsStub)
+                        {
+                            <RadzenButton Icon="play_arrow" Text="Resume" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                                          Disabled="@(busy || active || TurnActive)"
+                                          Click="@(() => ResumeAsync(thread))"
+                                          Title="@(active ? "This is the live thread." : TurnActive ? "Finish the current turn first." : "Reopen and continue this conversation.")"
+                                          data-testid="thread-resume" />
+                        }
+                        <RadzenButton Icon="@(thread.Kind == ThreadKind.Task ? "chat" : "task_alt")"
+                                      Text="@(thread.Kind == ThreadKind.Task ? "To discussion" : "To task")"
+                                      ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                      Disabled="@busy" Click="@(() => TogglePromotion(thread))"
+                                      Title="Promote/demote between discussion and task" data-testid="thread-promote" />
+                        <RadzenButton Icon="notes" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                      Disabled="@busy" Click="@(() => BeginDetails(thread))"
+                                      Title="Edit description / note" data-testid="thread-details" />
+                        @if (thread.Status == ThreadStatus.Abandoned)
+                        {
+                            <RadzenButton Icon="unarchive" Text="Restore" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                          Disabled="@busy" Click="@(() => SetStatus(thread, ThreadStatus.Archived))"
+                                          Title="Restore to Archived" data-testid="thread-restore" />
+                        }
+                        else
+                        {
+                            <RadzenButton Icon="block" Text="Abandon" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                          Disabled="@busy" Click="@(() => SetStatus(thread, ThreadStatus.Abandoned))"
+                                          Title="Mark abandoned (discarded, but kept until deleted)" data-testid="thread-abandon" />
+                        }
+                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                      Disabled="@busy" Click="@(() => DeleteAsync(thread))"
+                                      Title="Hard delete — removes the thread AND its transcript from disk" data-testid="thread-delete" />
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

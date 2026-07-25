@@ -21,6 +21,9 @@ public partial class MergeReviewDialog : IAsyncDisposable
     [Inject]
     private Services.SidecarClient Sidecar { get; set; } = default!;
 
+    [Inject]
+    private Threads.ThreadService Threads { get; set; } = default!;
+
     [Parameter]
     public string? SessionId { get; set; }
 
@@ -43,6 +46,12 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // file defers the expensive index rebuild (files still write; the index goes stale until the
     // next reindex). Disabled/ignored on non-terminal files, which never reindex anyway.
     private bool rebuildIndexOnAccept = true;
+
+    // Provenance sync points (per the thread model): accumulate the records approved in THIS edit
+    // session, commit them to the live thread on the TERMINAL accept (the write actually happens),
+    // and discard them on a REJECT (which voids the EDIT session only — writing nothing — while the
+    // thread log itself persists). A New Thread starts a fresh session, so nothing carries over.
+    private readonly HashSet<string> acceptedRecordIds = new(StringComparer.Ordinal);
 
     private bool UseSessionFlow => !string.IsNullOrWhiteSpace(SessionId);
     private string DialogTitle => UseSessionFlow ? "Merge Review" : "Merge Review Queue";
@@ -113,19 +122,31 @@ public partial class MergeReviewDialog : IAsyncDisposable
         }
 
         actionBusy = true;
-        building = IsTerminalAccept();
+        bool terminal = IsTerminalAccept();
+        building = terminal;
         try
         {
             await InvokeAsync(StateHasChanged);
             string recordId = selectedRecordId;
             // rebuildIndexOnAccept is honored only on the terminal accept; the workflow ignores it
             // on non-terminal files (they never reindex). Pass the terminal-guarded value.
-            bool rebuildIndex = !IsTerminalAccept() || rebuildIndexOnAccept;
+            bool rebuildIndex = !terminal || rebuildIndexOnAccept;
             ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex));
             errorMessage = result.Message;
             if (result.OverrideAvailable)
             {
                 overrideOfferedForRecordId = recordId;
+            }
+            else
+            {
+                // Accepted (or approved, on a non-terminal file). Record it for the live thread's
+                // provenance; the terminal accept is where the whole set was written, so commit then.
+                acceptedRecordIds.Add(recordId);
+                if (terminal)
+                {
+                    Threads.RecordAcceptedEdits(acceptedRecordIds);
+                    acceptedRecordIds.Clear();
+                }
             }
 
             // A non-terminal accept has written nothing (ADR-0005) and carries no summary; the
@@ -167,6 +188,12 @@ public partial class MergeReviewDialog : IAsyncDisposable
             string recordId = selectedRecordId;
             ReviewActionResult result = await Task.Run(() => Review.Reject(recordId));
             errorMessage = result.Message;
+
+            // A reject voids the EDIT session only — the staged changes; nothing reaches source.
+            // The THREAD LOG (conversation row + transcript) is untouched; it was autosaved on
+            // session_started and does not depend on the edit outcome. So we drop just the
+            // edit-provenance accumulator (which edits landed = none), not any thread state.
+            acceptedRecordIds.Clear();
 
             // Same contract as accept: telling the agent is best-effort transport, but a
             // failure must be visible. A rejection the agent never hears about leaves it
