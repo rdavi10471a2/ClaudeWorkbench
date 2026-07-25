@@ -45,6 +45,4 @@ public sealed class EditSessionManifest
     public int OperationCount { get; set; }
 
     public EditSyntaxValidationResult? LastSyntaxValidation { get; set; }
-
-    public EditOverlayValidationResult? LastOverlayValidation { get; set; }
 }

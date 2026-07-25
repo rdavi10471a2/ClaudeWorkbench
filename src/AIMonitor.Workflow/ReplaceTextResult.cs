@@ -31,6 +31,4 @@ public sealed class ReplaceTextResult
     public string ManifestJson { get; set; } = string.Empty;
 
     public EditSyntaxValidationResult? SyntaxValidation { get; set; }
-
-    public EditOverlayValidationResult? OverlayValidation { get; set; }
 }

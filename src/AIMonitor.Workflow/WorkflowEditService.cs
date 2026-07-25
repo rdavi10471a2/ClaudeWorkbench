@@ -32,7 +32,7 @@ public sealed class WorkflowEditService
     public WorkflowEditService(MonitorSettings settings)
     {
         paths = new WorkflowEditPaths(settings);
-        editValidator = new CandidateEditValidator(settings);
+        editValidator = new CandidateEditValidator();
     }
 
     public EditSessionStatus Refresh(string watchedFilePath)
@@ -150,8 +150,7 @@ public sealed class WorkflowEditService
             LastStagedRecordPath = manifest?.LastStagedRecordPath ?? string.Empty,
             ManifestJson = manifest?.ManifestJson ?? string.Empty,
             OperationCount = manifest?.OperationCount ?? 0,
-            SyntaxValidation = manifest?.LastSyntaxValidation,
-            OverlayValidation = manifest?.LastOverlayValidation
+            SyntaxValidation = manifest?.LastSyntaxValidation
         };
 
         if (status.WatchedFileExists)
@@ -278,7 +277,7 @@ public sealed class WorkflowEditService
         EditSessionManifest manifest = LoadManifest(fullWatchedPath)
             ?? throw new InvalidOperationException("No edit session exists for this file. Run edit refresh first.");
         EnsureSessionCanEdit(manifest);
-        return WriteCandidateContent(fullWatchedPath, manifest, content, manifestJson, validateOverlay);
+        return WriteCandidateContent(fullWatchedPath, manifest, content, manifestJson);
     }
 
     public ReplaceTextResult ReplaceText(
@@ -338,7 +337,7 @@ public sealed class WorkflowEditService
         string updatedText = occurrenceIndex.HasValue
             ? ReplaceOccurrence(workingText, textToFind, normalizedNewText, occurrenceIndex.Value)
             : workingText.Replace(textToFind, normalizedNewText, StringComparison.Ordinal);
-        EditSessionStatus updatedStatus = WriteCandidateContent(fullWatchedPath, manifest, updatedText, manifestJson, validateOverlay);
+        EditSessionStatus updatedStatus = WriteCandidateContent(fullWatchedPath, manifest, updatedText, manifestJson);
         return new ReplaceTextResult
         {
             WatchedFilePath = fullWatchedPath,
@@ -355,8 +354,7 @@ public sealed class WorkflowEditService
             Message = "Working candidate text was replaced.",
             OperationCount = updatedStatus.OperationCount,
             ManifestJson = updatedStatus.ManifestJson,
-            SyntaxValidation = updatedStatus.SyntaxValidation,
-            OverlayValidation = updatedStatus.OverlayValidation
+            SyntaxValidation = updatedStatus.SyntaxValidation
         };
     }
 
@@ -448,7 +446,7 @@ public sealed class WorkflowEditService
 
         string lineEnding = DetectDominantLineEnding(text);
         string updatedText = text[..startIndex] + NormalizeLineEndingsForFile(newText, lineEnding) + text[endIndex..];
-        return WriteCandidateContent(fullWatchedPath, manifest, updatedText, manifestJson, validateOverlay);
+        return WriteCandidateContent(fullWatchedPath, manifest, updatedText, manifestJson);
     }
 
     public EditSessionStatus SubmitFile(
@@ -503,16 +501,17 @@ public sealed class WorkflowEditService
         }
 
         EnsureSessionCanEdit(manifest);
-        return WriteCandidateContent(fullWatchedPath, manifest, content, manifestJson, validateOverlay);
+        return WriteCandidateContent(fullWatchedPath, manifest, content, manifestJson);
     }
 
     private EditSessionStatus WriteCandidateContent(
         string fullWatchedPath,
         EditSessionManifest manifest,
         string content,
-        string? manifestJson,
-        bool validateOverlay)
+        string? manifestJson)
     {
+        // Per-edit validation is SYNTAX only (fast, always accurate). Semantic/compile validation is the real
+        // pre-merge build at plan-complete (complete_edit_plan) and accept - not a per-submit flat overlay.
         EditSyntaxValidationResult syntaxValidation = editValidator.ValidateSyntaxIfCSharp(fullWatchedPath, content);
         if (syntaxValidation.HasErrors)
         {
@@ -530,13 +529,9 @@ public sealed class WorkflowEditService
             : DetectDominantLineEnding(existingText);
         WriteCandidateFile(manifest.WorkingFilePath, NormalizeLineEndingsForFile(content, lineEnding));
 
-        EditOverlayValidationResult overlayValidation = validateOverlay
-            ? editValidator.ValidateCandidateOverlayCompilation(manifest, manifest.WorkingFilePath)
-            : new EditOverlayValidationResult("planned-overlay-pending", false, 0, 0, []);
         manifest.OperationCount++;
         manifest.ManifestJson = manifestJson ?? string.Empty;
         manifest.LastSyntaxValidation = syntaxValidation;
-        manifest.LastOverlayValidation = overlayValidation;
         SaveManifest(fullWatchedPath, manifest);
         return GetStatus(fullWatchedPath);
     }
@@ -567,29 +562,6 @@ public sealed class WorkflowEditService
         using FileStream stream = File.OpenRead(path);
         Span<byte> head = stackalloc byte[3];
         return stream.Read(head) == 3 && head[0] == 0xEF && head[1] == 0xBB && head[2] == 0xBF;
-    }
-
-    // Compile the CURRENT overlay for one file's candidate WITHOUT writing new content, and stamp
-    // the result on its manifest. The overlay a single file compiles IS the whole session's
-    // candidate set (CandidateEditValidator.BuildCandidateOverlayMap), so this is the "plan
-    // complete" gate — call it per planned file to stamp each record with the complete-overlay
-    // result. Runs under the file's manifest lock, so it never reads a candidate mid-submit.
-    public EditOverlayValidationResult ValidateOverlayForFile(string watchedFilePath)
-    {
-        string fullWatchedPath = Path.GetFullPath(watchedFilePath);
-        using IDisposable manifestLock = AcquireManifestLock(fullWatchedPath);
-        EditSessionManifest manifest = LoadManifest(fullWatchedPath)
-            ?? throw new InvalidOperationException("No edit session exists for this file. Run edit refresh first.");
-        if (!File.Exists(manifest.WorkingFilePath))
-        {
-            throw new InvalidOperationException(
-                $"No Working candidate exists for {manifest.RelativePath}; submit it before completing the plan.");
-        }
-
-        EditOverlayValidationResult result = editValidator.ValidateCandidateOverlayCompilation(manifest, manifest.WorkingFilePath);
-        manifest.LastOverlayValidation = result;
-        SaveManifest(fullWatchedPath, manifest);
-        return result;
     }
 
     // Plan-complete gate: run the REAL pre-merge dotnet build over the session's WORKING candidates - the same
@@ -782,17 +754,9 @@ public sealed class WorkflowEditService
             LastLedgerPath = compare.LedgerPath
         };
 
-        // Carry the candidate's last overlay COMPILE result onto the record. The session
-        // already compiled this candidate (CandidateEditValidator) and knows it is broken;
-        // without stamping it here the record reads clean, the operator's review surface has
-        // no idea, and the failure only appears at the terminal build after accept.
-        if (manifest.LastOverlayValidation is { HasErrors: true } overlayCompile)
-        {
-            record.PreMergeValidationStatus = overlayCompile.Status;
-            record.PreMergeValidationIsError = true;
-            record.PreMergeValidationDiagnosticCount = overlayCompile.Diagnostics.Count;
-            record.PreMergeValidationAtUtc = DateTimeOffset.UtcNow.ToString("O");
-        }
+        // No per-edit overlay compile result to carry anymore: the authoritative build now runs at
+        // plan-complete (complete_edit_plan) and at accept. A staged record reflects build state from
+        // those real builds, not a flat per-submit overlay.
 
         SupersedeActiveRecordsForFile(fullWatchedPath, stagedRecordId);
         SaveStagedRecord(record);

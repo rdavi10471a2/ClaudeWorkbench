@@ -3,32 +3,46 @@ using AIMonitor.Workflow;
 
 namespace AIMonitor.Workflow.Tests;
 
-// ClaudeSmokes — Phase 6 CI gate (per-edit validation is FEEDBACK, not a gate), authored by Claude
-// (review+test role; no production edits). LOCAL.
+// ClaudeSmokes — Phase 6 (per-edit validation is SYNTAX-ONLY feedback), authored by Claude (review+test
+// role; no production edits). LOCAL.
 //
-// Pins the scope-safety contract recalibrated this session: per-edit overlay validation provides structured
-// diagnostics but must NOT block the edit, and must NOT apply C# validation to non-C# assets. The real safety gate
-// stays the pre-merge full build. These fail if per-edit validation becomes a hard blocker (scope-creep) or stops
-// surfacing diagnostics (orphaned).
+// The per-edit overlay COMPILE was removed: a flat in-memory CSharpCompilation with <solutionRoot>/bin
+// references could not model project types / references / SDKs / .razor, so it reported WRONG results on
+// cross-project, Blazor and multi-TFM edits. Per-edit validation is now SYNTAX only (fast, always accurate);
+// the authoritative semantic/compile gate is the REAL pre-merge build at complete_edit_plan and at accept.
+// These pin that recalibrated contract: a per-edit blocks broken SYNTAX but never blocks a
+// semantically-wrong-but-parseable edit (that is the real build's job), and never C#-validates non-C# assets.
 public sealed class ClaudeSmokesPhase6ValidationTests
 {
     [Fact]
     [Trait("Suite", "ClaudeSmokes")]
-    public void ClaudeSmokes_semantic_error_edit_is_feedback_not_a_block()
+    public void ClaudeSmokes_semantic_error_edit_is_not_blocked_at_edit_time()
     {
         (WorkflowEditService service, string watchedRoot, string programFilePath) = CreateFixture();
         EditSessionStatus refresh = service.Refresh(programFilePath);
         File.WriteAllText(refresh.WorkingFilePath, "namespace Example { internal static class Program { static int M() => 0; } }");
 
-        // Inject a CS0103 (undefined name) — a SEMANTIC error.
+        // Inject a CS0103 (undefined name) — a SEMANTIC error that is still syntactically valid.
         ReplaceTextResult result = service.ReplaceText(programFilePath, "0", "MissingThing", expectedMatches: 1);
 
-        // Edit is NOT blocked by the semantic error (the overlay is feedback, not a gate).
+        // Per-edit validation is syntax-only, so a parseable-but-semantically-wrong edit is NOT blocked here;
+        // the real build at plan-complete / accept is what reports the semantic failure.
         Assert.True(result.Changed);
-        // ...but the structured overlay diagnostics ARE surfaced as feedback.
-        Assert.NotNull(result.OverlayValidation);
-        Assert.Equal("compiled-with-errors", result.OverlayValidation!.Status);
-        Assert.Contains(result.OverlayValidation.Diagnostics, diagnostic => diagnostic.Id == "CS0103");
+        Assert.NotNull(result.SyntaxValidation);
+        Assert.False(result.SyntaxValidation!.HasErrors);
+    }
+
+    [Fact]
+    [Trait("Suite", "ClaudeSmokes")]
+    public void ClaudeSmokes_syntactically_invalid_edit_is_rejected_at_submit()
+    {
+        (WorkflowEditService service, string _, string programFilePath) = CreateFixture();
+        service.Refresh(programFilePath);
+
+        // An unbalanced brace is a SYNTAX error — the per-edit gate must reject it and write nothing.
+        Assert.ThrowsAny<Exception>(() =>
+            service.SubmitFile(programFilePath, "namespace Example { internal static class Program { "));
+        Assert.Equal(0, service.GetStatus(programFilePath).OperationCount);
     }
 
     [Fact]
@@ -45,8 +59,9 @@ public sealed class ClaudeSmokesPhase6ValidationTests
         ReplaceTextResult result = service.ReplaceText(jsonPath, "on", "off", expectedMatches: 1);
 
         Assert.True(result.Changed);
-        Assert.NotNull(result.OverlayValidation);
-        Assert.Equal("skipped-non-csharp", result.OverlayValidation!.Status);
+        // Non-.cs assets get no C# syntax validation (and never overlay compilation).
+        Assert.NotNull(result.SyntaxValidation);
+        Assert.False(result.SyntaxValidation!.HasErrors);
     }
 
     private static (WorkflowEditService Service, string WatchedRoot, string ProgramFilePath) CreateFixture()

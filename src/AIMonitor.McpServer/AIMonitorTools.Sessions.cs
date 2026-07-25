@@ -139,7 +139,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Mark this run's edit plan COMPLETE and run the REAL pre-merge build ONCE over the whole planned set (a full dotnet build of the solution with your working candidates overlaid - the same build the operator's Accept runs). This is the authoritative compile gate while editing - submit_file and the edit tools never build - so call this AFTER you have submitted every planned file and BEFORE staging. Returns the build result with the actual compiler error lines so you can fix them before review. If any planned file has no submitted candidate yet, it builds nothing and tells you which files are still pending, so it is safe to call and re-call.")]
+    [Description("Mark this run's edit plan COMPLETE and run the pre-merge build ONCE over the whole planned set. This is the ONLY point the build runs while editing — submit_file and the edit tools never build — so call this AFTER you have submitted every planned file and BEFORE staging. Returns the build result; errors are the actual compiler errors naming the specific file/line. If any planned file has no submitted candidate yet, it builds nothing and tells you which files are still pending, so it is safe to call and re-call.")]
     public PlanCompletionResult CompleteEditPlan(
         [Description("Session handle returned by start_monitor_session.")] string sessionId)
     {

@@ -55,6 +55,4 @@ public sealed class EditSessionStatus
     public int OperationCount { get; set; }
 
     public EditSyntaxValidationResult? SyntaxValidation { get; set; }
-
-    public EditOverlayValidationResult? OverlayValidation { get; set; }
 }

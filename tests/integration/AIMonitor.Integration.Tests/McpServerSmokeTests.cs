@@ -653,7 +653,6 @@ public sealed class McpServerSmokeTests
         Assert.Equal(1, ExtractJsonInt(replaceJson, "replacementCount"));
         Assert.Equal(1, ExtractJsonInt(replaceJson, "operationCount"));
         Assert.Contains("\"syntaxValidation\"", replaceJson, StringComparison.Ordinal);
-        Assert.Contains("\"overlayValidation\"", replaceJson, StringComparison.Ordinal);
 
         string workingText = await File.ReadAllTextAsync(workingFilePath);
         Assert.Contains("public static int Count => 1;", workingText, StringComparison.Ordinal);
@@ -733,7 +732,6 @@ public sealed class McpServerSmokeTests
         Assert.Equal(1, ExtractJsonInt(submitJson, "operationCount"));
         Assert.Equal("""{"intent":"submit"}""", ExtractJsonString(submitJson, "manifestJson"));
         Assert.Contains("\"syntaxValidation\"", submitJson, StringComparison.Ordinal);
-        Assert.Contains("\"overlayValidation\"", submitJson, StringComparison.Ordinal);
 
         string workingText = await File.ReadAllTextAsync(workingFilePath);
         Assert.Contains("submitted", workingText, StringComparison.Ordinal);
@@ -1374,7 +1372,6 @@ public sealed class McpServerSmokeTests
         Assert.Equal(1, ExtractJsonInt(replacementJson, "operationCount"));
         Assert.Equal("""{"intent":"typed-submit"}""", ExtractJsonString(replacementJson, "manifestJson"));
         Assert.Contains("\"syntaxValidation\"", replacementJson, StringComparison.Ordinal);
-        Assert.Contains("\"overlayValidation\"", replacementJson, StringComparison.Ordinal);
 
         CallToolResult addProperty = await client.CallToolAsync(
             "add_property",

@@ -517,8 +517,7 @@ public sealed class RoslynEditService
             FileHash.Compute(updatedStatus.WorkingFilePath),
             updatedStatus.OperationCount,
             string.IsNullOrWhiteSpace(updatedStatus.ManifestJson) ? null : updatedStatus.ManifestJson,
-            updatedStatus.SyntaxValidation,
-            updatedStatus.OverlayValidation);
+            updatedStatus.SyntaxValidation);
     }
 
     private static CompilationUnitSyntax ParseCompilationUnit(string filePath, string relativePath)

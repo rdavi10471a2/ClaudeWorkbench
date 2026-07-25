@@ -211,7 +211,7 @@ public sealed class WorkflowEditServiceSafetyTests
     }
 
     [Fact]
-    public void Text_edit_can_defer_overlay_validation_until_planned_working_set_is_complete()
+    public void Text_edit_writes_working_candidate_with_syntax_only_validation()
     {
         WorkflowFixture fixture = CreateFixture();
         WorkflowEditService service = new(fixture.Settings);
@@ -221,85 +221,21 @@ public sealed class WorkflowEditServiceSafetyTests
             fixture.ProgramFilePath,
             "internal static class Program { }",
             "internal static class Program { public static string Value => \"planned\"; }",
-            expectedMatches: 1,
-            validateOverlay: false);
+            expectedMatches: 1);
 
-        Assert.Equal("planned-overlay-pending", result.OverlayValidation?.Status);
-        Assert.False(result.OverlayValidation?.HasErrors);
+        // Per-edit validation is syntax-only now (no flat overlay compile): the edit is written and its
+        // syntax is clean; semantic/compile validation is the real build at plan-complete and accept.
+        Assert.True(result.Changed);
+        Assert.NotNull(result.SyntaxValidation);
+        Assert.False(result.SyntaxValidation!.HasErrors);
         Assert.Contains("\"planned\"", File.ReadAllText(refresh.WorkingFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Planned_overlay_retry_reports_and_recovers_three_file_cross_reference_errors()
-    {
-        ThreeFileWorkflowFixture fixture = CreateThreeFileFixture();
-        WorkflowEditService service = new(fixture.Settings);
-        service.Refresh(fixture.ProviderPath);
-        service.Refresh(fixture.ConsumerPath);
-        service.Refresh(fixture.PresenterPath);
-
-        EditSessionStatus providerStatus = service.SubmitFile(
-            fixture.ProviderPath,
-            """
-            namespace Example;
-
-            internal static class Provider
-            {
-                public static string RenamedValue()
-                {
-                    return "candidate";
-                }
-            }
-            """,
-            validateOverlay: false);
-
-        Assert.Equal("planned-overlay-pending", providerStatus.OverlayValidation?.Status);
-
-        // The parent symbol was renamed and one child has been updated, but the second
-        // child still points at the old parent member. The overlay should make that
-        // missed blast-radius file visible before review.
-        EditSessionStatus consumerStatus = service.SubmitFile(
-            fixture.ConsumerPath,
-            """
-            namespace Example;
-
-            internal static class Consumer
-            {
-                public static string Read()
-                {
-                    return Provider.RenamedValue();
-                }
-            }
-            """);
-
-        Assert.NotNull(consumerStatus.OverlayValidation);
-        Assert.True(consumerStatus.OverlayValidation.HasErrors);
-        Assert.Equal(3, consumerStatus.OverlayValidation.OverlayFileCount);
-        Assert.Contains(consumerStatus.OverlayValidation.Diagnostics, diagnostic =>
-            diagnostic.Path.Equals(fixture.PresenterPath, StringComparison.OrdinalIgnoreCase)
-            && diagnostic.Id == "CS0117");
-
-        // The agent can now repair the missed child Working candidate and retry the
-        // overlay without touching watched source or force-launching review.
-        EditSessionStatus presenterStatus = service.SubmitFile(
-            fixture.PresenterPath,
-            """
-            namespace Example;
-
-            internal static class Presenter
-            {
-                public static string Render()
-                {
-                    return Consumer.Read() + Provider.RenamedValue();
-                }
-            }
-            """);
-
-        Assert.NotNull(presenterStatus.OverlayValidation);
-        Assert.False(presenterStatus.OverlayValidation.HasErrors);
-        Assert.Equal("compiled", presenterStatus.OverlayValidation.Status);
-        Assert.Equal(3, presenterStatus.OverlayValidation.OverlayFileCount);
-    }
+    // NOTE: the former "Planned_overlay_retry_reports_and_recovers_three_file_cross_reference_errors" test
+    // exercised the flat in-memory overlay's cross-file error detection. That overlay was removed (it modelled
+    // project types/refs/.razor wrong); cross-file error detection is now the REAL pre-merge build at
+    // plan-complete/accept, covered by EngineEditLifecycleTests (multi-file compile error -> "failed") and the
+    // agent-in-the-loop MixedTfmSample tests.
 
     [Fact]
     public void Stage_blocks_after_accept_until_refresh()
@@ -459,11 +395,9 @@ public sealed class WorkflowEditServiceSafetyTests
         Assert.Equal(1, status.OperationCount);
         Assert.Equal("""{"intent":"phase6"}""", status.ManifestJson);
         Assert.NotNull(status.SyntaxValidation);
+        // The semantic error (Missing.Value / CS0103) is NOT caught per-edit anymore: syntax is clean, the
+        // edit goes through, and the real build at plan-complete/accept reports the semantic failure.
         Assert.False(status.SyntaxValidation.HasErrors);
-        Assert.NotNull(status.OverlayValidation);
-        Assert.True(status.OverlayValidation.HasErrors);
-        Assert.Equal("compiled-with-errors", status.OverlayValidation.Status);
-        Assert.Contains(status.OverlayValidation.Diagnostics, diagnostic => diagnostic.Id == "CS0103");
     }
 
     [Fact]
@@ -505,11 +439,10 @@ public sealed class WorkflowEditServiceSafetyTests
         Assert.Equal("""{"tool":"replace"}""", result.ManifestJson);
         Assert.NotNull(result.SyntaxValidation);
         Assert.False(result.SyntaxValidation.HasErrors);
-        Assert.NotNull(result.OverlayValidation);
     }
 
     [Fact]
-    public void Roslyn_typed_edit_reports_overlay_feedback_and_operation_count()
+    public void Roslyn_typed_edit_reports_syntax_feedback_and_operation_count()
     {
         WorkflowFixture fixture = CreateFixture();
         WorkflowEditService service = new(fixture.Settings);
@@ -526,10 +459,8 @@ public sealed class WorkflowEditServiceSafetyTests
         Assert.Equal(1, result.OperationCount);
         Assert.Equal("""{"tool":"add_method"}""", result.ManifestJson);
         Assert.NotNull(result.SyntaxValidation);
+        // Syntax is clean; the semantic error (Missing.Value) surfaces at the real build, not per-edit.
         Assert.False(result.SyntaxValidation.HasErrors);
-        Assert.NotNull(result.OverlayValidation);
-        Assert.True(result.OverlayValidation.HasErrors);
-        Assert.Contains(result.OverlayValidation.Diagnostics, diagnostic => diagnostic.Id == "CS0103");
     }
 
     private static StagedEditRecord StageChangedCandidate(WorkflowEditService service, WorkflowFixture fixture)

@@ -51,7 +51,7 @@ public sealed class McpPlannedSessionSurfaceTests
             });
         Assert.False(submit.IsError == true, McpSurfaceClient.Text(submit));
         string submitJson = McpSurfaceClient.Text(submit);
-        Assert.Contains("\"overlayValidation\"", submitJson, StringComparison.Ordinal);
+        Assert.Contains("\"syntaxValidation\"", submitJson, StringComparison.Ordinal);
         Assert.DoesNotContain("e2e", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
 
         CallToolResult stage = await client.CallToolAsync(
@@ -251,22 +251,17 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.False(File.Exists(newFilePath));
     }
 
-    // The multi-file plan-complete contract. Two mutually-dependent NEW files are queued in one
-    // planned session. A multi-file plan NEVER compiles the overlay on submit — that keeps the
-    // compile off the parallel-submit path so concurrent submits cannot race it, and never
-    // compiles a half-queued overlay. The single compile happens once, at complete_edit_plan:
+    // The multi-file plan-complete contract. Two mutually-dependent NEW files are queued in one planned
+    // session. Submits are SYNTAX-ONLY (they never build), so neither carries an overlay result; the single
+    // REAL pre-merge build happens once, at complete_edit_plan, over the whole submitted set:
     //
-    //   new_file(A) -> submit(A)   overlayValidation DEFERRED => exactly "planned-overlay-pending".
-    //   new_file(B) -> submit(B)   still DEFERRED => still "planned-overlay-pending" (submits never
-    //                              compile a multi-file overlay).
-    //   complete_edit_plan         every planned file is submitted => the overlay compiles ONCE over
-    //                              the whole set; both files are consistent, so it compiles clean.
-    //
-    // Without this, a regression that compiled on submit (the old existence-keyed gate, which fired
-    // against empty siblings) or never compiled at complete would go unnoticed.
+    //   new_file(A) -> submit(A)   syntax-only, no build, no overlay result.
+    //   new_file(B) -> submit(B)   syntax-only, no build, no overlay result.
+    //   complete_edit_plan         every planned file submitted => the REAL build runs ONCE over the whole
+    //                              set; the two files are mutually consistent, so it builds clean.
     [Fact]
     [Trait("Suite", "McpSurface")]
-    public async Task Multi_file_overlay_defers_on_every_submit_and_compiles_once_at_complete_edit_plan()
+    public async Task Multi_file_plan_builds_once_clean_at_complete_edit_plan()
     {
         McpSurfaceFixture fixture = McpSurfaceFixture.CreateSingleProject();
         await using McpClient client = await McpSurfaceClient.ConnectAsync(fixture);
@@ -299,23 +294,23 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.False(session.IsError == true, McpSurfaceClient.Text(session));
         string sessionId = McpSurfaceClient.JsonString(McpSurfaceClient.Text(session), "sessionId");
 
-        // Multi-file plan: no submit compiles the overlay. Both stay pending.
+        // Multi-file plan: submits are syntax-only (no build, no overlay result). Both must succeed.
         string firstSubmitJson = await ComposeNewFileAsync(
             client,
             sessionId,
             firstFilePath,
             "namespace Example { public static class OverlayOne { public static string Value => \"one\"; } }");
-        Assert.Equal("planned-overlay-pending", OverlayStatus(firstSubmitJson));
+        Assert.DoesNotContain("\"overlayValidation\"", firstSubmitJson, StringComparison.Ordinal);
 
         string secondSubmitJson = await ComposeNewFileAsync(
             client,
             sessionId,
             secondFilePath,
             "namespace Example { public static class OverlayTwo { public static string Value => OverlayOne.Value + \":two\"; } }");
-        Assert.Equal("planned-overlay-pending", OverlayStatus(secondSubmitJson));
+        Assert.DoesNotContain("\"overlayValidation\"", secondSubmitJson, StringComparison.Ordinal);
 
-        // Plan complete: every planned file is submitted, so the overlay compiles ONCE over the whole
-        // set. The two files are mutually consistent, so it compiles clean.
+        // Plan complete: every planned file is submitted, so the REAL build runs ONCE over the whole
+        // set. The two files are mutually consistent, so it builds clean.
         CallToolResult complete = await client.CallToolAsync(
             "complete_edit_plan",
             new Dictionary<string, object?> { ["sessionId"] = sessionId });
@@ -495,19 +490,6 @@ public sealed class McpPlannedSessionSurfaceTests
         return McpSurfaceClient.Text(submit);
     }
 
-    // Reads overlayValidation.status by exact path. The suite's generic JsonString probe searches
-    // recursively and "status" is a common property name, so this one is walked explicitly.
-    private static string OverlayStatus(string submitJson)
-    {
-        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(submitJson);
-        Assert.True(
-            document.RootElement.TryGetProperty("overlayValidation", out System.Text.Json.JsonElement overlay),
-            $"submit_file response carried no overlayValidation node: {submitJson}");
-        Assert.True(
-            overlay.TryGetProperty("status", out System.Text.Json.JsonElement status),
-            $"overlayValidation carried no status: {submitJson}");
-        return status.GetString() ?? string.Empty;
-    }
 
     private static async Task<(string RecordId, string StagedHash, string StagedFilePath)> StageAsync(
         McpClient client,
