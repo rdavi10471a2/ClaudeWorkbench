@@ -50,19 +50,6 @@ public sealed class ThreadServiceTests : IDisposable
     }
 
     [Fact]
-    public void Create_stub_is_planned_with_no_session()
-    {
-        (ThreadService service, _, _, _) = NewService();
-
-        ThreadRecord stub = service.CreateStub("plan the refactor", "why");
-
-        Assert.Equal(ThreadStatus.Planned, stub.Status);
-        Assert.True(stub.IsStub);
-        Assert.Equal("plan the refactor", stub.Name);
-        Assert.Equal("why", stub.Description);
-    }
-
-    [Fact]
     public void Active_thread_is_the_one_matching_the_live_session()
     {
         (ThreadService service, FakeCurrentSession session, _, _) = NewService();
@@ -101,14 +88,12 @@ public sealed class ThreadServiceTests : IDisposable
     }
 
     [Fact]
-    public void Get_resume_session_id_returns_the_session_for_a_real_thread_but_not_a_stub()
+    public void Get_resume_session_id_returns_the_session_for_a_real_thread()
     {
         (ThreadService service, _, _, _) = NewService();
         ThreadRecord real = service.EnsureThreadForSession("sess-1");
-        ThreadRecord stub = service.CreateStub("stub", null);
 
         Assert.Equal("sess-1", service.GetResumeSessionId(real.ThreadId));
-        Assert.Null(service.GetResumeSessionId(stub.ThreadId));
         Assert.Null(service.GetResumeSessionId("unknown"));
     }
 
@@ -143,11 +128,10 @@ public sealed class ThreadServiceTests : IDisposable
     }
 
     [Fact]
-    public void Prepare_resume_returns_null_for_a_stub()
+    public void Prepare_resume_returns_null_for_an_unknown_thread()
     {
         (ThreadService service, _, _, _) = NewService();
-        ThreadRecord stub = service.CreateStub("stub", null);
-        Assert.Null(service.PrepareResume(stub.ThreadId));
+        Assert.Null(service.PrepareResume("unknown"));
     }
 
     [Fact]

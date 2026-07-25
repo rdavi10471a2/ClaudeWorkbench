@@ -25,9 +25,9 @@ public sealed class ThreadRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             insert into threads
-                (thread_id, name, description, user_note, session_id, cwd, status, kind, created_at_utc, updated_at_utc)
+                (thread_id, name, description, user_note, session_id, cwd, status, created_at_utc, updated_at_utc)
             values
-                ($threadId, $name, $description, $userNote, $sessionId, $cwd, $status, $kind, $createdAt, $updatedAt)
+                ($threadId, $name, $description, $userNote, $sessionId, $cwd, $status, $createdAt, $updatedAt)
             on conflict(thread_id) do update set
                 name = excluded.name,
                 description = excluded.description,
@@ -35,7 +35,6 @@ public sealed class ThreadRepository
                 session_id = excluded.session_id,
                 cwd = excluded.cwd,
                 status = excluded.status,
-                kind = excluded.kind,
                 updated_at_utc = excluded.updated_at_utc;
             """;
         command.Parameters.AddWithValue("$threadId", thread.ThreadId);
@@ -45,7 +44,6 @@ public sealed class ThreadRepository
         command.Parameters.AddWithValue("$sessionId", (object?)thread.SessionId ?? DBNull.Value);
         command.Parameters.AddWithValue("$cwd", thread.Cwd);
         command.Parameters.AddWithValue("$status", thread.Status);
-        command.Parameters.AddWithValue("$kind", thread.Kind);
         command.Parameters.AddWithValue("$createdAt", FormatUtc(thread.CreatedAtUtc));
         command.Parameters.AddWithValue("$updatedAt", FormatUtc(thread.UpdatedAtUtc));
         command.ExecuteNonQuery();
@@ -118,16 +116,6 @@ public sealed class ThreadRepository
         }
 
         UpdateColumn(threadId, "status", status);
-    }
-
-    public void SetKind(string threadId, string kind)
-    {
-        if (!ThreadKind.IsValid(kind))
-        {
-            throw new ArgumentException("Unknown thread kind: " + kind, nameof(kind));
-        }
-
-        UpdateColumn(threadId, "kind", kind);
     }
 
     public void Rename(string threadId, string name) => UpdateColumn(threadId, "name", name);
@@ -226,7 +214,7 @@ public sealed class ThreadRepository
     }
 
     private const string SelectColumns =
-        "select thread_id, name, description, user_note, session_id, cwd, status, kind, created_at_utc, updated_at_utc from threads";
+        "select thread_id, name, description, user_note, session_id, cwd, status, created_at_utc, updated_at_utc from threads";
 
     private static ThreadRecord ReadRow(SqliteDataReader reader)
     {
@@ -238,9 +226,8 @@ public sealed class ThreadRepository
             reader.IsDBNull(4) ? null : reader.GetString(4),
             reader.GetString(5),
             reader.GetString(6),
-            reader.GetString(7),
+            ParseUtc(reader.GetString(7)),
             ParseUtc(reader.GetString(8)),
-            ParseUtc(reader.GetString(9)),
             []);
     }
 

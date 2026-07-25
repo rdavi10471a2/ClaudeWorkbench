@@ -49,11 +49,11 @@ public partial class ThreadsTab : IAsyncDisposable
     private ElementReference threadsSplitter;
     private IJSObjectReference? resizeModule;
 
-    // The board columns, left to right. Active is COMPUTED (the live session) — you land in it by
-    // Resume/Open, not by moving a card; the others are stored statuses moved via the detail buttons.
+    // The board groups, top to bottom. Active is COMPUTED (the live session) and pinned on top;
+    // the others are stored statuses moved via the detail buttons. (No Planned: a stub had no way
+    // to become a live conversation, so it was removed.)
     private static readonly (string Key, string Label)[] Columns =
     [
-        (ThreadStatus.Planned, "Planned"),
         ("active", "Active"),
         (ThreadStatus.Archived, "Archived"),
         (ThreadStatus.Abandoned, "Abandoned"),
@@ -135,14 +135,6 @@ public partial class ThreadsTab : IAsyncDisposable
         message = null;
     }
 
-    private void NewStub()
-    {
-        ThreadRecord stub = Threads.CreateStub(name: null, description: null);
-        Load();
-        Select(stub);
-        Report("Created a planned thread stub.", error: false);
-    }
-
     // Save the details pane's name/description/note for the selected thread.
     private void SaveDetails()
     {
@@ -189,12 +181,6 @@ public partial class ThreadsTab : IAsyncDisposable
                 ? $"Resumed “{thread.Name}” — switch to the Workbench tab and continue the conversation."
                 : "Could not resume — the sidecar rejected it (a turn may be active).",
             error: !ok);
-        Load();
-    }
-
-    private void TogglePromotion(ThreadRecord thread)
-    {
-        Threads.SetKind(thread.ThreadId, thread.Kind == ThreadKind.Task ? ThreadKind.Discussion : ThreadKind.Task);
         Load();
     }
 

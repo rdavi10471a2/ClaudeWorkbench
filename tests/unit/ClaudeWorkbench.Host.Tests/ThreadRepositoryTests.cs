@@ -22,8 +22,7 @@ public sealed class ThreadRepositoryTests : IDisposable
         string threadId,
         string name,
         string? sessionId = null,
-        string status = ThreadStatus.Archived,
-        string kind = ThreadKind.Discussion)
+        string status = ThreadStatus.Archived)
     {
         DateTime now = DateTime.UtcNow;
         return new ThreadRecord(
@@ -34,7 +33,6 @@ public sealed class ThreadRepositoryTests : IDisposable
             sessionId,
             @"C:\watched\Solution",
             status,
-            kind,
             now,
             now,
             []);
@@ -57,7 +55,6 @@ public sealed class ThreadRepositoryTests : IDisposable
         Assert.Equal("sess-abc", loaded.SessionId);
         Assert.Equal(@"C:\watched\Solution", loaded.Cwd);
         Assert.Equal(ThreadStatus.Archived, loaded.Status);
-        Assert.Equal(ThreadKind.Discussion, loaded.Kind);
         Assert.False(loaded.IsStub);
         // Timestamps round-trip to the second (round-trip "o" format).
         Assert.Equal(thread.CreatedAtUtc, loaded.CreatedAtUtc, TimeSpan.FromMilliseconds(2));
@@ -108,32 +105,29 @@ public sealed class ThreadRepositoryTests : IDisposable
     }
 
     [Fact]
-    public void Status_kind_rename_description_and_note_updates_persist()
+    public void Status_rename_description_and_note_updates_persist()
     {
         ThreadRepository repo = NewRepository();
         repo.Upsert(NewThread("t1", "orig"));
 
         repo.SetStatus("t1", ThreadStatus.Abandoned);
-        repo.SetKind("t1", ThreadKind.Task);
         repo.Rename("t1", "renamed");
         repo.SetDescription("t1", "new desc");
         repo.SetUserNote("t1", null);
 
         ThreadRecord loaded = repo.Get("t1")!;
         Assert.Equal(ThreadStatus.Abandoned, loaded.Status);
-        Assert.Equal(ThreadKind.Task, loaded.Kind);
         Assert.Equal("renamed", loaded.Name);
         Assert.Equal("new desc", loaded.Description);
         Assert.Null(loaded.UserNote);
     }
 
     [Fact]
-    public void Invalid_status_or_kind_is_rejected()
+    public void Invalid_status_is_rejected()
     {
         ThreadRepository repo = NewRepository();
         repo.Upsert(NewThread("t1", "orig"));
         Assert.Throws<ArgumentException>(() => repo.SetStatus("t1", "active"));
-        Assert.Throws<ArgumentException>(() => repo.SetKind("t1", "bogus"));
     }
 
     [Fact]

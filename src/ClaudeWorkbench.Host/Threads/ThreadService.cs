@@ -47,33 +47,11 @@ public sealed class ThreadService
             SessionId: sessionId,
             Cwd: workspace.Cwd,
             Status: ThreadStatus.Archived,
-            Kind: ThreadKind.Discussion,
             CreatedAtUtc: now,
             UpdatedAtUtc: now,
             AcceptedEditRefs: []);
         repository.Upsert(created);
         return created;
-    }
-
-    // A named pre-conversation stub (Planned) with no session yet — the one useful board affordance.
-    public ThreadRecord CreateStub(string? name, string? description)
-    {
-        ThreadRepository repository = Repository();
-        DateTime now = DateTime.UtcNow;
-        ThreadRecord stub = new(
-            Guid.NewGuid().ToString("N"),
-            string.IsNullOrWhiteSpace(name) ? repository.NextDefaultName(now) : name.Trim(),
-            Description: description,
-            UserNote: null,
-            SessionId: null,
-            Cwd: workspace.Cwd,
-            Status: ThreadStatus.Planned,
-            Kind: ThreadKind.Discussion,
-            CreatedAtUtc: now,
-            UpdatedAtUtc: now,
-            AcceptedEditRefs: []);
-        repository.Upsert(stub);
-        return stub;
     }
 
     public IReadOnlyList<ThreadRecord> List() => Repository().List();
@@ -96,8 +74,6 @@ public sealed class ThreadService
         Repository().SetUserNote(threadId, userNote);
 
     public void SetStatus(string threadId, string status) => Repository().SetStatus(threadId, status);
-
-    public void SetKind(string threadId, string kind) => Repository().SetKind(threadId, kind);
 
     // Provenance: link the accepted staged-edit records to whichever thread is currently live.
     public void RecordAcceptedEdits(IEnumerable<string> stagedRecordIds)

@@ -73,7 +73,6 @@ public sealed class ThreadDatabase
                 session_id text null,
                 cwd text not null,
                 status text not null default 'archived',
-                kind text not null default 'discussion',
                 created_at_utc text not null,
                 updated_at_utc text not null
             );

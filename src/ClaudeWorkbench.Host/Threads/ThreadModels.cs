@@ -24,18 +24,6 @@ public static class ThreadStatus
         status is Planned or Archived or Abandoned;
 }
 
-// KIND is a promotion flag, not a mode chosen up front (the old "discussion vs work" split is
-// gone). Everything starts as a discussion; the human may promote it to a task.
-public static class ThreadKind
-{
-    public const string Discussion = "discussion";
-
-    public const string Task = "task";
-
-    public static bool IsValid(string kind) =>
-        kind is Discussion or Task;
-}
-
 public sealed record ThreadRecord(
     string ThreadId,
     string Name,
@@ -44,7 +32,6 @@ public sealed record ThreadRecord(
     string? SessionId,
     string Cwd,
     string Status,
-    string Kind,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
     IReadOnlyList<string> AcceptedEditRefs)

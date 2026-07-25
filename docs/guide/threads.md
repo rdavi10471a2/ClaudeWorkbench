@@ -11,30 +11,29 @@ A thread is a pointer to a Claude Agent SDK **session** plus the human-facing me
 
 | Field | Meaning |
 |---|---|
-| `thread_id` | stable id (never changes on rename/promote) |
+| `thread_id` | stable id (never changes on rename) |
 | `name` | display name; defaults to `discussion-YYYY-MM-DD-N` (that day's Nth thread), editable |
 | `description`, `user_note` | your free text |
-| `session_id` | the SDK session (null = a Planned stub with no conversation yet) |
+| `session_id` | the SDK session |
 | `cwd` | the watched-solution folder — required for a correct resume |
-| `status`, `kind` | lifecycle (below) |
+| `status` | lifecycle (below) |
 | accepted-edit refs | provenance: the staged edits this thread landed in source |
 
 ## Lifecycle — a derived view, not a state machine
 
-States are **derived** from the session, not a board you drag cards around:
+There is no discussion/task split — it's all just a thread. States are **derived** from the session,
+not a board you drag cards around:
 
 - **Active** — the thread whose session is the live one. **Computed**, never stored; single-operator
-  (one Host per workspace) means there is at most one.
-- **Planned** — a named *stub* with no session yet (pre-conversation intent).
-- **Archived** — has a session, resumable, not live.
+  (one Host per workspace) means there is at most one, and resuming another thread bumps the old one
+  out of Active automatically.
+- **Archived** — has a session, resumable, not live (the resting state).
 - **Abandoned** — discarded, kept until you delete it.
 
-`kind` is a promotion flag (`discussion` ⇄ `task`), not a mode you pick up front.
-
-The Threads tab is a **kanban chooser** (one column per state) on the left and a **details pane** on
-the right (resizable splitter). Pick a card to open it; from the details pane you can **Resume**,
-**rename**, edit description/note, **promote/demote** (discussion ⇄ task), **Abandon/Restore**, and
-**hard-delete**; **New stub** creates a Planned thread.
+The Threads tab is a **vertical board** on the left — Active pinned on top, then Archived and
+Abandoned, each with its threads listed beneath — and a **details pane** on the right (resizable
+splitter). Pick a thread to open it; from the details pane you can **Resume**, **rename**, edit
+description/note, **Abandon/Restore**, and **hard-delete**.
 
 ## Autosave — no save button
 

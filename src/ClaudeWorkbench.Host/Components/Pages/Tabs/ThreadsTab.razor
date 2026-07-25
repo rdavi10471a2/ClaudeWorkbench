@@ -3,15 +3,11 @@
 <div class="threads-tab" data-testid="threads-tab">
     <div class="threads-toolbar">
         <div class="threads-title">
-            <RadzenIcon Icon="view_kanban" />
+            <RadzenIcon Icon="forum" />
             <span>Conversation threads</span>
             <span class="threads-count">@threads.Count</span>
         </div>
         <div class="threads-toolbar-actions">
-            <RadzenButton Icon="add" Text="New stub" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                          Disabled="@busy" Click="@NewStub"
-                          Title="Create a planned, pre-conversation thread stub (a named intent with no session yet)."
-                          data-testid="thread-new-stub" />
             <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                           Disabled="@busy" Click="@Refresh" data-testid="threads-refresh" />
         </div>
@@ -23,20 +19,20 @@
     }
 
     <div class="threads-body" @ref="threadsBody">
-        @* LHS — kanban chooser: one column per lifecycle state; click a card to open it on the right. *@
+        @* LHS — a single VERTICAL board: Active pinned on top, then Planned / Archived / Abandoned. *@
         <div class="threads-board" @ref="threadsBoard">
             @foreach ((string key, string label) in Columns)
             {
-                <div class="thread-column @(key == "active" ? "computed" : string.Empty)"
+                <div class="thread-group @(key == "active" ? "computed" : string.Empty)"
                      data-testid="thread-column" data-column="@key">
-                    <div class="thread-column-head">
-                        <span class="thread-column-name @key">@label</span>
-                        <span class="thread-column-count">@ColumnThreads(key).Count()</span>
+                    <div class="thread-group-head">
+                        <span class="thread-group-name @key">@label</span>
+                        <span class="thread-group-count">@ColumnThreads(key).Count()</span>
                     </div>
 
                     @if (key == "active" && !ColumnThreads(key).Any())
                     {
-                        <div class="thread-column-hint">The live session's thread appears here.</div>
+                        <div class="thread-group-hint">The live session's thread appears here.</div>
                     }
 
                     @foreach (ThreadRecord thread in ColumnThreads(key))
@@ -47,13 +43,10 @@
                                 @onclick="@(() => Select(thread))">
                             <span class="thread-chip-name" data-testid="thread-name">@thread.Name</span>
                             <span class="thread-chip-meta">
-                                @if (thread.Kind == ThreadKind.Task)
-                                {
-                                    <span class="thread-kind task">task</span>
-                                }
+                                <span>@thread.CreatedAtUtc.ToLocalTime().ToString("g")</span>
                                 @if (thread.AcceptedEditRefs.Count > 0)
                                 {
-                                    <span class="thread-chip-edits" title="Accepted edits">@thread.AcceptedEditRefs.Count✎</span>
+                                    <span class="thread-chip-edits" title="Accepted edits">· @thread.AcceptedEditRefs.Count edit(s)</span>
                                 }
                             </span>
                         </button>
@@ -76,10 +69,6 @@
                 bool active = IsActive(thread);
                 <div class="thread-details-head">
                     <span class="thread-status @(active ? "active" : thread.Status)">@(active ? "Active" : char.ToUpperInvariant(thread.Status[0]) + thread.Status[1..])</span>
-                    @if (thread.Kind == ThreadKind.Task)
-                    {
-                        <span class="thread-kind task">task</span>
-                    }
                 </div>
 
                 <label class="thread-field-label">Name</label>
@@ -101,10 +90,6 @@
                                       Title="@(active ? "This is the live thread." : TurnActive ? "Finish the current turn first." : "Reopen and continue this conversation.")"
                                       data-testid="thread-resume" />
                     }
-                    <RadzenButton Icon="@(thread.Kind == ThreadKind.Task ? "chat" : "task_alt")"
-                                  Text="@(thread.Kind == ThreadKind.Task ? "To discussion" : "To task")"
-                                  ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                  Disabled="@busy" Click="@(() => TogglePromotion(thread))" data-testid="thread-promote" />
                     @if (thread.Status == ThreadStatus.Abandoned)
                     {
                         <RadzenButton Icon="unarchive" Text="Restore" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"

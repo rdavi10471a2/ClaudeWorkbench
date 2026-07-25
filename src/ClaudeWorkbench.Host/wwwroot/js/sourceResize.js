@@ -113,9 +113,9 @@ export function attachGitSplitter(layout, sidebar, detail, splitter) {
     attachColumnSplitter(layout, sidebar, detail, splitter, 280, 380);
 }
 
-// Threads tab: the kanban chooser on the left, the details pane on the right.
+// Threads tab: the vertical board chooser on the left, the details pane on the right.
 export function attachThreadsSplitter(layout, board, detail, splitter) {
-    attachColumnSplitter(layout, board, detail, splitter, 420, 300);
+    attachColumnSplitter(layout, board, detail, splitter, 240, 320);
 }
 
 // Workbench tab: composer on the left, chat history on the right.
