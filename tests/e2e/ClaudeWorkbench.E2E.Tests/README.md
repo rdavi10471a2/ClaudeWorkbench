@@ -3,6 +3,15 @@
 Black-box browser tests that drive the **real Blazor Assistant UI** through Playwright, so a human can
 watch the governed loop render. They reference no product code — they exercise what the user sees.
 
+## One operator at a time (important)
+
+The driver drives your **running Host** at `AIMW_E2E_BASEURL`. That Host is single-operator: its agent
+session, sidecar, and approval gate are one shared server-side state. If you also interact with the same
+app in another browser tab/window while a driver run is in flight, the two circuits fight over that one
+session and the app can hang. **While a driver run is going, don't touch the app yourself** — just watch
+the Chromium window Playwright opened. (A future option is a dedicated, isolated Host instance on its own
+port + workspace so the two never share state.)
+
 ## Self-gating
 
 Every test **skips** (never fails) when its prerequisites are missing, so `dotnet test ClaudeWorkbench.slnx`
@@ -58,6 +67,14 @@ to Calculator `01-add-method`.
 | `AIMW_E2E_LIVE` | (off) | `1` to enable the real-agent live driver (opt-in; spends tokens) |
 | `AIMW_E2E_HOLD` | `0` | Seconds to keep the browser open after the turn (to Accept in Merge Review) |
 | `AIMW_E2E_PROMPT` | Calculator `01` | Path to the test-prompt `.md` to drive |
+| `AIMW_E2E_VIDEO` | (off) | `1` to record a `.webm` of the run |
+| `AIMW_E2E_TRACE` | (off) | `1` to record a Playwright trace (`playwright show-trace trace.zip`) |
+| `AIMW_E2E_ARTIFACTS` | `%TEMP%\ClaudeWorkbenchE2E` | Where video/trace land |
+
+The live driver ticks **Auto-approve** before submitting and auto-clicks **Allow** on any approval
+dialog, so the loop runs hands-free to Merge Review (the write to watched source is still gated by the
+human Accept). Recordings finalize when the run ends: video at `<artifacts>\video\*.webm`, trace at
+`<artifacts>\trace.zip`.
 
 ## Stable selectors
 

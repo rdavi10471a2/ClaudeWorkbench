@@ -39,9 +39,21 @@ public sealed class LivePromptDriverTests : IClassFixture<PlaywrightFixture>
         IPage page = fixture.Page;
         await page.GotoAsync(E2EEnvironment.BaseUrl);
 
-        // Type the prompt a human would paste, then submit the turn.
+        // Fallback for the operator gate (AgentActionModal): if an approval dialog appears, click
+        // "Allow". Registered before the turn so it fires the moment a dialog interrupts. With
+        // auto-approve ticked below this should rarely trigger, but a never-auto-approvable tool
+        // (ADR-0006) would still surface a dialog, and this keeps the loop watchable end to end.
+        ILocator allowButton = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Allow", Exact = true });
+        await page.AddLocatorHandlerAsync(allowButton, async handled => await handled.ClickAsync());
+
         ILocator composer = page.GetByTestId("composer-input");
         await Assertions.Expect(composer).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+
+        // Auto-approve claude-workbench edits for this thread so the loop flows to Merge Review
+        // without a per-tool dialog. The write to watched source is still gated by the human Accept.
+        await page.GetByTestId("auto-approve").CheckAsync();
+
+        // Type the prompt a human would paste, then submit the turn.
         await composer.FillAsync(prompt);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Submit Turn" }).ClickAsync();
 

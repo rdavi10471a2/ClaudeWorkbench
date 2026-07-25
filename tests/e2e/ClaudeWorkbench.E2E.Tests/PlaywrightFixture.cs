@@ -16,6 +16,9 @@ public sealed class PlaywrightFixture : IAsyncLifetime
 
     public string? SkipReason { get; private set; }
 
+    // Set when video recording is on; the .webm is finalized on context dispose.
+    public string? VideoDir { get; private set; }
+
     public async Task InitializeAsync()
     {
         if (!E2EEnvironment.IsHostReachable())
@@ -34,7 +37,31 @@ public sealed class PlaywrightFixture : IAsyncLifetime
                 Headless = !E2EEnvironment.Headed,
                 SlowMo = E2EEnvironment.SlowMoMs,
             });
-            context = await browser.NewContextAsync();
+
+            BrowserNewContextOptions contextOptions = new()
+            {
+                ViewportSize = new ViewportSize { Width = 1440, Height = 900 },
+            };
+            if (E2EEnvironment.RecordVideo)
+            {
+                VideoDir = Path.Combine(E2EEnvironment.ArtifactsDir, "video");
+                Directory.CreateDirectory(VideoDir);
+                contextOptions.RecordVideoDir = VideoDir;
+                contextOptions.RecordVideoSize = new RecordVideoSize { Width = 1440, Height = 900 };
+            }
+
+            context = await browser.NewContextAsync(contextOptions);
+
+            if (E2EEnvironment.RecordTrace)
+            {
+                await context.Tracing.StartAsync(new TracingStartOptions
+                {
+                    Screenshots = true,
+                    Snapshots = true,
+                    Sources = true,
+                });
+            }
+
             Page = await context.NewPageAsync();
         }
         catch (Exception ex)
@@ -52,6 +79,16 @@ public sealed class PlaywrightFixture : IAsyncLifetime
     {
         if (context is not null)
         {
+            if (E2EEnvironment.RecordTrace)
+            {
+                Directory.CreateDirectory(E2EEnvironment.ArtifactsDir);
+                await context.Tracing.StopAsync(new TracingStopOptions
+                {
+                    Path = Path.Combine(E2EEnvironment.ArtifactsDir, "trace.zip"),
+                });
+            }
+
+            // Disposing the context flushes the .webm to VideoDir.
             await context.DisposeAsync();
         }
 

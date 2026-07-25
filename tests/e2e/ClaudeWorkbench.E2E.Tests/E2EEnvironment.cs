@@ -31,6 +31,20 @@ internal static class E2EEnvironment
     public static int HoldSeconds =>
         int.TryParse(Environment.GetEnvironmentVariable("AIMW_E2E_HOLD"), out int value) ? value : 0;
 
+    // Where recordings land (video .webm + trace.zip). Default under the OS temp dir.
+    public static string ArtifactsDir =>
+        Environment.GetEnvironmentVariable("AIMW_E2E_ARTIFACTS") is { Length: > 0 } dir
+            ? dir
+            : Path.Combine(Path.GetTempPath(), "ClaudeWorkbenchE2E");
+
+    // AIMW_E2E_VIDEO=1 records a .webm of the whole run. AIMW_E2E_TRACE=1 records a Playwright trace
+    // (screenshots + DOM snapshots + sources) you open with `playwright show-trace trace.zip`.
+    public static bool RecordVideo =>
+        Environment.GetEnvironmentVariable("AIMW_E2E_VIDEO") is "1" or "true" or "TRUE";
+
+    public static bool RecordTrace =>
+        Environment.GetEnvironmentVariable("AIMW_E2E_TRACE") is "1" or "true" or "TRUE";
+
     // Which test-prompt to send. AIMW_E2E_PROMPT (absolute or cwd-relative) wins; otherwise defaults to
     // the Calculator "add a method" prompt resolved from the repo tree.
     public static string PromptFile =>
