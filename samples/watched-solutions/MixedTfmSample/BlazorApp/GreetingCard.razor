@@ -1,0 +1,9 @@
+<div class="greeting-card">
+    <h3>@Title</h3>
+    <p>@SharedGreeter.Greet("Blazor (net10.0)")</p>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Mixed TFM Sample";
+}
