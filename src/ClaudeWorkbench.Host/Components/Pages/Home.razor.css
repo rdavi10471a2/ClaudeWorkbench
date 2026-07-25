@@ -632,3 +632,31 @@
         max-height: calc(100vh - 24px);
     }
 }
+
+/* Top-bar Conversations chip (RHS, by the filename): shows the live thread name and opens the
+   Conversations modal. */
+.thread-chip-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 22rem;
+    padding: 3px 10px;
+    border: 1px solid var(--rz-border-color, #d7e1ea);
+    border-radius: 999px;
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-secondary-color, #52606d);
+    font: inherit;
+    font-size: .8rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.thread-chip-top:hover {
+    border-color: var(--rz-primary, #3b82f6);
+    color: var(--rz-primary, #3b82f6);
+}
+
+.thread-chip-top .thread-chip-top-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -806,28 +806,3 @@
     }
 }
 
-/* Optional name for the next conversation, beside the New Thread button. */
-.new-thread-name {
-    max-width: 12rem;
-    padding: 4px 8px;
-    border-radius: 5px;
-    border: 1px solid var(--rz-border-color, #ccc);
-    background: var(--rz-base-background-color, #fff);
-    color: var(--rz-text-color, #333);
-    font: inherit;
-    font-size: 0.85rem;
-}
-
-.new-thread-name:disabled { opacity: 0.5; }
-
-/* Current-conversation thread status in the transcript header (right-aligned, truncates if long). */
-.thread-status-blurb {
-    margin-left: auto;
-    align-self: center;
-    max-width: 18rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--rz-text-secondary-color, #52606d);
-    font-size: 0.8rem;
-}

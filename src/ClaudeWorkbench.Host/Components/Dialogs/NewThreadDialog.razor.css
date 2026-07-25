@@ -1,0 +1,34 @@
+.new-thread-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 2px;
+}
+
+.new-thread-hint {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.new-thread-hint code {
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-size: 0.78rem;
+}
+
+.new-thread-input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #333);
+    font: inherit;
+}
+
+.new-thread-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}

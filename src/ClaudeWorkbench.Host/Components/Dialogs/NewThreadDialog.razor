@@ -1,0 +1,36 @@
+@using Microsoft.AspNetCore.Components.Web
+@inject DialogService DialogService
+
+@* Small popup shown when the operator clicks New Thread: name the upcoming conversation (optional).
+   Returns the entered name (possibly empty -> default date name) on Start, or null on Cancel/Esc. *@
+<div class="new-thread-dialog">
+    <p class="new-thread-hint">Give this conversation a name, or leave blank for the default (<code>discussion-YYYY-MM-DD-N</code>). You can rename it later.</p>
+    <input class="new-thread-input"
+           @bind="name" @bind:event="oninput"
+           @onkeydown="OnKeyDown"
+           placeholder="e.g. add Dapper + repository"
+           autofocus
+           data-testid="new-thread-name" />
+    <div class="new-thread-actions">
+        <RadzenButton Text="Start thread" Icon="add_comment" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                      Click="@(() => DialogService.Close(name))" data-testid="new-thread-start" />
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                      Click="@(() => DialogService.Close(null))" />
+    </div>
+</div>
+
+@code {
+    private string name = string.Empty;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            DialogService.Close(name);
+        }
+        else if (e.Key == "Escape")
+        {
+            DialogService.Close(null);
+        }
+    }
+}

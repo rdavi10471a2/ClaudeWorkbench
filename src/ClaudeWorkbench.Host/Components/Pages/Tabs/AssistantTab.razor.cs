@@ -1,4 +1,5 @@
 using System.Text;
+using ClaudeWorkbench.Host.Components.Dialogs;
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
 using ClaudeWorkbench.Host.Threads;
@@ -22,12 +23,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     [Inject]
     private ThreadService ThreadStore { get; set; } = default!;
 
-    [Inject]
-    private NotificationService Notifications { get; set; } = default!;
-
-    [Inject]
-    private ICurrentSession CurrentSession { get; set; } = default!;
-
     private ElementReference assistantLayout;
     private ElementReference chatComposer;
     private ElementReference assistantSplitter;
@@ -39,13 +34,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private IJSObjectReference? attachModule;
     private DotNetObjectReference<AssistantTab>? selfRef;
     private string draft = string.Empty;
-    // Optional name the operator types before New Thread; applied to the next conversation's thread.
-    private string newThreadName = string.Empty;
-    // The current conversation's saved-thread name (null = not saved yet -> "Unsaved"), shown in the
-    // transcript header. Cached; refreshed only when the live session id changes (avoids a per-render
-    // DB hit).
-    private string? currentThreadName;
-    private string? lastThreadSessionId;
     private bool autoApprove;
     private bool usageOpen;
     private bool wasWorking;
@@ -67,37 +55,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     protected override void OnInitialized()
     {
         Session.Changed += OnChanged;
-        ThreadStore.ThreadCreated += OnThreadCreated;
-        RefreshThreadName();
-    }
-
-    // A new conversation was autosaved as a thread — toast its name and reflect it in the header.
-    private void OnThreadCreated(ThreadRecord thread) => InvokeAsync(() =>
-    {
-        currentThreadName = thread.Name;
-        lastThreadSessionId = thread.SessionId;
-        Notifications.Notify(new NotificationMessage
-        {
-            Severity = NotificationSeverity.Info,
-            Summary = "Thread saved",
-            Detail = $"Saving thread as “{thread.Name}”",
-            Duration = 4000,
-        });
-        StateHasChanged();
-    });
-
-    // Refresh the header's thread name, but only when the live session actually changed (resume, new
-    // thread, first turn) — so it is not a DB query on every streamed chunk.
-    private void RefreshThreadName()
-    {
-        string? sessionId = CurrentSession.CurrentSessionId;
-        if (string.Equals(sessionId, lastThreadSessionId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        lastThreadSessionId = sessionId;
-        currentThreadName = string.IsNullOrEmpty(sessionId) ? null : ThreadStore.ActiveThread()?.Name;
     }
 
     private void OnChanged()
@@ -112,7 +69,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             }
 
             wasWorking = working;
-            RefreshThreadName();
             // The session changed (message streamed/added/status) — the transcript may have grown,
             // so the next render must re-run the transcript-wide JS.
             transcriptDirty = true;
@@ -261,14 +217,19 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             return;
         }
 
-        // Name the upcoming conversation (optional): the pending name is applied to the thread that
-        // autosaves on its first turn. Blank => the default discussion-YYYY-MM-DD-N name.
-        ThreadStore.SetPendingName(newThreadName);
-        newThreadName = string.Empty;
+        // Popup to name the upcoming conversation. Cancel (null) aborts; a name (possibly blank ->
+        // the default discussion-YYYY-MM-DD-N) is held and applied to the thread that autosaves on
+        // the first turn.
+        object? chosen = await Dialogs.OpenAsync<NewThreadDialog>(
+            "Start a new thread",
+            null,
+            new DialogOptions { Width = "440px", Resizable = false, Draggable = false });
+        if (chosen is null)
+        {
+            return;
+        }
 
-        // Fresh conversation: back to "Unsaved" until its first turn autosaves a thread.
-        currentThreadName = null;
-        lastThreadSessionId = null;
+        ThreadStore.SetPendingName(chosen as string ?? string.Empty);
 
         // Auto-approve is per-thread; a fresh thread starts back at the gate.
         autoApprove = false;
@@ -313,19 +274,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             });
     }
 
-    // The Threads board is a modal (launched here), not a tab. It closes itself after a Resume.
-    private async Task OpenConversationsAsync()
-    {
-        await Dialogs.OpenAsync<ThreadsTab>(
-            "Conversations",
-            options: new DialogOptions
-            {
-                Width = "90vw",
-                Height = "82vh",
-                Resizable = true,
-                Draggable = false,
-            });
-    }
 
     private async Task PopOutAsync()
     {
@@ -418,7 +366,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     public void Dispose()
     {
         Session.Changed -= OnChanged;
-        ThreadStore.ThreadCreated -= OnThreadCreated;
     }
 
     public async ValueTask DisposeAsync()
