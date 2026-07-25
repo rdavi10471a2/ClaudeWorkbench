@@ -45,6 +45,11 @@ internal static class E2EEnvironment
     public static bool RecordTrace =>
         Environment.GetEnvironmentVariable("AIMW_E2E_TRACE") is "1" or "true" or "TRUE";
 
+    // AIMW_E2E_ACCEPT=1 also scripts the Merge Review Accept after the turn, writing the change to
+    // watched source (the whole loop, hands-free). Off by default: watch-only.
+    public static bool AcceptChanges =>
+        Environment.GetEnvironmentVariable("AIMW_E2E_ACCEPT") is "1" or "true" or "TRUE";
+
     // Which test-prompt to send. AIMW_E2E_PROMPT (absolute or cwd-relative) wins; otherwise defaults to
     // the Calculator "add a method" prompt resolved from the repo tree.
     public static string PromptFile =>

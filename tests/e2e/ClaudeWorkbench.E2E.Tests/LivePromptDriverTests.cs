@@ -73,7 +73,41 @@ public sealed class LivePromptDriverTests : IClassFixture<PlaywrightFixture>
         await Assertions.Expect(page.GetByTestId("message-assistant").First)
             .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
 
-        // Hold the browser open so you can open Merge Review and Accept before teardown.
+        // Optionally script the whole loop through to the write: Merge Review auto-opens after the turn
+        // when a candidate is staged. Accept each file (single-file closes after one; session flow
+        // advances per accept and auto-closes on the last). The Accept is the human gate to watched
+        // source - scripting it here writes the change, so it is opt-in via AIMW_E2E_ACCEPT.
+        if (E2EEnvironment.AcceptChanges)
+        {
+            ILocator accept = page.GetByTestId("accept-proposed");
+            ILocator busy = page.GetByTestId("review-busy");
+            try
+            {
+                await accept.WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = 30_000,
+                });
+
+                for (int i = 0; i < 25 && await accept.IsVisibleAsync(); i++)
+                {
+                    await accept.ClickAsync(new LocatorClickOptions { Timeout = 120_000 });
+                    // The accept runs the terminal build + write (+ optional reindex): wait out the
+                    // busy overlay, then loop - the dialog either advances to the next file or closes.
+                    try { await busy.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 }); }
+                    catch (TimeoutException) { }
+                    try { await busy.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 180_000 }); }
+                    catch (TimeoutException) { }
+                    await page.WaitForTimeoutAsync(1_000);
+                }
+            }
+            catch (TimeoutException)
+            {
+                // Nothing staged to accept (e.g. a read-only prompt), or the dialog already closed.
+            }
+        }
+
+        // Hold the browser open so you can see the result (and Merge Review if not auto-accepted).
         if (E2EEnvironment.HoldSeconds > 0)
         {
             await Task.Delay(TimeSpan.FromSeconds(E2EEnvironment.HoldSeconds));

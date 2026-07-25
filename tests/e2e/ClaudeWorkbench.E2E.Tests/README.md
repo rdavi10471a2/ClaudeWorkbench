@@ -70,6 +70,7 @@ to Calculator `01-add-method`.
 | `AIMW_E2E_VIDEO` | (off) | `1` to record a `.webm` of the run |
 | `AIMW_E2E_TRACE` | (off) | `1` to record a Playwright trace (`playwright show-trace trace.zip`) |
 | `AIMW_E2E_ARTIFACTS` | `%TEMP%\ClaudeWorkbenchE2E` | Where video/trace land |
+| `AIMW_E2E_ACCEPT` | (off) | `1` to also script the Merge Review **Accept** (writes to watched source) |
 
 The live driver ticks **Auto-approve** before submitting and auto-clicks **Allow** on any approval
 dialog, so the loop runs hands-free to Merge Review (the write to watched source is still gated by the
@@ -79,9 +80,10 @@ human Accept). Recordings finalize when the run ends: video at `<artifacts>\vide
 ## Stable selectors
 
 The Assistant page (`AssistantTab.razor`) carries `data-testid` hooks: `composer-input`, `transcript`,
-`message-user`, `message-assistant`, `tool-call`, `auto-approve`, `turn-activity`. The Radzen buttons
-(Submit Turn / Stop / New Thread / Copy / Pop Out) have no testid — target them by role + accessible
-name (`GetByRole(AriaRole.Button, name: "Submit Turn")`).
+`message-user`, `message-assistant`, `tool-call`, `auto-approve`, `turn-activity`. The Merge Review
+dialog (`MergeReviewDialog.razor`) carries `accept-proposed`, `accept-override`, `reject-proposed`,
+`review-busy`. The Radzen buttons (Submit Turn / Stop / New Thread / Copy / Pop Out) have no testid —
+target them by role + accessible name (`GetByRole(AriaRole.Button, name: "Submit Turn")`).
 
 ## Two test kinds here
 

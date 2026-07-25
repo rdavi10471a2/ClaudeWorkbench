@@ -3,7 +3,7 @@
 <div class="staged-review-dialog">
     @if (building)
     {
-        <div class="staged-review-busy-overlay" role="status" aria-live="polite" aria-busy="true">
+        <div class="staged-review-busy-overlay" data-testid="review-busy" role="status" aria-live="polite" aria-busy="true">
             <div class="staged-review-busy-card">
                 <div class="staged-review-busy-spinner"></div>
                 <strong>Applying review decision</strong>
@@ -134,18 +134,21 @@
                 <div class="staged-review-detail-actions">
                     <button class="staged-review-primary-action"
                             type="button"
+                            data-testid="accept-proposed"
                             disabled="@(!CanAcceptNormally || actionBusy)"
                             @onclick="AcceptSelectedAsync">
                         Accept Proposed
                     </button>
                     <button class="staged-review-warning-action"
                             type="button"
+                            data-testid="accept-override"
                             disabled="@(!CanForceAccept || actionBusy)"
                             @onclick="AcceptSelectedWithOverrideAsync">
                         Accept With Validation Override
                     </button>
                     <button class="staged-review-danger-action"
                             type="button"
+                            data-testid="reject-proposed"
                             disabled="@(selectedModel.IsDecided || actionBusy)"
                             @onclick="RejectSelectedAsync">
                         Reject
