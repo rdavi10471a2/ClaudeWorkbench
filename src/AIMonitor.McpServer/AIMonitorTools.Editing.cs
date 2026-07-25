@@ -199,8 +199,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        EditSessionStatus status = workflowService.SubmitFile(fullPath, content, manifestJson, !deferOverlayValidation);
+        EditSessionStatus status = workflowService.SubmitFile(fullPath, content, manifestJson);
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             RecordMonitorSessionEvent(sessionId, "submit-file", fullPath, manifestJson);
@@ -235,7 +234,6 @@ public sealed partial class AIMonitorTools
 
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
         ReplaceTextResult result = workflowService.ReplaceText(
             fullPath,
             oldText,
@@ -243,8 +241,7 @@ public sealed partial class AIMonitorTools
             expectedMatchCount,
             expectedFileHash,
             occurrenceIndex >= 0 ? occurrenceIndex : null,
-            manifestJson,
-            !deferOverlayValidation);
+            manifestJson);
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             RecordMonitorSessionEvent(sessionId, "replace-text-in-file", result.WatchedFilePath, JsonSerializer.Serialize(result, JsonOptions));
@@ -288,7 +285,6 @@ public sealed partial class AIMonitorTools
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
         EnsureSession(fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
         EditSessionStatus status = workflowService.ReplaceSpan(
             fullPath,
             startLine,
@@ -299,8 +295,7 @@ public sealed partial class AIMonitorTools
             expectedFileHash,
             expectedOldTextHash,
             expectedOldText,
-            manifestJson,
-            !deferOverlayValidation);
+            manifestJson);
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             RecordMonitorSessionEvent(sessionId, "replace-span-in-file", status.WatchedFilePath, null);

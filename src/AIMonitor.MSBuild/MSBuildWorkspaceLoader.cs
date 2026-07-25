@@ -248,7 +248,6 @@ public sealed class MSBuildWorkspaceLoader
                     timingSink,
                     projectTimingProperties,
                     () => ProjectSymbolIndex.BuildRazorDeclarationsAsync(
-                        project,
                         compilation,
                         symbolIndex,
                         razorDocuments,
@@ -403,7 +402,6 @@ public sealed class MSBuildWorkspaceLoader
                 timingSink,
                 timingProperties,
                 () => ProjectSymbolIndex.BuildRazorDeclarationsAsync(
-                    project,
                     compilation,
                     declarations,
                     razorDocuments,
@@ -886,7 +884,6 @@ internal sealed class ProjectSymbolIndex
     }
 
     public static async Task<ProjectSymbolIndex> BuildRazorDeclarationsAsync(
-        Microsoft.CodeAnalysis.Project project,
         Compilation compilation,
         ProjectSymbolIndex declarations,
         IReadOnlyList<RazorDocumentIndex> razorDocuments,

@@ -269,7 +269,7 @@ public sealed class EngineReviewSessionAtomicityTests
         string sessionId)
     {
         workspace.EditService.Refresh(watchedFilePath);
-        workspace.EditService.WriteWorkingCandidate(watchedFilePath, content, manifestJson: null, validateOverlay: false);
+        workspace.EditService.WriteWorkingCandidate(watchedFilePath, content, manifestJson: null);
         return workspace.EditService.Stage(watchedFilePath, "session atomicity", sessionId);
     }
 

@@ -330,26 +330,6 @@ public sealed partial class AIMonitorTools
         return new PlannedSessionDecisionOptions(!allPlannedFilesDecided, refreshPlan, terminalValidationRecords);
     }
 
-    // A MULTI-file plan's overlay is compiled ONCE, at plan complete (complete_edit_plan), and
-    // NEVER on submit: deferring every submit keeps the compile off the parallel-submit path
-    // entirely, so concurrent submits cannot race the compile or the validator's cache, and no
-    // submit ever compiles a half-queued overlay (refresh_file/new_file create the Working file up
-    // front with old/empty content, so keying the gate on existence fired it before the siblings
-    // were queued). A SINGLE-file plan has no siblings to race and no "queueing" to finish, so it
-    // still validates on submit for immediate feedback — the submit IS plan-complete. Either way
-    // the accept-time GATE-2 build remains the authoritative net.
-    private bool ShouldDeferPlannedOverlayValidation(string? sessionId, string sourceFilePath)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return false;
-        }
-
-        AIMonitorSessionEditPlan editPlan = RequireSessionEditPlan(sessionId);
-        EnsurePlannedFile(editPlan, sourceFilePath);
-        return editPlan.FilesPlanned.Count > 1;
-    }
-
     private void EnsurePlannedMutationAllowed(string? sessionId, string sourceFilePath)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -515,15 +495,6 @@ public sealed partial class AIMonitorTools
     {
         return ex.Message.Contains("Razor markup", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("supports C# source files only", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static void ValidateExpectedHash(string path, string? expectedFileHash)
-    {
-        if (!string.IsNullOrWhiteSpace(expectedFileHash)
-            && !ComputeFileHash(path).Equals(expectedFileHash, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("Working candidate hash did not match expectedFileHash.");
-        }
     }
 
     private static bool IsUnderBuildOrHiddenDirectory(string path)

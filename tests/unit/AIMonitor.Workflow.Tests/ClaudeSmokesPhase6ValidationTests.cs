@@ -18,7 +18,7 @@ public sealed class ClaudeSmokesPhase6ValidationTests
     [Trait("Suite", "ClaudeSmokes")]
     public void ClaudeSmokes_semantic_error_edit_is_not_blocked_at_edit_time()
     {
-        (WorkflowEditService service, string watchedRoot, string programFilePath) = CreateFixture();
+        (WorkflowEditService service, _, string programFilePath) = CreateFixture();
         EditSessionStatus refresh = service.Refresh(programFilePath);
         File.WriteAllText(refresh.WorkingFilePath, "namespace Example { internal static class Program { static int M() => 0; } }");
 

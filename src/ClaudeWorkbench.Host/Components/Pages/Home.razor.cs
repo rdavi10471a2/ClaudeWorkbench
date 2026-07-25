@@ -14,9 +14,6 @@ public partial class Home : IDisposable
     private IOperatorConsole Session { get; set; } = default!;
 
     [Inject]
-    private IApprovalQueue Approvals { get; set; } = default!;
-
-    [Inject]
     private WorkspaceManager Workspace { get; set; } = default!;
 
     [Inject]
@@ -59,7 +56,6 @@ public partial class Home : IDisposable
     private readonly record struct AuthCue(string Css, string Label, string Title);
 
     private bool settingsOpen;
-    private bool workspacePickerOpen;
     private bool reviewDialogOpen;
     private bool aboutOpen;
     private bool helpOpen;
@@ -162,9 +158,10 @@ public partial class Home : IDisposable
         }
     }
 
+    // The workspace picker is embedded (always rendered), so closing it has no local
+    // open/close state to toggle; the handler stays as the picker's OnClose target.
     private void CloseWorkspacePicker()
     {
-        workspacePickerOpen = false;
     }
 
     public void Dispose()

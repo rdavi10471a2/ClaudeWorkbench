@@ -47,7 +47,7 @@ public sealed class WorkflowEditService
         EditSessionManifest? previousManifest = LoadManifest(fullWatchedPath);
         string originalHash = FileHash.Compute(fullWatchedPath);
         DateTimeOffset refreshedAtUtc = DateTimeOffset.UtcNow;
-        string retrievalBackupPath = CreateRetrievalBackup(fullWatchedPath, originalHash, refreshedAtUtc);
+        string retrievalBackupPath = CreateRetrievalBackup(fullWatchedPath, refreshedAtUtc);
         string workingFilePath = paths.GetWorkingFilePath(fullWatchedPath);
         Directory.CreateDirectory(Path.GetDirectoryName(workingFilePath) ?? ".");
         File.Copy(fullWatchedPath, workingFilePath, overwrite: true);
@@ -102,7 +102,7 @@ public sealed class WorkflowEditService
         return GetStatus(fullWatchedPath);
     }
 
-    private string CreateRetrievalBackup(string fullWatchedPath, string originalHash, DateTimeOffset capturedAtUtc)
+    private string CreateRetrievalBackup(string fullWatchedPath, DateTimeOffset capturedAtUtc)
     {
         string backupDirectory = paths.GetRetrievalBackupDirectory(fullWatchedPath);
         Directory.CreateDirectory(backupDirectory);
@@ -269,8 +269,7 @@ public sealed class WorkflowEditService
     public EditSessionStatus WriteWorkingCandidate(
         string watchedFilePath,
         string content,
-        string? manifestJson = null,
-        bool validateOverlay = true)
+        string? manifestJson = null)
     {
         string fullWatchedPath = Path.GetFullPath(watchedFilePath);
         using IDisposable manifestLock = AcquireManifestLock(fullWatchedPath);
@@ -287,8 +286,7 @@ public sealed class WorkflowEditService
         int? expectedMatches = null,
         string? expectedWorkingHash = null,
         int? occurrenceIndex = null,
-        string? manifestJson = null,
-        bool validateOverlay = true)
+        string? manifestJson = null)
     {
         if (string.IsNullOrEmpty(oldText))
         {
@@ -410,8 +408,7 @@ public sealed class WorkflowEditService
         string? expectedWorkingHash = null,
         string? expectedOldTextHash = null,
         string? expectedOldText = null,
-        string? manifestJson = null,
-        bool validateOverlay = true)
+        string? manifestJson = null)
     {
         string fullWatchedPath = Path.GetFullPath(watchedFilePath);
         using IDisposable manifestLock = AcquireManifestLock(fullWatchedPath);
@@ -452,8 +449,7 @@ public sealed class WorkflowEditService
     public EditSessionStatus SubmitFile(
         string watchedFilePath,
         string content,
-        string? manifestJson = null,
-        bool validateOverlay = true)
+        string? manifestJson = null)
     {
         string fullWatchedPath = Path.GetFullPath(watchedFilePath);
         using IDisposable manifestLock = AcquireManifestLock(fullWatchedPath);

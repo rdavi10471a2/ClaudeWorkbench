@@ -32,8 +32,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.SubmitSymbol(fullPath, symbolSelectorJson, code, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.SubmitSymbol(fullPath, symbolSelectorJson, code, manifestJson);
         RecordRoslynSessionEvent(sessionId, "submit-symbol", result);
         return result;
     }
@@ -45,8 +44,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddUsing(fullPath, @namespace, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddUsing(fullPath, @namespace, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-using", result);
         return result;
     }
@@ -58,8 +56,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.RemoveUsing(fullPath, @namespace, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.RemoveUsing(fullPath, @namespace, manifestJson);
         RecordRoslynSessionEvent(sessionId, "remove-using", result);
         return result;
     }
@@ -71,8 +68,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.SetTypePartial(fullPath, containingType, isPartial, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.SetTypePartial(fullPath, containingType, isPartial, manifestJson);
         RecordRoslynSessionEvent(sessionId, "set-type-partial", result);
         return result;
     }
@@ -84,8 +80,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddSymbol(fullPath, containingType, symbolType, code, afterSymbol, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddSymbol(fullPath, containingType, symbolType, code, afterSymbol, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-symbol", result);
         return result;
     }
@@ -97,8 +92,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddField(fullPath, containingType, declaration, afterSymbol, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddField(fullPath, containingType, declaration, afterSymbol, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-field", result);
         return result;
     }
@@ -110,8 +104,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddProperty(fullPath, containingType, declaration, afterSymbol, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddProperty(fullPath, containingType, declaration, afterSymbol, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-property", result);
         return result;
     }
@@ -123,8 +116,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddMethod(fullPath, containingType, declaration, afterSymbol, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddMethod(fullPath, containingType, declaration, afterSymbol, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-method", result);
         return result;
     }
@@ -136,8 +128,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddConstructor(fullPath, containingType, declaration, afterSymbol, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddConstructor(fullPath, containingType, declaration, afterSymbol, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-constructor", result);
         return result;
     }
@@ -149,8 +140,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.AddNestedType(fullPath, containingType, declaration, afterSymbol, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.AddNestedType(fullPath, containingType, declaration, afterSymbol, manifestJson);
         RecordRoslynSessionEvent(sessionId, "add-nested-type", result);
         return result;
     }
@@ -162,8 +152,7 @@ public sealed partial class AIMonitorTools
         runtimeState.Touch();
         string fullPath = ResolveWatchedPath(path);
         EnsurePlannedMutationAllowed(sessionId, fullPath);
-        bool deferOverlayValidation = ShouldDeferPlannedOverlayValidation(sessionId, fullPath);
-        RoslynEditResult result = roslynEditService.RemoveSymbol(fullPath, symbolSelectorJson, manifestJson, !deferOverlayValidation);
+        RoslynEditResult result = roslynEditService.RemoveSymbol(fullPath, symbolSelectorJson, manifestJson);
         RecordRoslynSessionEvent(sessionId, "remove-symbol", result);
         return result;
     }

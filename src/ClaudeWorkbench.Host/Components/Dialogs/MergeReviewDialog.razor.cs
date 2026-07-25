@@ -70,16 +70,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
         LoadReview(preserveSelection: false);
     }
 
-    private void RefreshReview()
-    {
-        LoadReview(preserveSelection: true);
-    }
-
-    private void CloseDialog()
-    {
-        DialogService.Close();
-    }
-
     private void SelectRecord(string stagedRecordId)
     {
         try

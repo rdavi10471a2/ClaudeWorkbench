@@ -22,7 +22,6 @@ public sealed partial class AIMonitorTools
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
         [Description("Optional compact ledger summary.")] string? ledgerSummary = null,
         [Description("Optional durable session handle.")] string? sessionId = null,
-        [Description("Optional JSON manifest expressing model intent.")] string? manifestJson = null,
         [Description("Return the full staged record inline for debugging. Defaults to compact response.")] bool verbose = false)
     {
         runtimeState.Touch();
