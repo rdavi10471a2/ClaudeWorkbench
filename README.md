@@ -61,26 +61,27 @@ dotnet build ClaudeWorkbench.slnx
 dotnet test  ClaudeWorkbench.slnx
 ```
 
-**233 tests — 227 pass · 6 skipped · 0 failed.** Grouped by what is covered rather than by project:
+**227 tests — 227 pass · 0 skipped · 0 failed.** Grouped by what is covered rather than by project:
 
 | Capability | Tests |
 |---|---|
-| Semantic index & language coverage (incl. the 42-case language corpus) | 74 (6 skipped) |
+| Semantic index & language coverage (incl. the language corpus) | 68 |
 | MCP tool surface (out-of-process, real JSON-RPC) | 50 |
 | Edit workflow & staging | 34 |
 | Host & infrastructure (git panel, settings, logging) | 25 |
 | Review gates & decisions (incl. ADR-0005 session atomicity) | 23 |
 | Sample-driven authoring over `samples/watched-solutions/` | 19 |
 | Agent-loop end-to-end (real `dotnet build`s) | 8 |
-| **Total** | **233** |
+| **Total** | **227** |
 
 - **Everything runs under `dotnet test`** — no console runners, no flags to remember. Suite-by-suite detail: **[docs/guide/testing.md](docs/guide/testing.md)**.
-- **The 6 skips are deliberate and countable** — five language-corpus cases that need a multi-project harness, and the environment-dependent `razor-generated:*` rows.
 - **A build-time dead-code gate** (`EnforceCodeStyleInBuild` + `.editorconfig`) reports unused members/params as warnings.
 
 ### Browser-visible end-to-end tests
 
 `tests/e2e` drives the **real Blazor UI** through Playwright — a scripted agent-loop that types a prompt, submits, watches tool calls stream in, and accepts in Merge Review, optionally recording video/trace. It is self-gating (skips cleanly when no Host or browsers are present), so it never breaks the main suite. See **[tests/e2e/ClaudeWorkbench.E2E.Tests/README.md](tests/e2e/ClaudeWorkbench.E2E.Tests/README.md)**.
+
+A recorded example — the multi-function-session prompt driven end to end through the real UI (edit → build → Merge Review → accept): **[docs/media/agent-loop-multi-function.mp4](docs/media/agent-loop-multi-function.mp4)**.
 
 ## Deploy — publish a live install
 

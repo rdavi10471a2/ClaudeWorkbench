@@ -5,24 +5,24 @@ dotnet build ClaudeWorkbench.slnx
 dotnet test  ClaudeWorkbench.slnx
 ```
 
-**233 tests: 227 pass · 6 skipped · 0 failed.** Everything runs under `dotnet test`. There are no
+**227 tests: 227 pass · 0 skipped · 0 failed.** Everything runs under `dotnet test`. There are no
 console runners, no manual flags, and nothing that has to be remembered — see
 [why that matters](#why-there-are-no-console-runners) below.
 
 The table most people want is not "one row per project", because the project layout answers *where
-code lives*, not *what is covered*. Grouped by capability (per-project totals: Data 78 · MSBuild 7 ·
+code lives*, not *what is covered*. Grouped by capability (per-project totals: Data 72 · MSBuild 7 ·
 Indexing 6 · Core 6 · Logging 3 · Host 15 · Workflow 46 · Integration 72):
 
 | # | Capability | Tests | Where |
 |---|---|---|---|
-| A | [Semantic index & language coverage](#a-semantic-index--language-coverage) | 74 (6 skipped) | `Data.Tests`, `MSBuild.Tests`, `Indexing.Tests` |
+| A | [Semantic index & language coverage](#a-semantic-index--language-coverage) | 68 | `Data.Tests`, `MSBuild.Tests`, `Indexing.Tests` |
 | B | [Edit workflow & staging](#b-edit-workflow--staging) | 34 | `Workflow.Tests` |
 | C | [Review gates & decisions](#c-review-gates--decisions) | 23 | `Workflow.Tests`, `Indexing.Tests`, `Integration.Tests` |
 | D | [MCP tool surface](#d-mcp-tool-surface-out-of-process) | 50 | `Integration.Tests`, `Data.Tests` |
 | E | [Sample-driven authoring](#e-sample-driven-authoring-claudesmokes) | 19 | `Data.Tests`, `Workflow.Tests` |
 | F | [Host & infrastructure](#f-host--infrastructure) | 25 | `Host.Tests`, `Core.Tests`, `Logging.Tests`, `Integration.Tests` |
 | G | [Agent-loop end-to-end (real builds)](#g-agent-loop-end-to-end-real-builds) | 8 | `Integration.Tests` |
-| | **Total** | **233** | |
+| | **Total** | **227** | |
 
 ---
 
@@ -33,24 +33,18 @@ failure mode is quiet: the index looks healthy and the answer is simply empty.
 
 | Suite | Tests | Covers |
 |---|---|---|
-| `LanguageCorpusTests` | 42 (5 skipped) | 42 C# constructs, each bound by an independent Roslyn oracle and compared against the index on symbol identity, reference count, caller count, relationship kind, and exact line/column. Covers `operator +`, conversion operators, indexers, explicit interface implementations, method-group assignment, local functions, partials, global usings. |
+| `LanguageCorpusTests` | 37 | C# constructs, each bound by an independent Roslyn oracle and compared against the index on symbol identity, reference count, caller count, relationship kind, and exact line/column. Covers `operator +`, conversion operators, indexers, explicit interface implementations, method-group assignment, local functions, partials, global usings. |
 | `FixtureIndexMatrixTests` | 8 | One case per symbol shape (instance/static method, property, field, event, base type, extension method); asserts `expected == roslyn == aimonitor` three ways. |
 | `MSBuildWorkspaceLoaderTests` | 5 | Project/document loading through real MSBuild. |
 | `SolutionIndexQueryServiceTests` | 5 | Scoped queries: solution, namespace, folder, file. |
 | `SolutionIndexStoreTests` | 4 | SQLite row round-trips, including package references. |
-| `SolutionIndexBuilderTests` | 3 (1 skipped) | Build-to-store pipeline. |
+| `SolutionIndexBuilderTests` | 2 | Build-to-store pipeline. |
 | `SolutionIndexDatabaseSchemaVersionTests` | 2 | Schema version gating. |
 | `RazorCodeBehindIndexingTests` | 1 | Every `.razor.cs` is indexed **and** contributes symbols. |
 | `RazorGeneratorEnvironmentDiagnostic` | 1 | Reports Razor generator/Roslyn version coupling. |
 | `IndexingBoundaryTests` | 1 | What is in and out of the index boundary. |
 | `IndexDbDumpTests` | 1 | Diagnostic dump shape. |
 | `MonitorDataPathsTests` | 1 | Monitor-owned data paths. |
-
-**The 5 skips are all corpus cases** the harness cannot express: it synthesises a single project,
-and those cases need more than one. Each is skipped individually with that reason so the gap stays
-countable instead of disappearing. **The 6th skip** (in `SolutionIndexBuilderTests`) is the
-`razor-generated:*` reference rows, which only index when the host Roslyn matches the SDK's Razor
-source generator — environment-dependent, so documented rather than pinned.
 
 ## B. Edit workflow & staging
 

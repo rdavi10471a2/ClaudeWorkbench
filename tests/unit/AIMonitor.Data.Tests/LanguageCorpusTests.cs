@@ -17,10 +17,6 @@ namespace AIMonitor.Data.Tests;
 /// </summary>
 public sealed class LanguageCorpusTests : IClassFixture<LanguageCorpusFixture>
 {
-    private const string InformationalSkipReason =
-        "Harness limitation: the corpus is synthesised as a single project, so multi-project, "
-        + "project-system and framework-metadata cases cannot be asserted. Tracked as a known gap.";
-
     private readonly LanguageCorpusFixture _fixture;
 
     public LanguageCorpusTests(LanguageCorpusFixture fixture)
@@ -81,36 +77,6 @@ public sealed class LanguageCorpusTests : IClassFixture<LanguageCorpusFixture>
         Assert.True(
             result.MonitorReferenceAtBind,
             $"[{caseId}] no indexed reference at the bind marker position {item.RelativePath}({result.BindLine},{result.BindColumn}).");
-    }
-
-    [Fact(Skip = InformationalSkipReason)]
-    public void Informational_multi_project_classlib_to_app_call()
-    {
-        _fixture.GetEvaluation("multi-project/classlib-to-app-call");
-    }
-
-    [Fact(Skip = InformationalSkipReason)]
-    public void Informational_multi_project_shared_interface_app_implementation()
-    {
-        _fixture.GetEvaluation("multi-project/shared-interface-app-implementation");
-    }
-
-    [Fact(Skip = InformationalSkipReason)]
-    public void Informational_project_system_global_using_file()
-    {
-        _fixture.GetEvaluation("project-system/global-using-file");
-    }
-
-    [Fact(Skip = InformationalSkipReason)]
-    public void Informational_metadata_framework_method_call()
-    {
-        _fixture.GetEvaluation("metadata/framework-method-call");
-    }
-
-    [Fact(Skip = InformationalSkipReason)]
-    public void Informational_metadata_framework_type_reference()
-    {
-        _fixture.GetEvaluation("metadata/framework-type-reference");
     }
 }
 
