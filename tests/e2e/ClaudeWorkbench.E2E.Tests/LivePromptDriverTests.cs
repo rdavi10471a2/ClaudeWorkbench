@@ -2,115 +2,148 @@ using Microsoft.Playwright;
 
 namespace ClaudeWorkbench.E2E.Tests;
 
-// The "automated headed driver": opens the REAL Assistant UI, types a test-prompt, clicks Submit, and
-// then lets you WATCH the real governed loop unfold in the browser - tool-call lines streaming into the
-// transcript, the plan-complete build, and Merge Review. It drives the real Claude agent, so it is:
+// The "automated headed driver": opens the REAL Assistant UI and runs each test-prompt end to end so you
+// can WATCH the governed loop unfold - tool-call lines streaming in, the plan-complete build, Merge
+// Review, and (opt-in) the Accept that writes watched source. It drives the real Claude agent, so it is:
 //
-//   * OPT-IN  - skipped unless AIMW_E2E_LIVE=1 (it spends tokens and needs Claude signed in).
-//   * headed  - run with AIMW_E2E_HEADED=1 (+ AIMW_E2E_SLOWMO=400 to follow the clicks).
-//   * held    - AIMW_E2E_HOLD=120 keeps the browser open 120s after the turn so you can Accept.
+//   * OPT-IN  - skipped unless AIMW_E2E_LIVE=1 (spends tokens, needs Claude signed in).
+//   * headed  - AIMW_E2E_HEADED=1 (+ AIMW_E2E_SLOWMO=500 to follow it).
+//   * batched - runs every prompt from PromptFiles() as its own theory case, in order, sharing one
+//               browser so a single video/trace captures the whole session. New Thread resets the
+//               conversation between prompts. See E2EEnvironment.PromptFiles for selection.
 //
-// PREREQS: the Host must already be running on the sample the prompt targets (e.g. launch it on
-// CalculatorSample). The driver types and submits; it does not switch workspaces or sign you in.
+// PREREQS: the Host must already be running on the sample the prompts target (e.g. CalculatorSample).
+// The driver types/submits/accepts; it does not switch workspaces or sign you in. Don't touch the app
+// yourself while it runs (single-operator - see README).
 //
-//   $env:AIMW_E2E_LIVE="1"; $env:AIMW_E2E_HEADED="1"; $env:AIMW_E2E_SLOWMO="400"; $env:AIMW_E2E_HOLD="120"
-//   $env:AIMW_E2E_PROMPT="samples/watched-solutions/CalculatorSample/test-prompts/01-add-method.md"
+//   $env:AIMW_E2E_LIVE="1"; $env:AIMW_E2E_HEADED="1"; $env:AIMW_E2E_SLOWMO="500"
+//   $env:AIMW_E2E_ACCEPT="1"; $env:AIMW_E2E_VIDEO="1"
 //   dotnet test tests/e2e/ClaudeWorkbench.E2E.Tests --filter "FullyQualifiedName~LivePromptDriver"
 public sealed class LivePromptDriverTests : IClassFixture<PlaywrightFixture>
 {
     private readonly PlaywrightFixture fixture;
+    private readonly Xunit.Abstractions.ITestOutputHelper output;
 
-    public LivePromptDriverTests(PlaywrightFixture fixture)
+    public LivePromptDriverTests(PlaywrightFixture fixture, Xunit.Abstractions.ITestOutputHelper output)
     {
         this.fixture = fixture;
+        this.output = output;
     }
 
-    [SkippableFact]
-    public async Task Drive_a_test_prompt_and_watch_the_loop()
+    public static IEnumerable<object[]> Prompts()
+    {
+        IReadOnlyList<string> files = E2EEnvironment.PromptFiles();
+        if (files.Count == 0)
+        {
+            // One placeholder case so the theory isn't empty; it will Skip.
+            yield return ["(none)", string.Empty];
+            yield break;
+        }
+
+        foreach (string file in files)
+        {
+            yield return [Path.GetFileNameWithoutExtension(file), file];
+        }
+    }
+
+    [SkippableTheory]
+    [MemberData(nameof(Prompts))]
+    public async Task Drive_test_prompt(string name, string promptFile)
     {
         Skip.IfNot(E2EEnvironment.LiveEnabled,
-            "Live driver is opt-in (it uses the real Claude agent + tokens). Set AIMW_E2E_LIVE=1 to run it.");
+            "Live driver is opt-in (real Claude agent + tokens). Set AIMW_E2E_LIVE=1 to run it.");
         Skip.If(fixture.SkipReason is not null, fixture.SkipReason);
-        Skip.IfNot(File.Exists(E2EEnvironment.PromptFile), $"Prompt file not found: {E2EEnvironment.PromptFile}");
+        Skip.IfNot(File.Exists(promptFile), $"Prompt file not found: {promptFile}");
 
-        string prompt = E2EEnvironment.ReadPromptSection(E2EEnvironment.PromptFile);
-        Skip.If(string.IsNullOrWhiteSpace(prompt), $"No '## Prompt' section in {E2EEnvironment.PromptFile}");
+        string prompt = E2EEnvironment.ReadPromptSection(promptFile);
+        Skip.If(string.IsNullOrWhiteSpace(prompt), $"No '## Prompt' section in {promptFile}");
+
+        output.WriteLine($"Driving prompt '{name}' ({promptFile})");
 
         IPage page = fixture.Page;
         await page.GotoAsync(E2EEnvironment.BaseUrl);
 
-        // Fallback for the operator gate (AgentActionModal): if an approval dialog appears, click
-        // "Allow". Registered before the turn so it fires the moment a dialog interrupts. With
-        // auto-approve ticked below this should rarely trigger, but a never-auto-approvable tool
-        // (ADR-0006) would still surface a dialog, and this keeps the loop watchable end to end.
-        ILocator allowButton = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Allow", Exact = true });
-        await page.AddLocatorHandlerAsync(allowButton, async handled => await handled.ClickAsync());
-
         ILocator composer = page.GetByTestId("composer-input");
         await Assertions.Expect(composer).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
 
-        // Auto-approve claude-workbench edits for this thread so the loop flows to Merge Review
-        // without a per-tool dialog. The write to watched source is still gated by the human Accept.
+        // Reset the conversation so each prompt is an independent turn (best-effort: disabled while a
+        // turn is running, absent on a fresh session).
+        ILocator newThread = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "New Thread" });
+        if (await newThread.IsVisibleAsync() && await newThread.IsEnabledAsync())
+        {
+            await newThread.ClickAsync();
+            await Assertions.Expect(composer).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        }
+
+        // Auto-approve claude-workbench edits for this thread so the loop flows without a per-tool
+        // dialog (New Thread resets it, so re-tick every prompt). The write is still gated by Accept.
         await page.GetByTestId("auto-approve").CheckAsync();
 
-        // Type the prompt a human would paste, then submit the turn.
         await composer.FillAsync(prompt);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Submit Turn" }).ClickAsync();
 
-        // The turn started: "Thinking..." appears.
+        // Turn started -> a tool-call streams in (the live loop) -> turn finished.
         ILocator activity = page.GetByTestId("turn-activity");
         await Assertions.Expect(activity).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
-
-        // The agent is acting: at least one tool-call line streams into the transcript. THIS is the
-        // live loop you wanted to watch.
-        ILocator toolCalls = page.GetByTestId("tool-call");
-        await Assertions.Expect(toolCalls.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 180_000 });
-
-        // The turn finished: "Thinking..." goes away (real turns can be slow - allow minutes).
+        await Assertions.Expect(page.GetByTestId("tool-call").First)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 180_000 });
         await Assertions.Expect(activity).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 600_000 });
-
-        // An assistant reply rendered.
         await Assertions.Expect(page.GetByTestId("message-assistant").First)
             .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
 
-        // Optionally script the whole loop through to the write: Merge Review auto-opens after the turn
-        // when a candidate is staged. Accept each file (single-file closes after one; session flow
-        // advances per accept and auto-closes on the last). The Accept is the human gate to watched
-        // source - scripting it here writes the change, so it is opt-in via AIMW_E2E_ACCEPT.
         if (E2EEnvironment.AcceptChanges)
         {
-            ILocator accept = page.GetByTestId("accept-proposed");
-            ILocator busy = page.GetByTestId("review-busy");
-            try
-            {
-                await accept.WaitForAsync(new LocatorWaitForOptions
-                {
-                    State = WaitForSelectorState.Visible,
-                    Timeout = 30_000,
-                });
-
-                for (int i = 0; i < 25 && await accept.IsVisibleAsync(); i++)
-                {
-                    await accept.ClickAsync(new LocatorClickOptions { Timeout = 120_000 });
-                    // The accept runs the terminal build + write (+ optional reindex): wait out the
-                    // busy overlay, then loop - the dialog either advances to the next file or closes.
-                    try { await busy.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 }); }
-                    catch (TimeoutException) { }
-                    try { await busy.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 180_000 }); }
-                    catch (TimeoutException) { }
-                    await page.WaitForTimeoutAsync(1_000);
-                }
-            }
-            catch (TimeoutException)
-            {
-                // Nothing staged to accept (e.g. a read-only prompt), or the dialog already closed.
-            }
+            await ResolveReviewAsync(page);
         }
 
-        // Hold the browser open so you can see the result (and Merge Review if not auto-accepted).
         if (E2EEnvironment.HoldSeconds > 0)
         {
             await Task.Delay(TimeSpan.FromSeconds(E2EEnvironment.HoldSeconds));
+        }
+    }
+
+    // Merge Review auto-opens after the turn when a candidate is staged. Accept each file when the
+    // normal Accept is available; if pre-merge validation failed (Accept disabled), Reject instead -
+    // that is the correct outcome for the build-fail scenarios and keeps the batch from hanging.
+    private static async Task ResolveReviewAsync(IPage page)
+    {
+        ILocator accept = page.GetByTestId("accept-proposed");
+        ILocator reject = page.GetByTestId("reject-proposed");
+        ILocator busy = page.GetByTestId("review-busy");
+
+        try
+        {
+            await accept.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 30_000 });
+        }
+        catch (TimeoutException)
+        {
+            return; // nothing staged (e.g. a read-only prompt) or the dialog already closed
+        }
+
+        for (int i = 0; i < 25 && await accept.IsVisibleAsync(); i++)
+        {
+            try
+            {
+                if (await accept.IsEnabledAsync())
+                {
+                    await accept.ClickAsync(new LocatorClickOptions { Timeout = 120_000 });
+                }
+                else
+                {
+                    await reject.ClickAsync(new LocatorClickOptions { Timeout = 120_000 });
+                }
+            }
+            catch (Exception)
+            {
+                break; // the dialog raced closed under the click, or nothing left to decide - done
+            }
+
+            // The decision runs the terminal build + write (+ optional reindex): wait it out.
+            try { await busy.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 }); }
+            catch (TimeoutException) { }
+            try { await busy.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 180_000 }); }
+            catch (TimeoutException) { }
+            await page.WaitForTimeoutAsync(1_000);
         }
     }
 }

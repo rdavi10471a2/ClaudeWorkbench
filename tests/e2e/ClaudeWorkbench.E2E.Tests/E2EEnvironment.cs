@@ -50,12 +50,38 @@ internal static class E2EEnvironment
     public static bool AcceptChanges =>
         Environment.GetEnvironmentVariable("AIMW_E2E_ACCEPT") is "1" or "true" or "TRUE";
 
-    // Which test-prompt to send. AIMW_E2E_PROMPT (absolute or cwd-relative) wins; otherwise defaults to
-    // the Calculator "add a method" prompt resolved from the repo tree.
-    public static string PromptFile =>
-        Environment.GetEnvironmentVariable("AIMW_E2E_PROMPT") is { Length: > 0 } path
-            ? path
-            : Path.Combine(RepoRoot(), "samples", "watched-solutions", "CalculatorSample", "test-prompts", "01-add-method.md");
+    // The prompts the live driver runs, in order. Resolution:
+    //   AIMW_E2E_PROMPTS   = ';'-separated list of .md files (explicit set)   -> those
+    //   AIMW_E2E_PROMPT    = a single .md file                                -> just that
+    //   AIMW_E2E_PROMPT_DIR (default CalculatorSample/test-prompts)           -> its *.md (minus
+    //                        README), sorted, first AIMW_E2E_PROMPT_TAKE (default 5)
+    public static IReadOnlyList<string> PromptFiles()
+    {
+        if (Environment.GetEnvironmentVariable("AIMW_E2E_PROMPTS") is { Length: > 0 } list)
+        {
+            return list.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+
+        if (Environment.GetEnvironmentVariable("AIMW_E2E_PROMPT") is { Length: > 0 } single)
+        {
+            return [single];
+        }
+
+        string dir = Environment.GetEnvironmentVariable("AIMW_E2E_PROMPT_DIR") is { Length: > 0 } d
+            ? d
+            : Path.Combine(RepoRoot(), "samples", "watched-solutions", "CalculatorSample", "test-prompts");
+        if (!Directory.Exists(dir))
+        {
+            return [];
+        }
+
+        int take = int.TryParse(Environment.GetEnvironmentVariable("AIMW_E2E_PROMPT_TAKE"), out int t) ? t : 5;
+        return Directory.GetFiles(dir, "*.md")
+            .Where(file => !Path.GetFileName(file).Equals("README.md", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
+            .Take(take)
+            .ToList();
+    }
 
     // The prompt text a human would paste: everything under the "## Prompt" heading of a test-prompt .md.
     public static string ReadPromptSection(string promptFilePath)
