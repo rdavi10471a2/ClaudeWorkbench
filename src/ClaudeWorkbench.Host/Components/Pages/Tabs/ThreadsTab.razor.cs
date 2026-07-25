@@ -3,14 +3,15 @@ using ClaudeWorkbench.Host.Services;
 using ClaudeWorkbench.Host.Threads;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using Radzen;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Tabs;
 
-// The conversation-Threads page — a master/detail: a kanban CHOOSER on the left (one column per
-// lifecycle state) and a DETAILS pane on the right for the selected thread. A thread is a named,
-// resumable pointer to an SDK session (autosaved as you talk). States are derived: Active is
-// computed (the thread whose session is live); Planned/Archived/Abandoned are stored. Every write
-// here is metadata or disk reclamation — never watched source — so nothing goes through the gate.
+// The Conversations board — a modal (opened from the Workbench toolbar), master/detail: a VERTICAL
+// board CHOOSER on the left (Active pinned on top, then Archived and Abandoned) and a DETAILS pane
+// on the right for the selected thread. A thread is a named, resumable pointer to an SDK session
+// (autosaved as you talk). Active is computed (the thread whose session is live); the rest are
+// stored. Every write here is metadata or disk reclamation — never watched source — no gate.
 public partial class ThreadsTab : IAsyncDisposable
 {
     [Inject]
@@ -27,6 +28,9 @@ public partial class ThreadsTab : IAsyncDisposable
 
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
+
+    [Inject]
+    private DialogService DialogService { get; set; } = default!;
 
     private IReadOnlyList<ThreadRecord> threads = [];
     private string? activeThreadId;
@@ -162,7 +166,7 @@ public partial class ThreadsTab : IAsyncDisposable
     {
         if (thread.IsStub)
         {
-            Report("This is a planned stub — it has no conversation to resume yet.", error: true);
+            Report("This thread has no conversation to resume yet.", error: true);
             return;
         }
 
@@ -176,11 +180,14 @@ public partial class ThreadsTab : IAsyncDisposable
         string? sessionId = Threads.PrepareResume(thread.ThreadId);
         bool ok = sessionId is not null && await Sidecar.ResumeAsync(sessionId);
         busy = false;
-        Report(
-            ok
-                ? $"Resumed “{thread.Name}” — switch to the Workbench tab and continue the conversation."
-                : "Could not resume — the sidecar rejected it (a turn may be active).",
-            error: !ok);
+        if (ok)
+        {
+            // Close the modal and drop the operator back on the Workbench to continue the thread.
+            DialogService.Close();
+            return;
+        }
+
+        Report("Could not resume — the sidecar rejected it (a turn may be active).", error: true);
         Load();
     }
 

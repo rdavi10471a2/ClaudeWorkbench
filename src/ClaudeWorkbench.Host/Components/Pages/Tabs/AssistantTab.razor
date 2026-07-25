@@ -2,11 +2,12 @@
     <div class="assistant-layout" @ref="assistantLayout">
         <div class="chat-composer" @ref="chatComposer">
             <div class="chat-composer-toolbar">
-                <label class="composer-icon-btn @(uploading ? "busy" : null)"
-                       title="@(uploading ? "Uploading..." : "Attach files")">
-                    <InputFile class="attach-input" OnChange="OnFilesSelectedAsync" multiple disabled="@uploading" />
-                    <RadzenIcon Icon="attach_file" />
-                </label>
+                <button type="button" class="composer-icon-btn"
+                        title="Conversations — browse, resume, rename, or delete saved threads"
+                        @onclick="OpenConversationsAsync"
+                        data-testid="open-conversations">
+                    <RadzenIcon Icon="forum" />
+                </button>
                 <button type="button" class="composer-icon-btn"
                         title="Activity — tool calls and events for this run"
                         @onclick="OpenActivityAsync">
@@ -93,7 +94,7 @@
             <div class="transcript-header">
                 <span>Chat History</span>
                 <span class="thread-status-blurb" data-testid="thread-status"
-                      title="This conversation's saved thread. Rename it or add notes in the Threads tab.">
+                      title="This conversation's saved thread. Open Conversations (toolbar) to rename, add notes, resume, or delete.">
                     @(currentThreadName is null
                         ? "Unsaved"
                         : $"Thread: {currentThreadName}")

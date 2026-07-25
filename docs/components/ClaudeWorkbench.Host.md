@@ -171,7 +171,7 @@ sequenceDiagram
 
 Hosted on `Components/Pages/Home.razor`:
 
-- **Threads** (`Tabs/ThreadsTab`) — the conversation-thread list (replaced the Tasks board): resume/rename/promote/abandon/restore/delete named, autosaved threads. Backed by `ThreadService` over the per-workspace `threads.sqlite`.
+- **Conversations** (`Tabs/ThreadsTab`, opened as a modal from the Workbench toolbar — not a tab) — the conversation-thread board (replaced the Tasks board): resume/rename/abandon/restore/delete named, autosaved threads. Backed by `ThreadService` over the per-workspace `threads.sqlite`.
 - **Workbench / Assistant** (`Tabs/AssistantTab`) — the chat surface: prompt the agent, watch the transcript, resolve gates/elicitations via `AgentActionModal`, start a new thread.
 - **Source** (`Pages/Source/*`) — read-only browser of the watched solution from the in-process AIMonitor index (`SourceWorkspace`).
 - **Git** (`Tabs/GitTab`) — the operator's git panel over `GitWorkspaceService`: status, stage/unstage/discard, diff, commit, push, branches.

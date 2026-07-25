@@ -2,8 +2,9 @@
 
 A **thread** is a named, resumable conversation. It replaced the old Tasks board: instead of a
 kanban you maintain by hand, every conversation is saved automatically, and you name, reopen, and
-delete threads from the **Threads** tab. A saved thread is a lightweight after-the-fact record —
-the conversation, and (uniquely) the exact edits it produced.
+delete threads from the **Conversations** modal (the `forum` button in the Workbench composer
+toolbar). A saved thread is a lightweight after-the-fact record — the conversation, and (uniquely)
+the exact edits it produced.
 
 ## What a thread is
 
@@ -30,10 +31,11 @@ not a board you drag cards around:
 - **Archived** — has a session, resumable, not live (the resting state).
 - **Abandoned** — discarded, kept until you delete it.
 
-The Threads tab is a **vertical board** on the left — Active pinned on top, then Archived and
-Abandoned, each with its threads listed beneath — and a **details pane** on the right (resizable
-splitter). Pick a thread to open it; from the details pane you can **Resume**, **rename**, edit
-description/note, **Abandon/Restore**, and **hard-delete**.
+The Conversations modal is a **vertical board** on the left — Active pinned on top, then Archived
+and Abandoned, each with its threads listed beneath — and a **details pane** on the right (resizable
+splitter). Pick a thread to open it; from the details pane you can **Resume** (which closes the modal
+so you continue on the Workbench), **rename**, edit description/note, **Abandon/Restore**, and
+**hard-delete**.
 
 ## Autosave — no save button
 

@@ -3,7 +3,6 @@ using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
 using ClaudeWorkbench.Host.Threads;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using Radzen;
 
@@ -16,9 +15,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
 
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
-
-    [Inject]
-    private UploadService Uploads { get; set; } = default!;
 
     [Inject]
     private DialogService Dialogs { get; set; } = default!;
@@ -60,7 +56,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private bool transcriptDirty = true;
     private UsageSnapshot? usage;
     private readonly List<PendingAttachment> attachments = new();
-    private bool uploading;
     private string? uploadError;
 
     private sealed record PendingAttachment(string Name, string Path);
@@ -185,33 +180,6 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private static string LocalFileUrl(string path)
     {
         return "/local-file?path=" + Uri.EscapeDataString(path);
-    }
-
-    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs args)
-    {
-        uploadError = null;
-        uploading = true;
-        StateHasChanged();
-        try
-        {
-            foreach (IBrowserFile file in args.GetMultipleFiles(maximumFileCount: 20))
-            {
-                using (Stream stream = file.OpenReadStream(maxAllowedSize: 50L * 1024 * 1024))
-                {
-                    string saved = await Uploads.SaveAsync(file.Name, stream, CancellationToken.None);
-                    attachments.Add(new PendingAttachment(file.Name, saved));
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            uploadError = ex.Message;
-        }
-        finally
-        {
-            uploading = false;
-            StateHasChanged();
-        }
     }
 
     private void RemoveAttachment(PendingAttachment attachment)
@@ -342,6 +310,20 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
                 Height = "72vh",
                 Resizable = true,
                 Draggable = true,
+            });
+    }
+
+    // The Threads board is a modal (launched here), not a tab. It closes itself after a Resume.
+    private async Task OpenConversationsAsync()
+    {
+        await Dialogs.OpenAsync<ThreadsTab>(
+            "Conversations",
+            options: new DialogOptions
+            {
+                Width = "90vw",
+                Height = "82vh",
+                Resizable = true,
+                Draggable = false,
             });
     }
 

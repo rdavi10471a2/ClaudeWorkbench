@@ -54,7 +54,7 @@ flowchart TB
 
     subgraph host["Blazor Host — .NET 10 process, :6100"]
         direction TB
-        ui["Blazor operator console<br/>Workbench · Threads · Source · Git · Activity"]
+        ui["Blazor operator console<br/>Workbench · Source · Git · Activity + Conversations modal"]
         mcp[claude-workbench MCP server<br/>Streamable HTTP /mcp · ~72 tools]
         engine[AIMonitor.* engine<br/>Core · Logging · MSBuild · Data · Indexing · Workflow · McpServer]
         rev[EngineReviewWorkflow<br/>the ONLY watched-source writer]
