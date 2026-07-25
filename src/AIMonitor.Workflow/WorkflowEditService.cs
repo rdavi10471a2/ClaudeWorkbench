@@ -548,8 +548,13 @@ public sealed class WorkflowEditService
     // the original carried a BOM; match it. (A brand-new file has none, so new files stay BOM-less.)
     private static void WriteCandidateFile(string path, string content)
     {
+        // Preserve the source file's UTF-8 BOM (rationale above) AND write atomically (temp + replace) so a
+        // concurrent reader - the overlay/pre-merge build, or another agent thread - never observes a
+        // half-written working file, and a crash mid-write leaves the prior candidate intact.
         bool hadBom = HasUtf8Bom(path);
-        File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: hadBom));
+        string tempPath = path + ".writing";
+        File.WriteAllText(tempPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: hadBom));
+        File.Move(tempPath, path, overwrite: true);
     }
 
     private static bool HasUtf8Bom(string path)
@@ -1196,7 +1201,13 @@ public sealed class WorkflowEditService
     {
         string metadataPath = paths.GetMetadataPath(watchedFilePath);
         Directory.CreateDirectory(Path.GetDirectoryName(metadataPath) ?? ".");
-        File.WriteAllText(metadataPath, JsonSerializer.Serialize(manifest, JsonOptions));
+        // Atomic write-through (same pattern as SaveStagedRecord): serialize to a sibling temp then replace,
+        // so a crash mid-write - or a concurrent lock-free reader such as GetStatus, or another agent thread -
+        // never observes a truncated manifest. The ".writing" suffix is NOT "*.json", so the MetadataRoot
+        // overlay scan (BuildCandidateOverlayMap) ignores it.
+        string tempPath = metadataPath + ".writing";
+        File.WriteAllText(tempPath, JsonSerializer.Serialize(manifest, JsonOptions));
+        File.Move(tempPath, metadataPath, overwrite: true);
     }
 
     private StagedEditRecord? LoadStagedRecord(string stagedRecordId)
