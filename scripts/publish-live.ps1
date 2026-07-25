@@ -158,13 +158,17 @@ if (-not (Test-Path (Join-Path $sidecarOut 'dist\index.js'))) {
     throw "Sidecar publish incomplete: $sidecarOut\dist\index.js is missing."
 }
 
-# --- 3b. Sample workspace -------------------------------------------------------------
-# A small watched solution so a fresh install has something to open on first run. It goes in
+# --- 3b. Sample workspaces ------------------------------------------------------------
+# Small watched solutions so a fresh install has something to open on first run. They go in
 # samples\, NOT runtime\ - runtime\ is disposable per-workspace state and gets cleared.
-$sampleSource = Join-Path $repoRoot 'samples\watched-solutions\CalculatorSample'
-$sampleOut = Join-Path $Destination 'samples\CalculatorSample'
-if (Test-Path $sampleSource) {
-    Write-Host '  copying CalculatorSample workspace...'
+#   CalculatorSample - single-project smoke fixture.
+#   MixedTfmSample   - multi-project / multi-TFM overlay test bed (net8 console + net9
+#                      WinForms + net10 Blazor + shared net8 lib).
+foreach ($sampleName in @('CalculatorSample', 'MixedTfmSample')) {
+    $sampleSource = Join-Path $repoRoot "samples\watched-solutions\$sampleName"
+    $sampleOut = Join-Path $Destination "samples\$sampleName"
+    if (-not (Test-Path $sampleSource)) { continue }
+    Write-Host "  copying $sampleName workspace..."
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $sampleOut) | Out-Null
     if (Test-Path $sampleOut) { Remove-Item $sampleOut -Recurse -Force }
     Copy-Item $sampleSource $sampleOut -Recurse -Force
@@ -177,7 +181,7 @@ if (Test-Path $sampleSource) {
     # clobbered on the next publish), so resetting the fixture needs an untouched source to
     # copy back from. The Launcher's "Reset Sample" button copies samples-golden\ over
     # samples\ to restore the fixture to first-publish state.
-    $goldenOut = Join-Path $Destination 'samples-golden\CalculatorSample'
+    $goldenOut = Join-Path $Destination "samples-golden\$sampleName"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $goldenOut) | Out-Null
     if (Test-Path $goldenOut) { Remove-Item $goldenOut -Recurse -Force }
     Copy-Item $sampleSource $goldenOut -Recurse -Force
