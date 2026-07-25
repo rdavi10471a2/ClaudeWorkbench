@@ -32,6 +32,10 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
     // can persist or touch the corresponding thread. Carries the session id.
     public event Action<string>? SessionStarted;
 
+    // Raised when a turn finishes, carrying the live session id, so the thread layer can mirror
+    // the (now up-to-date) transcript into the app-owned runtime copy.
+    public event Action<string>? TurnFinished;
+
     public bool Connected { get; private set; }
 
     public string? ActiveTurn { get; private set; }
@@ -234,6 +238,7 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
     private void Apply(SidecarEvent evt)
     {
         string? sessionToAnnounce = null;
+        string? sessionToMirror = null;
         lock (sync)
         {
             events.AddLast(evt);
@@ -267,6 +272,7 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
                     break;
                 case "turn_finished":
                     ActiveTurn = null;
+                    sessionToMirror = CurrentSessionId;
                     break;
                 case "tool_call_started":
                     // Any file the agent touches (read/write/edit) becomes viewable in chat
@@ -285,11 +291,16 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
             }
         }
 
-        // Fire outside the lock: the thread layer does DB work on this callback and
+        // Fire outside the lock: the thread layer does DB/file work on these callbacks and
         // must never run while the event lock is held.
         if (sessionToAnnounce is not null)
         {
             SessionStarted?.Invoke(sessionToAnnounce);
+        }
+
+        if (!string.IsNullOrWhiteSpace(sessionToMirror))
+        {
+            TurnFinished?.Invoke(sessionToMirror);
         }
     }
 

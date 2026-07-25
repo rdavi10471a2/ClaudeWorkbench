@@ -19,6 +19,9 @@ public sealed class RuntimeProvisioner
         // write_note MCP tool. Physically under runtime, OUTSIDE watched source, so it can
         // never sneak an edit into governed source. See AIMonitorTools.Notes.
         "agent-notes",
+        // App-owned MIRROR of conversation transcripts (~/.claude stays the primary). See
+        // ThreadService.MirrorTranscript / ClaudeTranscriptStore.
+        "sessions",
     ];
 
     public void EnsureRuntime(MonitorSettings settings)

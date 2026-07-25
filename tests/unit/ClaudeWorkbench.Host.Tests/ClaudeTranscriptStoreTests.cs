@@ -53,6 +53,30 @@ public sealed class ClaudeTranscriptStoreTests : IDisposable
     }
 
     [Fact]
+    public void Mirror_to_copies_the_transcript_into_the_destination_as_session_jsonl()
+    {
+        string root = NewProjectsRoot();
+        WriteTranscript(root, "proj", "sess-1", "{\"m\":1}");
+        ClaudeTranscriptStore store = new(root);
+        string dest = Path.Combine(Path.GetTempPath(), "cwb-mirror-" + Guid.NewGuid().ToString("N"));
+        tempDirs.Add(dest);
+
+        string? mirror = store.MirrorTo("sess-1", dest);
+
+        Assert.NotNull(mirror);
+        Assert.Equal(Path.Combine(dest, "sess-1.jsonl"), mirror);
+        Assert.Equal("{\"m\":1}", File.ReadAllText(mirror!));
+    }
+
+    [Fact]
+    public void Mirror_to_returns_null_when_there_is_no_transcript()
+    {
+        string root = NewProjectsRoot();
+        ClaudeTranscriptStore store = new(root);
+        Assert.Null(store.MirrorTo("missing", Path.Combine(Path.GetTempPath(), "cwb-mirror-none")));
+    }
+
+    [Fact]
     public void Unknown_session_locates_nothing_and_deletes_nothing()
     {
         string root = NewProjectsRoot();

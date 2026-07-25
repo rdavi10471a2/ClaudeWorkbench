@@ -116,6 +116,16 @@ public sealed class ThreadService
         }
     }
 
+    // Copy the current ~/.claude transcript for a session into the app-owned runtime mirror
+    // (runtime\<workspace>\sessions). Called after each turn so the mirror stays current. Best-effort.
+    public void MirrorTranscript(string sessionId)
+    {
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            transcripts.MirrorTo(sessionId, workspace.SessionsDirectory);
+        }
+    }
+
     // The session id to hand SidecarClient.ResumeAsync when reopening a thread. Null for a stub
     // (nothing to resume yet) or an unknown thread.
     public string? GetResumeSessionId(string threadId)
@@ -137,10 +147,32 @@ public sealed class ThreadService
 
         if (!string.IsNullOrWhiteSpace(thread.SessionId))
         {
+            // Remove BOTH copies: the ~/.claude primary and the app-owned runtime mirror.
             transcripts.DeleteTranscripts(thread.SessionId);
+            DeleteMirror(thread.SessionId);
         }
 
         return repository.Delete(threadId);
+    }
+
+    // Remove the app-owned runtime mirror for a session (best-effort; the ~/.claude primary is
+    // handled by ClaudeTranscriptStore.DeleteTranscripts).
+    private void DeleteMirror(string sessionId)
+    {
+        try
+        {
+            string mirror = Path.Combine(workspace.SessionsDirectory, sessionId + ".jsonl");
+            if (File.Exists(mirror))
+            {
+                File.Delete(mirror);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     // A fresh repository bound to the CURRENT workspace each call, so the service follows an

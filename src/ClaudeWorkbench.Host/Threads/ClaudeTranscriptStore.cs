@@ -44,6 +44,39 @@ public sealed class ClaudeTranscriptStore
         return matches;
     }
 
+    // Copy the primary ~/.claude transcript for a session into destDir as <sessionId>.jsonl (the
+    // app-owned mirror). Overwrites so the mirror always reflects the latest turn. Best-effort:
+    // returns the destination path if copied, null if there was nothing to copy or the copy failed.
+    public string? MirrorTo(string sessionId, string destinationDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(destinationDirectory))
+        {
+            return null;
+        }
+
+        string source = Locate(sessionId).FirstOrDefault() ?? string.Empty;
+        if (source.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(destinationDirectory);
+            string destination = Path.Combine(destinationDirectory, sessionId + ".jsonl");
+            File.Copy(source, destination, overwrite: true);
+            return destination;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     // Hard-delete the transcript(s) for a session to reclaim disk. Best-effort: returns how many
     // files were removed; a locked/absent file is skipped, not thrown.
     public int DeleteTranscripts(string sessionId)

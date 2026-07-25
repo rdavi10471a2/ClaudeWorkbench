@@ -11,23 +11,33 @@ public sealed class ThreadServiceTests : IDisposable
 {
     private readonly List<string> tempDirs = new();
 
-    private (ThreadService service, FakeCurrentSession session, string projectsRoot) NewService()
+    private (ThreadService service, FakeCurrentSession session, string projectsRoot, string sessionsDir) NewService()
     {
         string dir = Path.Combine(Path.GetTempPath(), "cwb-threadsvc-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         tempDirs.Add(dir);
-        FakeWorkspace workspace = new(Path.Combine(dir, "threads.sqlite"), @"C:\watched\Solution");
+        string sessionsDir = Path.Combine(dir, "sessions");
+        FakeWorkspace workspace = new(Path.Combine(dir, "threads.sqlite"), @"C:\watched\Solution", sessionsDir);
         string projectsRoot = Path.Combine(dir, "projects");
         Directory.CreateDirectory(projectsRoot);
         ClaudeTranscriptStore transcripts = new(projectsRoot);
         FakeCurrentSession session = new();
-        return (new ThreadService(workspace, transcripts, session), session, projectsRoot);
+        return (new ThreadService(workspace, transcripts, session), session, projectsRoot, sessionsDir);
+    }
+
+    private static string WritePrimaryTranscript(string projectsRoot, string sessionId, string content = "{}")
+    {
+        string projectDir = Path.Combine(projectsRoot, "proj");
+        Directory.CreateDirectory(projectDir);
+        string path = Path.Combine(projectDir, sessionId + ".jsonl");
+        File.WriteAllText(path, content);
+        return path;
     }
 
     [Fact]
     public void Ensure_thread_for_session_creates_then_touches_the_same_thread()
     {
-        (ThreadService service, _, _) = NewService();
+        (ThreadService service, _, _, _) = NewService();
 
         ThreadRecord created = service.EnsureThreadForSession("sess-1");
         ThreadRecord again = service.EnsureThreadForSession("sess-1");
@@ -42,7 +52,7 @@ public sealed class ThreadServiceTests : IDisposable
     [Fact]
     public void Create_stub_is_planned_with_no_session()
     {
-        (ThreadService service, _, _) = NewService();
+        (ThreadService service, _, _, _) = NewService();
 
         ThreadRecord stub = service.CreateStub("plan the refactor", "why");
 
@@ -55,7 +65,7 @@ public sealed class ThreadServiceTests : IDisposable
     [Fact]
     public void Active_thread_is_the_one_matching_the_live_session()
     {
-        (ThreadService service, FakeCurrentSession session, _) = NewService();
+        (ThreadService service, FakeCurrentSession session, _, _) = NewService();
         ThreadRecord a = service.EnsureThreadForSession("sess-a");
         service.EnsureThreadForSession("sess-b");
 
@@ -69,7 +79,7 @@ public sealed class ThreadServiceTests : IDisposable
     [Fact]
     public void Record_accepted_edits_links_them_to_the_live_thread()
     {
-        (ThreadService service, FakeCurrentSession session, _) = NewService();
+        (ThreadService service, FakeCurrentSession session, _, _) = NewService();
         ThreadRecord thread = service.EnsureThreadForSession("sess-1");
         session.CurrentSessionId = "sess-1";
 
@@ -81,7 +91,7 @@ public sealed class ThreadServiceTests : IDisposable
     [Fact]
     public void Record_accepted_edits_is_a_noop_with_no_live_session()
     {
-        (ThreadService service, FakeCurrentSession session, _) = NewService();
+        (ThreadService service, FakeCurrentSession session, _, _) = NewService();
         ThreadRecord thread = service.EnsureThreadForSession("sess-1");
         session.CurrentSessionId = null;
 
@@ -93,7 +103,7 @@ public sealed class ThreadServiceTests : IDisposable
     [Fact]
     public void Get_resume_session_id_returns_the_session_for_a_real_thread_but_not_a_stub()
     {
-        (ThreadService service, _, _) = NewService();
+        (ThreadService service, _, _, _) = NewService();
         ThreadRecord real = service.EnsureThreadForSession("sess-1");
         ThreadRecord stub = service.CreateStub("stub", null);
 
@@ -103,32 +113,49 @@ public sealed class ThreadServiceTests : IDisposable
     }
 
     [Fact]
-    public void Delete_thread_removes_the_row_and_the_transcript()
+    public void Mirror_transcript_copies_the_primary_into_the_runtime_sessions_dir()
     {
-        (ThreadService service, _, string projectsRoot) = NewService();
+        (ThreadService service, _, string projectsRoot, string sessionsDir) = NewService();
+        WritePrimaryTranscript(projectsRoot, "sess-1", "{\"turn\":1}");
+
+        service.MirrorTranscript("sess-1");
+
+        string mirror = Path.Combine(sessionsDir, "sess-1.jsonl");
+        Assert.True(File.Exists(mirror));
+        Assert.Equal("{\"turn\":1}", File.ReadAllText(mirror));
+    }
+
+    [Fact]
+    public void Delete_thread_removes_the_row_the_primary_and_the_mirror()
+    {
+        (ThreadService service, _, string projectsRoot, string sessionsDir) = NewService();
         ThreadRecord thread = service.EnsureThreadForSession("sess-1");
-        string projectDir = Path.Combine(projectsRoot, "proj");
-        Directory.CreateDirectory(projectDir);
-        string transcript = Path.Combine(projectDir, "sess-1.jsonl");
-        File.WriteAllText(transcript, "{}");
+        string transcript = WritePrimaryTranscript(projectsRoot, "sess-1");
+        service.MirrorTranscript("sess-1");
+        string mirror = Path.Combine(sessionsDir, "sess-1.jsonl");
+        Assert.True(File.Exists(mirror));
 
         Assert.True(service.DeleteThread(thread.ThreadId));
         Assert.Null(service.Get(thread.ThreadId));
         Assert.False(File.Exists(transcript));
+        Assert.False(File.Exists(mirror));
         Assert.False(service.DeleteThread(thread.ThreadId));
     }
 
     private sealed class FakeWorkspace : IThreadWorkspace
     {
-        public FakeWorkspace(string threadsDatabasePath, string cwd)
+        public FakeWorkspace(string threadsDatabasePath, string cwd, string sessionsDirectory)
         {
             ThreadsDatabasePath = threadsDatabasePath;
             Cwd = cwd;
+            SessionsDirectory = sessionsDirectory;
         }
 
         public string ThreadsDatabasePath { get; }
 
         public string Cwd { get; }
+
+        public string SessionsDirectory { get; }
     }
 
     private sealed class FakeCurrentSession : ICurrentSession

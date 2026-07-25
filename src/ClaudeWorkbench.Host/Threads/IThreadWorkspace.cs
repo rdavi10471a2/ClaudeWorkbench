@@ -14,6 +14,10 @@ public interface IThreadWorkspace
     // The watched-solution folder = the SDK cwd. REQUIRED for a correct resume (resuming from a
     // different cwd silently starts a fresh session).
     string Cwd { get; }
+
+    // runtime\<workspace>\sessions — the app-owned MIRROR of each conversation transcript. The SDK's
+    // ~/.claude copy stays the primary (holds auth, drives resume); this is a republish-safe copy.
+    string SessionsDirectory { get; }
 }
 
 // Live adapter over the current watched workspace.
@@ -32,4 +36,8 @@ public sealed class WorkspaceThreadPaths : IThreadWorkspace
         "threads.sqlite");
 
     public string Cwd => Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
+
+    public string SessionsDirectory => Path.Combine(
+        MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings),
+        "sessions");
 }

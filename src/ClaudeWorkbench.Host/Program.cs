@@ -141,6 +141,24 @@ internal static class Program
                     new Dictionary<string, string> { ["sessionId"] = sessionId, ["error"] = exception.Message });
             }
         };
+        // After each turn, mirror the now-current ~/.claude transcript into the app-owned runtime
+        // copy. Best-effort and guarded so a copy hiccup never breaks the event stream.
+        sessionStream.TurnFinished += sessionId =>
+        {
+            try
+            {
+                threadService.MirrorTranscript(sessionId);
+            }
+            catch (Exception exception)
+            {
+                threadLogger.Write(
+                    MonitorLogLevel.Warning,
+                    "ClaudeWorkbench.Host",
+                    "thread.mirror.failed",
+                    "Failed to mirror transcript to the runtime copy.",
+                    new Dictionary<string, string> { ["sessionId"] = sessionId, ["error"] = exception.Message });
+            }
+        };
 
         // Ensure the already-configured workspace's runtime skeleton exists at startup.
         // Idempotent; the skeleton build is synchronous and cheap.
