@@ -143,3 +143,7 @@ Commit.
   Stable `threadId` separate from editable display `name`.
 - **Thread scope of agent-notes:** workspace-wide `agent-notes\` (default) vs. per-thread subfolder — default workspace-wide; revisit if notes should archive/delete with a thread.
 - **UI shape:** full tab vs. composer-header switcher — decide in Phase 3.
+- **Git ↔ thread link (DEFERRED — user-flagged 2026-07-25):** beyond `acceptedEditRefs`, connect a thread to
+  git state (the branch it ran on and/or the commit(s) its accepted edits landed in). Would make a thread a
+  fuller "what happened" record — conversation + edits + the commit that shipped them. Not in scope for
+  Phases 0–3; revisit after threads persist.

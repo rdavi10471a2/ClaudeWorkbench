@@ -17,7 +17,7 @@ namespace AIMonitor.McpServer;
 // So the procedure is authored here, once. The sidecar fetches it at startup over
 // GET /guidance/staging (it is not an MCP client itself; it already polls /health the same
 // way). Anything the sidecar keeps in its card must be a fact the HOST cannot know — which
-// native tools the SDK exposes, gate behaviour, task-board policy.
+// native tools the SDK exposes, gate behaviour.
 public static class AgentGuidance
 {
     public static string StagingGuide { get; } = ComposeStagingGuide();
@@ -25,7 +25,7 @@ public static class AgentGuidance
     // The full governed role card, authored HERE (in C#) and served to the sidecar over
     // GET /guidance/card, which injects it as the system-prompt append. Everything in it is
     // host-knowable (chat UI + image rendering, the MCP tools, the staging workflow, the
-    // operator-controlled tool policy, the task board), so it lives in C# — one copy, no drift.
+    // operator-controlled tool policy), so it lives in C# — one copy, no drift.
     // The sidecar carries none of this text; it only fetches and appends it.
     public static string ComposeGovernanceCard(string watchedProject)
     {
@@ -45,7 +45,6 @@ public static class AgentGuidance
         builder.AppendLine("- When asked to change code, follow this workflow exactly:");
         builder.AppendLine();
         builder.AppendLine(StagingGuide);
-        builder.AppendLine("- The task board is OPTIONAL context, not a per-turn step. Work is free-flowing by default: do NOT tie a turn to a task automatically. ONLY when the operator's request clearly concerns a board task should you call get_current_task for that task's context and record progress with update_agent_notes. For ad-hoc requests, do not load or write task notes, and never fold an unrelated request into the Active task.");
         builder.AppendLine("- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.");
         return builder.ToString();
     }

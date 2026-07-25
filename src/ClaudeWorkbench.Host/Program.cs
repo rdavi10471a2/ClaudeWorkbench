@@ -53,7 +53,6 @@ internal static class Program
             })
             .WithHttpTransport()
             .WithTools<AIMonitorTools>()
-            .WithTools<Tasks.TaskMcpTools>()
             .WithTools<GitMcpTools>();
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
@@ -86,8 +85,6 @@ internal static class Program
         builder.Services.AddScoped<IOperatorConsole>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddScoped<IApprovalQueue>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddSingleton<IReviewWorkflow, EngineReviewWorkflow>();
-        builder.Services.AddSingleton<Tasks.TaskBoardRepositoryFactory>();
-        builder.Services.AddScoped<Tasks.IWorkflowTaskBoardViewService, Tasks.WorkflowTaskBoardViewService>();
         builder.Services.AddSingleton<Source.SourceWorkspace>();
 
         // Operator-driven git backing for the watched solution (host-side; the agent
@@ -118,8 +115,8 @@ internal static class Program
 
         WebApplication app = builder.Build();
 
-        // Ensure the already-configured workspace's runtime (skeleton + task DB) exists
-        // at startup. Idempotent; the skeleton build is synchronous and cheap.
+        // Ensure the already-configured workspace's runtime skeleton exists at startup.
+        // Idempotent; the skeleton build is synchronous and cheap.
         WorkspaceManager startupWorkspace = app.Services.GetRequiredService<WorkspaceManager>();
         if (startupWorkspace.HasWorkspace)
         {
