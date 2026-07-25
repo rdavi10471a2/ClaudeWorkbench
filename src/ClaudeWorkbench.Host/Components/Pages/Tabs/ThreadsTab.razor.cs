@@ -6,12 +6,12 @@ using Microsoft.JSInterop;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Tabs;
 
-// The conversation-Threads page — the thread list that replaced the retired Tasks board. A thread
-// is a named, resumable pointer to an SDK session (autosaved as you talk). States are a DERIVED
-// view of lifecycle: Active is computed (the thread whose session is the live one), the rest
-// (Planned/Archived/Abandoned) are stored. Every write here is metadata or disk reclamation — never
-// watched source — so nothing goes through the governance gate.
-public partial class ThreadsTab : IDisposable
+// The conversation-Threads page — a master/detail: a kanban CHOOSER on the left (one column per
+// lifecycle state) and a DETAILS pane on the right for the selected thread. A thread is a named,
+// resumable pointer to an SDK session (autosaved as you talk). States are derived: Active is
+// computed (the thread whose session is live); Planned/Archived/Abandoned are stored. Every write
+// here is metadata or disk reclamation — never watched source — so nothing goes through the gate.
+public partial class ThreadsTab : IAsyncDisposable
 {
     [Inject]
     private ThreadService Threads { get; set; } = default!;
@@ -30,18 +30,34 @@ public partial class ThreadsTab : IDisposable
 
     private IReadOnlyList<ThreadRecord> threads = [];
     private string? activeThreadId;
+    private string? selectedThreadId;
     private bool busy;
     private string? message;
     private bool messageIsError;
 
-    // Inline editors, keyed by thread id (only one open at a time).
-    private string? editingNameId;
-    private string editingName = string.Empty;
-    private string? editingDetailsId;
-    private string editingDescription = string.Empty;
-    private string editingNote = string.Empty;
+    // Edit buffers for the details pane (populated on selection).
+    private string editName = string.Empty;
+    private string editDescription = string.Empty;
+    private string editNote = string.Empty;
 
     private bool TurnActive => Session.Status.Working;
+
+    // Resizable board|details split, using the shared splitter the other tabs use.
+    private ElementReference threadsBody;
+    private ElementReference threadsBoard;
+    private ElementReference threadsDetails;
+    private ElementReference threadsSplitter;
+    private IJSObjectReference? resizeModule;
+
+    // The board columns, left to right. Active is COMPUTED (the live session) — you land in it by
+    // Resume/Open, not by moving a card; the others are stored statuses moved via the detail buttons.
+    private static readonly (string Key, string Label)[] Columns =
+    [
+        (ThreadStatus.Planned, "Planned"),
+        ("active", "Active"),
+        (ThreadStatus.Archived, "Archived"),
+        (ThreadStatus.Abandoned, "Abandoned"),
+    ];
 
     protected override void OnInitialized()
     {
@@ -49,10 +65,26 @@ public partial class ThreadsTab : IDisposable
         Load();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Attach the shared column splitter. Guarded like GitTab: an unhandled OnAfterRender
+        // exception would tear the circuit down, and the splitter element carries its own
+        // "already attached" dataset flag so re-renders re-attach only when genuinely new.
+        try
+        {
+            resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+            await resizeModule.InvokeVoidAsync("attachThreadsSplitter", threadsBody, threadsBoard, threadsDetails, threadsSplitter);
+        }
+        catch (JSException)
+        {
+            // Non-fatal: the splitter just won't be draggable this render; it re-attaches next render.
+        }
+    }
+
     private void OnStreamChanged() => InvokeAsync(() =>
     {
-        // The autosave (session_started) may have added/renamed a thread, and Active tracks the live
-        // session — reload so the list and the Active badge stay honest.
+        // Autosave (session_started) may add/rename a thread and Active tracks the live session —
+        // reload so the board and the Active badge stay honest.
         Load();
         StateHasChanged();
     });
@@ -61,28 +93,41 @@ public partial class ThreadsTab : IDisposable
     {
         threads = Threads.List();
         activeThreadId = Threads.ActiveThread()?.ThreadId;
+        if (selectedThreadId is not null && threads.All(thread => thread.ThreadId != selectedThreadId))
+        {
+            selectedThreadId = null;
+        }
+    }
+
+    private ThreadRecord? SelectedThread =>
+        selectedThreadId is null ? null : threads.FirstOrDefault(thread => thread.ThreadId == selectedThreadId);
+
+    private void Select(ThreadRecord thread)
+    {
+        selectedThreadId = thread.ThreadId;
+        editName = thread.Name;
+        editDescription = thread.Description ?? string.Empty;
+        editNote = thread.UserNote ?? string.Empty;
+        message = null;
     }
 
     private bool IsActive(ThreadRecord thread) =>
         activeThreadId is not null && string.Equals(thread.ThreadId, activeThreadId, StringComparison.Ordinal);
 
-    private static string StatusLabel(ThreadRecord thread, bool active) =>
-        active ? "Active"
-        : thread.Status switch
-        {
-            ThreadStatus.Planned => "Planned",
-            ThreadStatus.Abandoned => "Abandoned",
-            _ => "Archived",
-        };
+    private bool IsSelected(ThreadRecord thread) =>
+        string.Equals(thread.ThreadId, selectedThreadId, StringComparison.Ordinal);
 
-    private static string StatusCss(ThreadRecord thread, bool active) =>
-        active ? "active"
-        : thread.Status switch
+    // Bucket a thread into exactly one column: the live one goes to Active regardless of its stored
+    // status; everything else falls to its stored status column.
+    private IEnumerable<ThreadRecord> ColumnThreads(string columnKey)
+    {
+        if (columnKey == "active")
         {
-            ThreadStatus.Planned => "planned",
-            ThreadStatus.Abandoned => "abandoned",
-            _ => "archived",
-        };
+            return threads.Where(IsActive);
+        }
+
+        return threads.Where(thread => !IsActive(thread) && thread.Status == columnKey);
+    }
 
     private void Refresh()
     {
@@ -92,13 +137,35 @@ public partial class ThreadsTab : IDisposable
 
     private void NewStub()
     {
-        Threads.CreateStub(name: null, description: null);
+        ThreadRecord stub = Threads.CreateStub(name: null, description: null);
+        Load();
+        Select(stub);
         Report("Created a planned thread stub.", error: false);
+    }
+
+    // Save the details pane's name/description/note for the selected thread.
+    private void SaveDetails()
+    {
+        ThreadRecord? thread = SelectedThread;
+        if (thread is null)
+        {
+            return;
+        }
+
+        string name = editName.Trim();
+        if (name.Length > 0 && !string.Equals(name, thread.Name, StringComparison.Ordinal))
+        {
+            Threads.Rename(thread.ThreadId, name);
+        }
+
+        Threads.SetDescription(thread.ThreadId, string.IsNullOrWhiteSpace(editDescription) ? null : editDescription.Trim());
+        Threads.SetUserNote(thread.ThreadId, string.IsNullOrWhiteSpace(editNote) ? null : editNote.Trim());
+        Report("Saved thread details.", error: false);
         Load();
     }
 
-    // Reopen a stored thread: prime the sidecar to resume its session. The operator then continues
-    // in the Workbench tab. Blocked while a turn is live (the sidecar refuses a resume mid-turn).
+    // Reopen a stored thread: restore its transcript from our mirror, then prime the sidecar to
+    // resume that session. Blocked while a turn is live (the sidecar refuses a resume mid-turn).
     private async Task ResumeAsync(ThreadRecord thread)
     {
         if (thread.IsStub)
@@ -114,73 +181,26 @@ public partial class ThreadsTab : IDisposable
         }
 
         busy = true;
-        // Restore the SDK's primary transcript from our authoritative runtime mirror FIRST, then
-        // tell the sidecar to resume that session — so it continues from exactly what we saved.
         string? sessionId = Threads.PrepareResume(thread.ThreadId);
         bool ok = sessionId is not null && await Sidecar.ResumeAsync(sessionId);
         busy = false;
-        if (ok)
-        {
-            Report($"Resumed “{thread.Name}” — switch to the Workbench tab and continue the conversation.", error: false);
-        }
-        else
-        {
-            Report("Could not resume — the sidecar rejected it (a turn may be active).", error: true);
-        }
-
-        Load();
-    }
-
-    private void BeginRename(ThreadRecord thread)
-    {
-        editingNameId = thread.ThreadId;
-        editingName = thread.Name;
-        editingDetailsId = null;
-    }
-
-    private void SaveRename(ThreadRecord thread)
-    {
-        string name = editingName.Trim();
-        if (!string.IsNullOrEmpty(name) && !string.Equals(name, thread.Name, StringComparison.Ordinal))
-        {
-            Threads.Rename(thread.ThreadId, name);
-        }
-
-        editingNameId = null;
-        Load();
-    }
-
-    private void CancelRename() => editingNameId = null;
-
-    private void BeginDetails(ThreadRecord thread)
-    {
-        editingDetailsId = thread.ThreadId;
-        editingDescription = thread.Description ?? string.Empty;
-        editingNote = thread.UserNote ?? string.Empty;
-        editingNameId = null;
-    }
-
-    private void SaveDetails(ThreadRecord thread)
-    {
-        Threads.SetDescription(thread.ThreadId, string.IsNullOrWhiteSpace(editingDescription) ? null : editingDescription.Trim());
-        Threads.SetUserNote(thread.ThreadId, string.IsNullOrWhiteSpace(editingNote) ? null : editingNote.Trim());
-        editingDetailsId = null;
-        Report("Saved thread details.", error: false);
-        Load();
-    }
-
-    private void CancelDetails() => editingDetailsId = null;
-
-    private void SetStatus(ThreadRecord thread, string status)
-    {
-        Threads.SetStatus(thread.ThreadId, status);
+        Report(
+            ok
+                ? $"Resumed “{thread.Name}” — switch to the Workbench tab and continue the conversation."
+                : "Could not resume — the sidecar rejected it (a turn may be active).",
+            error: !ok);
         Load();
     }
 
     private void TogglePromotion(ThreadRecord thread)
     {
-        string next = thread.Kind == ThreadKind.Task ? ThreadKind.Discussion : ThreadKind.Task;
-        Threads.SetKind(thread.ThreadId, next);
+        Threads.SetKind(thread.ThreadId, thread.Kind == ThreadKind.Task ? ThreadKind.Discussion : ThreadKind.Task);
+        Load();
+    }
+
+    private void SetStatus(ThreadRecord thread, string status)
+    {
+        Threads.SetStatus(thread.ThreadId, status);
         Load();
     }
 
@@ -197,6 +217,11 @@ public partial class ThreadsTab : IDisposable
         busy = true;
         bool ok = Threads.DeleteThread(thread.ThreadId);
         busy = false;
+        if (string.Equals(thread.ThreadId, selectedThreadId, StringComparison.Ordinal))
+        {
+            selectedThreadId = null;
+        }
+
         Report(ok ? "Deleted the thread and reclaimed its transcript." : "Thread was already gone.", error: !ok);
         Load();
     }
@@ -207,5 +232,20 @@ public partial class ThreadsTab : IDisposable
         messageIsError = error;
     }
 
-    public void Dispose() => Events.Changed -= OnStreamChanged;
+    public async ValueTask DisposeAsync()
+    {
+        Events.Changed -= OnStreamChanged;
+        if (resizeModule is not null)
+        {
+            try
+            {
+                await resizeModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Circuit already gone; nothing to release.
+            }
+        }
+    }
 }
+

@@ -31,8 +31,10 @@ States are **derived** from the session, not a board you drag cards around:
 
 `kind` is a promotion flag (`discussion` ⇄ `task`), not a mode you pick up front.
 
-From the Threads tab you can **Resume**, **rename**, edit description/note, **promote/demote**
-(discussion ⇄ task), **Abandon/Restore**, create a **stub**, and **hard-delete**.
+The Threads tab is a **kanban chooser** (one column per state) on the left and a **details pane** on
+the right (resizable splitter). Pick a card to open it; from the details pane you can **Resume**,
+**rename**, edit description/note, **promote/demote** (discussion ⇄ task), **Abandon/Restore**, and
+**hard-delete**; **New stub** creates a Planned thread.
 
 ## Autosave — no save button
 
