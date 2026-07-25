@@ -8,7 +8,7 @@ An edit session can stage several watched files as one logical change. Today the
 reviews them one at a time in the Merge Review dialog, and **each Accept writes its file to
 watched source immediately** — only the *terminal* accept (the last pending file) runs the
 authoritative GATE-2 build over the combined session overlay
-(`EngineReviewWorkflow.Accept`, `terminal` at line ~118).
+(`EngineReviewWorkflow.Accept`, the `terminal` branch).
 
 Two problems follow from writing per file.
 
@@ -60,9 +60,9 @@ is the governed loop working as designed, not a workaround.
   is limited to multi-file sessions, which is exactly the broken case.
 - **Reject becomes cheap and safe**, which is the right incentive for a human gate: the
   operator never has to reason about what a partial reject already did to their source.
-- Multi-file assertions in `CliIndexQueryTests` and `McpPlannedSessionSurfaceTests` that
-  expect watched source to change after a non-terminal accept must be updated — they now
-  correctly observe it unchanged until the session completes.
+- Multi-file assertions in `McpPlannedSessionSurfaceTests` were updated to observe watched
+  source staying unchanged after a non-terminal accept (rather than changing per file), and
+  `EngineReviewSessionAtomicityTests` covers the session-atomicity behaviour directly.
 
 ## Notes for implementation
 

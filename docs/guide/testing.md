@@ -5,22 +5,24 @@ dotnet build ClaudeWorkbench.slnx
 dotnet test  ClaudeWorkbench.slnx
 ```
 
-**224 tests: 218 pass · 6 skipped · 0 failed.** Everything runs under `dotnet test`. There are no
+**233 tests: 227 pass · 6 skipped · 0 failed.** Everything runs under `dotnet test`. There are no
 console runners, no manual flags, and nothing that has to be remembered — see
 [why that matters](#why-there-are-no-console-runners) below.
 
 The table most people want is not "one row per project", because the project layout answers *where
-code lives*, not *what is covered*. Grouped by capability:
+code lives*, not *what is covered*. Grouped by capability (per-project totals: Data 78 · MSBuild 7 ·
+Indexing 6 · Core 6 · Logging 3 · Host 15 · Workflow 46 · Integration 72):
 
 | # | Capability | Tests | Where |
 |---|---|---|---|
-| A | [Semantic index & language coverage](#a-semantic-index--language-coverage) | 74 (5 skipped) | `Data.Tests`, `MSBuild.Tests`, `Indexing.Tests` |
-| B | [Edit workflow & staging](#b-edit-workflow--staging) | 35 | `Workflow.Tests` |
-| C | [Review gates & decisions](#c-review-gates--decisions) | 22 | `Workflow.Tests`, `Indexing.Tests`, `Integration.Tests` |
+| A | [Semantic index & language coverage](#a-semantic-index--language-coverage) | 74 (6 skipped) | `Data.Tests`, `MSBuild.Tests`, `Indexing.Tests` |
+| B | [Edit workflow & staging](#b-edit-workflow--staging) | 34 | `Workflow.Tests` |
+| C | [Review gates & decisions](#c-review-gates--decisions) | 23 | `Workflow.Tests`, `Indexing.Tests`, `Integration.Tests` |
 | D | [MCP tool surface](#d-mcp-tool-surface-out-of-process) | 50 | `Integration.Tests`, `Data.Tests` |
-| E | [Sample-driven authoring](#e-sample-driven-authoring-claudesmokes) | 18 | `Data.Tests`, `Workflow.Tests` |
-| F | [Host & infrastructure](#f-host--infrastructure) | 25 | `Host.Tests`, `Core.Tests`, `Logging.Tests` |
-| | **Total** | **224** | |
+| E | [Sample-driven authoring](#e-sample-driven-authoring-claudesmokes) | 19 | `Data.Tests`, `Workflow.Tests` |
+| F | [Host & infrastructure](#f-host--infrastructure) | 25 | `Host.Tests`, `Core.Tests`, `Logging.Tests`, `Integration.Tests` |
+| G | [Agent-loop end-to-end (real builds)](#g-agent-loop-end-to-end-real-builds) | 8 | `Integration.Tests` |
+| | **Total** | **233** | |
 
 ---
 
@@ -56,7 +58,7 @@ source generator — environment-dependent, so documented rather than pinned.
 
 | Suite | Tests | Covers |
 |---|---|---|
-| `WorkflowEditServiceSafetyTests` | 23 | Path containment, working-copy isolation, staging guards, refusals. |
+| `WorkflowEditServiceSafetyTests` | 22 | Path containment, working-copy isolation, staging guards, refusals. |
 | `RoslynEditServiceSourceMapTests` | 6 | Source-map fidelity for symbol-level edits. |
 | `WorkflowEditServiceRecordStoreTests` | 4 | Staged-record persistence and the in-memory cache's write-through to disk. |
 | `RoslynEditServiceOutlineTests` | 2 | File outline extraction. |
@@ -69,7 +71,7 @@ source generator — environment-dependent, so documented rather than pinned.
 |---|---|---|
 | `EngineEditLifecycleTests` | 11 | Full refresh → stage → review → decide lifecycle: `accepted-normalized` (CRLF vs LF), Razor and CSS round-trips, new-file create-then-clean, watched-relative path resolution, and the five pre-merge validation gates (errors block, warnings don't, staged-hash mismatch, multi-file compile error, runtime exclusion). |
 | `StagedDecisionWorkflowTests` | 5 | Decision recording and post-accept index refresh. |
-| `EngineReviewSessionAtomicityTests` | 3 | **ADR-0005**: one reject invalidates the whole session — a non-terminal accept followed by a reject leaves *every* file unwritten. |
+| `EngineReviewSessionAtomicityTests` | 4 | **ADR-0005**: one reject invalidates the whole session — a non-terminal accept followed by a reject leaves *every* file unwritten. |
 | `ReviewDecisionClassifierTests` | 3 | `accepted` / `accepted-normalized` / `rejected` / `dirty-unexpected` classification. |
 
 `EngineEditLifecycleTests` constructs a **new `WorkflowEditService` at every seam**. That is
@@ -80,13 +82,14 @@ still passing. This was verified by mutation — see the class comment.
 ## D. MCP tool surface (out-of-process)
 
 *Does the surface the agent actually speaks to behave?* These boot a real server process and speak
-real JSON-RPC — 166 protocol calls across ~60 distinct tools.
+real JSON-RPC across the MCP tool surface (71 tools: 64 `AIMonitorTools` + 3 `TaskMcpTools` + 4
+`GitMcpTools`).
 
 | Suite | Tests | Covers |
 |---|---|---|
 | `McpServerSmokeTests` | 25 | Tool registration, manifest, discovery and mutation tools, session lifecycle, telemetry. |
 | `McpReadIndexSurfaceTests` | 10 | Read-side index tools, including `find_references_in_file` and `list_package_references`. |
-| `McpPlannedSessionSurfaceTests` | 9 | Planned sessions: staging, rejection, and the overlay state machine (`planned-overlay-pending` until every planned file exists). |
+| `McpPlannedSessionSurfaceTests` | 9 | Planned sessions: staging, rejection, and plan-complete gating — submits are **syntax-only and carry no overlay result** (asserted: no `overlayValidation` on submit); the real build runs once, at `complete_edit_plan`, after every planned file exists. |
 | `ClaudeSmokesPhase1McpTests` | 3 | Phase-1 tool behaviour over the samples. |
 | `McpRenameDiscoverySurfaceTests` | 1 | A cross-file rename accepted through the real session path; a rebuilt index must still discover **both** external consumers. |
 | `McpSurfaceIndexVerificationTests` | 1 | Index agreement across the surface. |
@@ -101,9 +104,25 @@ process boundary, so the coverage lives where the failures are.
 
 ## E. Sample-driven authoring (ClaudeSmokes)
 
-*Do real fixture solutions in `samples/watched-solutions/` survive the loop?* 18 tests across
+*Do real fixture solutions in `samples/watched-solutions/` survive the loop?* 19 tests across
 Blazor, WinForms, Razor and harness samples — authoring workflows, materialization, source maps,
 `dirty-unexpected` handling, and validation.
+
+## G. Agent-loop end-to-end (real builds)
+
+*Does a full author→submit→validate→fix loop actually converge on a real build?*
+`AgentLoopSampleWorkflowTests` (8, all `[Trait("Suite","AgentLoop")]`, in `Integration.Tests`) drive
+a scripted agent through the governed edit loop against real sample solutions and run the **real
+`dotnet build`** at plan-complete (`WorkflowEditService.ValidatePlannedOverlayBuild`), asserting on
+both the emitted source and the workflow artifacts. The scenarios use the `test-prompts/` fixtures
+under `samples/watched-solutions/CalculatorSample` and `.../BlazorSample` (including a
+deliberately-broken edit that must fail the build, then a follow-up fix that must make it pass).
+These are the tests that push `Integration.Tests` to 72.
+
+`samples/watched-solutions/MixedTfmSample` (net8 console + net9 WinForms + net10 Blazor + a shared
+net8 library, wired via `appsettings.mixed-tfm.json`) exists as a **multi-TFM** overlay-build
+fixture for cross-target validation and live dogfooding; it is not one of the automated AgentLoop
+scenarios.
 
 ## F. Host & infrastructure
 
@@ -112,9 +131,21 @@ Blazor, WinForms, Razor and harness samples — authoring workflows, materializa
 | `GitServiceTests` | 15 | Git panel operations (argv, no shell — **ADR-0004**). |
 | `MonitorSettingsLoaderTests` · `MonitorSettingsTests` · `MonitorWorkspacePathsTests` | 6 | Settings resolution and workspace-relative paths. |
 | Logging (3 suites) | 3 | JSON-lines sink, log paths, in-proc log service. |
-| `RepositoryShapeTests` | 1 | Repository layout invariants. |
+| `RepositoryShapeTests` | 1 | Repository layout invariants. (Physically in `Integration.Tests`, grouped here by capability.) |
 
 ---
+
+## Build-time dead-code analysis
+
+Beyond `dotnet test`, the build itself carries a **dead-code / code-style gate**. The repo-root
+`Directory.Build.props` sets `<EnableNETAnalyzers>` + `<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>`,
+and the root `.editorconfig` raises the "this is never used" rules — IDE0051 (unused private members),
+IDE0052 (write-only fields), IDE0059 (dead assignments), IDE0060 (unused parameters, `= all`) — to
+**warnings**. They surface at `dotnet build` without a `TreatWarningsAsErrors`, so dead code is
+reported but does not break the loop. The watched-solution fixtures under `samples/` deliberately opt
+out (`samples/watched-solutions/Directory.Build.props` sets `EnforceCodeStyleInBuild=false`), since
+several carry intentionally-unused members for edit scenarios. This gate exists because AI-authored
+code accretes dead code in a way hand-written code does not; the build should surface it continuously.
 
 ## Why there are no console runners
 
@@ -126,7 +157,7 @@ exited 0 unless `--assert` was passed, which is why 42 real fixture cases never 
 asserted nothing. `AIMonitor.ToolSmokeTests` drove a project that has never existed in this repo.
 
 Everything they were reaching for was moved into `dotnet test` **before** they were deleted. The
-corpus is category A above; the Razor sweep, fixture matrix, overlay state machine and rename
+corpus is category A above; the Razor sweep, fixture matrix, planned-session surface and rename
 discovery are in A and D; 11 engine-lifecycle facts are in C.
 
 The rule that came out of it: **a check that cannot fail is not coverage.** If something is worth

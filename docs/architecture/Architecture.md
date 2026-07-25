@@ -182,8 +182,8 @@ Two independent checks protect watched source. Both must be satisfied to accept.
 
 | Gate | When | What it checks | Where |
 |---|---|---|---|
-| **GATE 1 — pre-merge validation** | at stage/review-open | a fast staged-overlay **readiness check**, no `dotnet build` (on the MCP/CLI path, a full overlay build) | `PreMergeValidationService`, `StagedDiffLaunchWorkflow` |
-| **GATE 2 — the authoritative build + decision** | at the **terminal** accept, **before anything is written** | the record is still pending, the staged file **re-hashes unchanged**, and the overlay of the whole write set **compiles** (a real build) — then, and only then, every approved-but-unwritten file in the session is written and `expectedStagedHash` / `dirty-unexpected` are re-checked as each decision is recorded | `EngineReviewWorkflow.Accept` → `PreMergeValidationService`, then `WorkflowEditService.RecordDecision` |
+| **GATE 1 — pre-merge validation** | at stage/review-open (in-app); at `complete_edit_plan` (MCP/CLI) | in-app: a fast staged readiness check, no `dotnet build` (`EngineReviewWorkflow.EnsureValidatedAndLaunched` → `PreMergeValidationService.ValidateStagedOverlay`). MCP/CLI: a full real `dotnet build` over the **Working** candidates at plan-complete (`AIMonitorTools.CompleteEditPlan` → `WorkflowEditService.ValidatePlannedOverlayBuild` → `PreMergeValidationService.ValidateWorkingOverlay`) | `PreMergeValidationService`; `EngineReviewWorkflow` / `AIMonitorTools.CompleteEditPlan` |
+| **GATE 2 — the authoritative build + decision** | at the **terminal** accept, **before anything is written** | the record is still pending, the staged file **re-hashes unchanged**, and the overlay of the whole write set **compiles** (a real build) — then, and only then, every approved-but-unwritten file in the session is written and `expectedStagedHash` / `dirty-unexpected` are re-checked as each decision is recorded | `EngineReviewWorkflow.Accept` → `PreMergeValidationService`, then `StagedDecisionWorkflow.Record` (→ `WorkflowEditService.RecordDecision`) |
 
 **Ordering matters, and it is validate-then-write.** In the in-app path the GATE-2 build runs
 *before* watched source is touched: a failed build (or a superseded record, or a staged file that
@@ -197,6 +197,12 @@ The build runs once per **edit session**, on the *terminal* accept (the last pen
 over the combined overlay of every file accepted in that session — so a multi-file edit is
 compiled as a whole, not file by file. The post-accept index rebuild is deferred to that same
 terminal accept.
+
+Ahead of both gates, each individual candidate write gets a cheap **syntax-only** check
+(`CandidateEditValidator.ValidateSyntaxIfCSharp`) — it rejects unparseable C# at edit time
+but does no semantic/`dotnet build` work. This is the per-edit check that replaced the old
+in-memory flat-overlay compile: real semantic validation now happens only at the GATE-1
+plan-complete build and the GATE-2 terminal build, both of which are real `dotnet build`s.
 
 The core safety invariant: **an accepted edit equals exactly what was reviewed** — the
 staged snapshot is copy-once/immutable, accept re-hashes it, and accept independently
@@ -266,11 +272,11 @@ flowchart TD
     MSBuild --> Indexing
     Data --> Indexing
     Core --> Workflow
-    Data --> Workflow
-    Indexing --> Workflow
+    Workflow --> Indexing
     Workflow --> Mcp
     Indexing --> Mcp
     Data --> Mcp
+    MSBuild --> Mcp
     Mcp --> Host
     Workflow --> Host
     Indexing --> Host
@@ -292,8 +298,9 @@ in-proc over **Streamable HTTP** at `http://localhost:6100/mcp`, advertising
 `ai-monitor`). Tools appear to the agent as `mcp__claude-workbench__*`. `strictMcpConfig:
 true` exposes only `claude-workbench` — the machine's other MCP connectors don't leak in.
 
-The surface is ~**71 tools**: ~60 `AIMonitorTools` (Editing, Index, Status, RoslynEdits,
-Sessions, Review) + 3 `TaskMcpTools` + 8 `GitMcpTools`.
+The surface is **71 tools**: 64 `AIMonitorTools` (Status 13, Index 14, Editing 13,
+RoslynEdits 11, Sessions 8, Review 4, Download 1) + 3 `TaskMcpTools` + 4 `GitMcpTools`
+(all read-only: `GitStatus`, `GitDiff`, `GitLog`, `GitListBranches`).
 
 ---
 
