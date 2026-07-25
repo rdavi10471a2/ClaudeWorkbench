@@ -80,6 +80,10 @@ public sealed class McpServerSmokeTests
             "get_staging_guide",
             "get_smoke_test_catalog",
             "list_watched_projects",
+            "write_note",
+            "list_notes",
+            "read_note",
+            "delete_note",
             "shutdown_server"
         ];
         foreach (string expectedToolName in expectedToolNames)

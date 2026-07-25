@@ -15,6 +15,10 @@ public sealed class RuntimeProvisioner
         "logs",
         "planning",
         "uploads",
+        // Ungoverned agent scratchpad: the agent writes freeform notes/plans here via the
+        // write_note MCP tool. Physically under runtime, OUTSIDE watched source, so it can
+        // never sneak an edit into governed source. See AIMonitorTools.Notes.
+        "agent-notes",
     ];
 
     public void EnsureRuntime(MonitorSettings settings)

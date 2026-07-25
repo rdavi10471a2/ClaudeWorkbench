@@ -37,8 +37,8 @@ The method, so it can be repeated:
 4. **Diagrams** — [Mermaid](https://mermaid.js.org/), GitHub-safe subset only
    (`flowchart` / `sequenceDiagram` / `erDiagram`; **no** experimental C4-diagram syntax),
    arranged conceptually along C4 levels.
-5. **Verification** — every code fence was checked balanced; the live MCP tool count (**71
-   = 60 AIMonitor + 3 Task + 8 Git**) was confirmed against an actual `tools/list`; a couple
+5. **Verification** — every code fence was checked balanced; the live MCP tool count (**72
+   = 68 AIMonitor + 4 Git**) was confirmed against an actual `tools/list`; a couple
    of agent miscounts were corrected against that ground truth.
 
 ## Since the pass (checked 2026-07-19, later the same day)

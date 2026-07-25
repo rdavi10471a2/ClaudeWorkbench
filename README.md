@@ -166,7 +166,9 @@ workflow rather than the whole product.
 
 ## Roadmap
 
-Done: engine + in-proc MCP endpoint (71-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); session continuity + New Thread; `AskUserQuestion` operator dialog; per-thread auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; the Tasks board + agent task-memory MCP loop (board UI tab currently disabled, WIP); single-start with the injected role card; and the Playwright E2E harness.
+Done: engine + in-proc MCP endpoint (72-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); session continuity + New Thread; `AskUserQuestion` operator dialog; per-thread auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
+
+In progress: the conversation-**threads** rewrite (named, resumable, deletable threads that replace the retired Tasks board) — see [docs/plans/task-to-thread-rewrite.md](docs/plans/task-to-thread-rewrite.md).
 
 Next:
 

@@ -19,7 +19,7 @@ flowchart LR
     Op([Operator]) --> Host
     subgraph Host["Blazor Host :6100"]
         UI[Operator console]
-        MCP[claude-workbench MCP ~71 tools]
+        MCP[claude-workbench MCP ~72 tools]
         Engine[AIMonitor.* engine]
         Rev[EngineReviewWorkflow<br/>sole watched-source writer]
     end

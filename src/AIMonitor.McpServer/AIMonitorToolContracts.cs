@@ -55,6 +55,29 @@ public sealed record AIMonitorNamespaceTree(
     IReadOnlyList<string> Files,
     int SymbolCount);
 
+public sealed record AgentNoteWriteResult(
+    string RelativePath,
+    string FullPath,
+    long BytesWritten,
+    bool Appended);
+
+public sealed record AgentNoteReadResult(
+    string RelativePath,
+    string FullPath,
+    bool Exists,
+    string Content);
+
+public sealed record AgentNoteInfo(
+    string RelativePath,
+    string FullPath,
+    long Length,
+    DateTime ModifiedUtc);
+
+public sealed record AgentNoteDeleteResult(
+    string RelativePath,
+    string FullPath,
+    bool Deleted);
+
 public sealed record AIMonitorStageCandidateResult(
     string StagedRecordId,
     string StagedHash,
