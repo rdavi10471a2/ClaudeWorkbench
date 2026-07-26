@@ -39,13 +39,29 @@
                 <option value="Debug">Debug</option>
                 <option value="Release">Release</option>
             </select>
+
+            @* Startup-project picker — like VS's dropdown next to the play button. Lists the solution's
+               executable projects (from the index) so Run is never ambiguous when there's more than one. *@
+            <select class="source-run-project"
+                    @bind="selectedRunProject"
+                    title="Project to run"
+                    disabled="@(IsBuilding || Snapshot.RunnableProjects.Count == 0)">
+                @if (Snapshot.RunnableProjects.Count == 0)
+                {
+                    <option value="">No executable project</option>
+                }
+                @foreach (RunnableProjectEntry project in Snapshot.RunnableProjects)
+                {
+                    <option value="@project.ProjectPath">@project.Name</option>
+                }
+            </select>
             <RadzenButton Icon="play_arrow"
                           Text="Run"
                           ButtonStyle="ButtonStyle.Light"
                           Size="ButtonSize.Small"
-                          Title="Build and launch the executable project"
-                          Click="@(() => Run.InvokeAsync(buildConfiguration))"
-                          Disabled="@IsBuilding" />
+                          Title="Build and launch the selected executable project"
+                          Click="@RunSelected"
+                          Disabled="@(IsBuilding || Snapshot.RunnableProjects.Count == 0)" />
         </div>
         <div class="source-top-right">
             <RadzenButton Icon="add"
@@ -154,7 +170,7 @@
     public EventCallback<string> Build { get; set; }
 
     [Parameter]
-    public EventCallback<string> Run { get; set; }
+    public EventCallback<SourceRunRequest> Run { get; set; }
 
     [Parameter]
     public bool IsBuilding { get; set; }
@@ -173,6 +189,28 @@
     private IJSObjectReference? resizeModule;
     private bool showFilter;
     private string buildConfiguration = "Debug";
+    private string selectedRunProject = string.Empty;
+
+    // Keep the picked startup project valid as the index changes: default to the first executable, and
+    // re-default if the selected project was removed or the list came back empty.
+    protected override void OnParametersSet()
+    {
+        IReadOnlyList<RunnableProjectEntry> runnable = Snapshot.RunnableProjects;
+        if (runnable.Count == 0)
+        {
+            selectedRunProject = string.Empty;
+        }
+        else if (string.IsNullOrEmpty(selectedRunProject)
+            || !runnable.Any(project => project.ProjectPath == selectedRunProject))
+        {
+            selectedRunProject = runnable[0].ProjectPath;
+        }
+    }
+
+    private Task RunSelected()
+    {
+        return Run.InvokeAsync(new SourceRunRequest(buildConfiguration, selectedRunProject));
+    }
 
     private Task OnFilterChanged(string? value)
     {

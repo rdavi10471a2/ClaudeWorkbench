@@ -138,7 +138,9 @@ public sealed class SourceWorkspace
 
     // Operator Run: build, then launch the executable — F5 semantics, mirroring the accept dialog's
     // build-then-run. A build failure short-circuits into a RunResult so the caller shows one message.
-    public async Task<SolutionRunService.RunResult> RunAsync(string configuration)
+    // When projectPath is given (the Source tab's project dropdown) that exact project is launched;
+    // otherwise it falls back to auto-detecting a single executable.
+    public async Task<SolutionRunService.RunResult> RunAsync(string configuration, string? projectPath = null)
     {
         if (!workspace.HasWorkspace)
         {
@@ -156,7 +158,9 @@ public sealed class SourceWorkspace
                 return new SolutionRunService.RunResult(true, "Build failed — " + detail, null);
             }
 
-            return await Task.Run(() => new SolutionRunService().Run(workspace.Settings, configuration));
+            return await Task.Run(() => string.IsNullOrWhiteSpace(projectPath)
+                ? new SolutionRunService().Run(workspace.Settings, configuration)
+                : new SolutionRunService().RunProject(workspace.Settings, configuration, projectPath));
         }
         finally
         {
@@ -206,7 +210,20 @@ public sealed class SourceWorkspace
             tree,
             selectedFile,
             filter ?? string.Empty,
-            files.Count == 0 ? "No indexed source files matched the current filter." : string.Empty);
+            files.Count == 0 ? "No indexed source files matched the current filter." : string.Empty,
+            BuildRunnableProjects(projects));
+    }
+
+    // The executable projects the operator can Run, straight from the index's OutputType — no disk
+    // rescan, so the dropdown lists exactly the apps the tree already shows. Sorted for a stable menu.
+    private static IReadOnlyList<RunnableProjectEntry> BuildRunnableProjects(IReadOnlyList<IndexedProjectRow> projects)
+    {
+        return projects
+            .Where(project => project.OutputType.Equals("Exe", StringComparison.OrdinalIgnoreCase)
+                || project.OutputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(project => project.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(project => new RunnableProjectEntry(project.Name, Path.GetFullPath(project.ProjectPath)))
+            .ToArray();
     }
 
     private SourceWorkspaceSnapshot WithMessage(MonitorStatusResult status, string? filter, string message)
@@ -219,7 +236,8 @@ public sealed class SourceWorkspace
             [],
             null,
             filter ?? string.Empty,
-            message);
+            message,
+            []);
     }
 
     private static IReadOnlyList<SourceFileEntry> BuildFiles(

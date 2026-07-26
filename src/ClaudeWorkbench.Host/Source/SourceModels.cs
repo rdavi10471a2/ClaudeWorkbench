@@ -11,13 +11,25 @@ public sealed record SourceWorkspaceSnapshot(
     IReadOnlyList<SourceTreeNode> Tree,
     SourceFileDocument? SelectedFile,
     string Filter,
-    string Message)
+    string Message,
+    IReadOnlyList<RunnableProjectEntry> RunnableProjects)
 {
     public static SourceWorkspaceSnapshot Empty(string message)
     {
-        return new SourceWorkspaceSnapshot(string.Empty, string.Empty, string.Empty, [], [], null, string.Empty, message);
+        return new SourceWorkspaceSnapshot(string.Empty, string.Empty, string.Empty, [], [], null, string.Empty, message, []);
     }
 }
+
+// An executable project (OutputType Exe/WinExe) the operator can pick to Run — VS's "startup project"
+// dropdown. Derived from the index, so it tracks the same projects the tree shows.
+public sealed record RunnableProjectEntry(
+    string Name,
+    string ProjectPath);
+
+// What the Source tab's Run action carries: which configuration to build and which project to launch.
+public sealed record SourceRunRequest(
+    string Configuration,
+    string ProjectPath);
 
 public sealed record SourceFileEntry(
     string RelativePath,

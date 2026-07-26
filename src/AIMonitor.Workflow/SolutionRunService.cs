@@ -42,7 +42,30 @@ public sealed class SolutionRunService
                 null);
         }
 
-        string project = runnable[0];
+        return LaunchProject(runnable[0], config, solutionRoot);
+    }
+
+    // Run a specific project the operator picked from the Source tab's project dropdown. Unlike Run(),
+    // this never guesses — no "which one?" ambiguity — so it's the path used whenever there's a UI to
+    // choose from. Still requires a prior build; it launches the artifact, it does not compile.
+    public RunResult RunProject(MonitorSettings settings, string configuration, string projectPath)
+    {
+        string config = string.IsNullOrWhiteSpace(configuration) ? "Debug" : configuration.Trim();
+        if (string.IsNullOrWhiteSpace(projectPath) || !File.Exists(projectPath))
+        {
+            return new RunResult(true, "Run skipped — the selected project file is missing.", null);
+        }
+
+        string solutionRoot = Path.GetDirectoryName(Path.GetFullPath(settings.WatchedSolutionPath))
+            ?? settings.WatchedProjectFolder;
+        return LaunchProject(Path.GetFullPath(projectPath), config, solutionRoot);
+    }
+
+    // Locate the freshest built exe for `project` under bin/<config> and start it detached, stopping any
+    // previously launched instance first. Shared by Run() (single auto-detected project) and
+    // RunProject() (operator-picked), so both behave identically once a project is chosen.
+    private static RunResult LaunchProject(string project, string config, string solutionRoot)
+    {
         string projectDirectory = Path.GetDirectoryName(project) ?? solutionRoot;
         string projectName = Path.GetFileNameWithoutExtension(project);
         string binConfig = Path.Combine(projectDirectory, "bin", config);

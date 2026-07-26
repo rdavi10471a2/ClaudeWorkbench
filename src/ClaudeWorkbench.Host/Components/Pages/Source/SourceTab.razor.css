@@ -51,6 +51,22 @@
     opacity: .55;
 }
 
+/* Startup-project picker (VS-style) — a touch wider than the config select, name truncates if long. */
+.source-run-project {
+    max-width: 220px;
+    font-size: .8rem;
+    padding: 4px 6px;
+    border: 1px solid #c2d0dc;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #1f2933;
+    text-overflow: ellipsis;
+}
+
+.source-run-project:disabled {
+    opacity: .55;
+}
+
 .source-layout {
     display: grid;
     grid-template-columns: auto 8px minmax(0, 1fr);

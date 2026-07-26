@@ -1,5 +1,6 @@
 using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Components.Dialogs;
+using ClaudeWorkbench.Host.Source;
 using Microsoft.AspNetCore.Components;
 using Radzen;
 
@@ -58,10 +59,10 @@ public partial class SourcePanel : IDisposable
         });
     }
 
-    // Operator Run — build then launch the executable; toast the outcome.
-    private async Task OnRunAsync(string configuration)
+    // Operator Run — build then launch the picked executable project; toast the outcome.
+    private async Task OnRunAsync(SourceRunRequest request)
     {
-        SolutionRunService.RunResult result = await Workspace.RunAsync(configuration);
+        SolutionRunService.RunResult result = await Workspace.RunAsync(request.Configuration, request.ProjectPath);
         Notifications.Notify(new NotificationMessage
         {
             Severity = result.IsError ? NotificationSeverity.Warning : NotificationSeverity.Success,
