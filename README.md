@@ -127,6 +127,12 @@ time — so the dropdowns show exactly what this machine can create — then sca
 registers the project in the `.slnx` (`dotnet sln add`), restores, and reindexes. **C# only**, and new
 projects must live inside the solution folder (containment). This is an **operator** action run
 host-side out-of-process — it is *not* part of the agent's tool surface; the agent never runs the SDK.
+
+**Requires the `dotnet` CLI on `PATH`** (the same **.NET 10 SDK** the app already needs to run and
+index). By design this feature invokes the SDK's own tooling (`dotnet new` / `dotnet sln` /
+`dotnet restore`) as subprocesses rather than embedding the templating libraries — so it uses each
+machine's real, version-matched engine and *every* installed template for free. Any machine with
+Visual Studio or VS Code (or a bare SDK install) already has this on `PATH`; nothing extra to install.
 Because it shells the SDK, a template that needs a framework/workload you don't have will fail with the
 SDK's own message — install it and retry.
 
