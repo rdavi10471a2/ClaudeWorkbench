@@ -205,12 +205,20 @@ internal static class Program
 
         app.MapStaticAssets();
 
+        // A plain `dotnet build` output has NO physical wwwroot — static assets are served virtually
+        // from the static-web-assets manifest, so WebRootPath is null there; only `publish` lays down a
+        // real wwwroot folder. Resolve a physical root defensively (fall back to ContentRoot/wwwroot)
+        // so the explicit file providers below degrade to a no-op instead of NRE-ing the whole host on
+        // startup — which is exactly what happened when the Host was launched from a build output.
+        string webRoot = app.Environment.WebRootPath
+            ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+
         // Vendored Monaco editor (read-only source viewer) served from wwwroot/lib/monaco. Local disk
         // instead of the jsdelivr CDN: the CDN download was the ENTIRE slow-first-load cost on the
         // launcher's cold, isolated browser profile (measured — host serves in ~1.2s; the rest was the
         // browser fetching Monaco over the network). Like the mermaid blob, the MapStaticAssets
         // manifest does not reliably serve this tree, so map an explicit static-file provider.
-        string monacoRoot = Path.Combine(app.Environment.WebRootPath, "lib", "monaco");
+        string monacoRoot = Path.Combine(webRoot, "lib", "monaco");
         if (Directory.Exists(monacoRoot))
         {
             app.UseStaticFiles(new StaticFileOptions
@@ -231,9 +239,9 @@ internal static class Program
         // 404s every variant of it at runtime — plain and fingerprinted — while the smaller assets
         // it authored serve fine. Rather than fight that pipeline over a third-party bundle, we
         // read the physical file from wwwroot/lib and serve it on a route the manifest doesn't own.
-        app.MapGet("/vendor/mermaid.min.js", (IWebHostEnvironment env) =>
+        app.MapGet("/vendor/mermaid.min.js", () =>
         {
-            string path = Path.Combine(env.WebRootPath, "lib", "mermaid", "mermaid.min.js");
+            string path = Path.Combine(webRoot, "lib", "mermaid", "mermaid.min.js");
             return File.Exists(path)
                 ? Results.File(path, "text/javascript")
                 : Results.NotFound();
