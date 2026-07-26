@@ -80,9 +80,9 @@
             <div class="source-tree-tabs" role="tablist">
                 <button type="button"
                         role="tab"
-                        class="source-tree-tab @(activeTree == TreeMode.Symbols ? "active" : string.Empty)"
-                        aria-selected="@(activeTree == TreeMode.Symbols)"
-                        @onclick="@(() => SetTree(TreeMode.Symbols))">Symbols</button>
+                        class="source-tree-tab @(activeTree == TreeMode.Solution ? "active" : string.Empty)"
+                        aria-selected="@(activeTree == TreeMode.Solution)"
+                        @onclick="@(() => SetTree(TreeMode.Solution))">Solution</button>
                 <button type="button"
                         role="tab"
                         class="source-tree-tab @(activeTree == TreeMode.Files ? "active" : string.Empty)"
@@ -123,7 +123,7 @@
                 @if (ActiveTreeNodes.Count == 0)
                 {
                     <div class="source-tree-empty">
-                        @(activeTree == TreeMode.Files ? "No tracked files." : "No indexed symbols.")
+                        @(activeTree == TreeMode.Files ? "No tracked files." : "No indexed source.")
                     </div>
                 }
                 else
@@ -224,9 +224,9 @@
     private string buildConfiguration = "Debug";
     private string selectedRunProject = string.Empty;
 
-    private enum TreeMode { Symbols, Files }
+    private enum TreeMode { Solution, Files }
 
-    private TreeMode activeTree = TreeMode.Symbols;
+    private TreeMode activeTree = TreeMode.Solution;
 
     private IReadOnlyList<SourceTreeNode> ActiveTreeNodes =>
         activeTree == TreeMode.Files ? Snapshot.FilesTree : Snapshot.Tree;
