@@ -20,6 +20,32 @@
                           Title="Re-index the whole solution"
                           Click="@RebuildIndex"
                           IsBusy="@IsRebuildingIndex" />
+
+            <span class="source-toolbar-divider" aria-hidden="true"></span>
+
+            <RadzenButton Icon="build"
+                          Text="Build"
+                          BusyText="Building..."
+                          ButtonStyle="ButtonStyle.Success"
+                          Size="ButtonSize.Small"
+                          Title="Build the solution to real output (bin/<config>)"
+                          Click="@(() => Build.InvokeAsync(buildConfiguration))"
+                          IsBusy="@IsBuilding"
+                          Disabled="@IsBuilding" />
+            <select class="source-build-config"
+                    @bind="buildConfiguration"
+                    title="Build configuration"
+                    disabled="@IsBuilding">
+                <option value="Debug">Debug</option>
+                <option value="Release">Release</option>
+            </select>
+            <RadzenButton Icon="play_arrow"
+                          Text="Run"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Title="Build and launch the executable project"
+                          Click="@(() => Run.InvokeAsync(buildConfiguration))"
+                          Disabled="@IsBuilding" />
         </div>
         <div class="source-top-right">
             <RadzenButton Icon="add"
@@ -125,6 +151,15 @@
     public EventCallback AddProject { get; set; }
 
     [Parameter]
+    public EventCallback<string> Build { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Run { get; set; }
+
+    [Parameter]
+    public bool IsBuilding { get; set; }
+
+    [Parameter]
     public EventCallback Reload { get; set; }
 
     [Parameter]
@@ -137,6 +172,7 @@
     private ElementReference treeList;
     private IJSObjectReference? resizeModule;
     private bool showFilter;
+    private string buildConfiguration = "Debug";
 
     private Task OnFilterChanged(string? value)
     {

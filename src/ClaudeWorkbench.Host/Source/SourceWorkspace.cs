@@ -2,6 +2,7 @@ using AIMonitor.Core;
 using AIMonitor.Data;
 using AIMonitor.Indexing;
 using AIMonitor.McpServer;
+using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Services;
 
 namespace ClaudeWorkbench.Host.Source;
@@ -38,6 +39,7 @@ public sealed class SourceWorkspace
     private string? selectedPath;
     private int? selectedLine;
     private bool rebuilding;
+    private bool building;
     private bool loaded;
 
     public event Action? Changed;
@@ -49,6 +51,8 @@ public sealed class SourceWorkspace
     public string? SelectedPath => selectedPath;
 
     public bool Rebuilding => rebuilding;
+
+    public bool Building => building;
 
     public void EnsureLoaded()
     {
@@ -106,6 +110,58 @@ public sealed class SourceWorkspace
             selectedLine = null;
             loaded = true;
             Refresh();
+        }
+    }
+
+    // Operator Build: real `dotnet build` into the watched tree's own bin/<config> — the same
+    // SolutionBuildService the accept dialog's "Build after accept" uses, just on demand from the
+    // Source tab. Shells the SDK off the UI thread; the Building flag drives the button spinner.
+    public async Task<SolutionBuildService.BuildResult> BuildAsync(string configuration)
+    {
+        if (!workspace.HasWorkspace)
+        {
+            return new SolutionBuildService.BuildResult("no-workspace", true, configuration, string.Empty, 0, [], 0, "No watched workspace.");
+        }
+
+        building = true;
+        Changed?.Invoke();
+        try
+        {
+            return await Task.Run(() => new SolutionBuildService().Build(workspace.Settings, configuration));
+        }
+        finally
+        {
+            building = false;
+            Changed?.Invoke();
+        }
+    }
+
+    // Operator Run: build, then launch the executable — F5 semantics, mirroring the accept dialog's
+    // build-then-run. A build failure short-circuits into a RunResult so the caller shows one message.
+    public async Task<SolutionRunService.RunResult> RunAsync(string configuration)
+    {
+        if (!workspace.HasWorkspace)
+        {
+            return new SolutionRunService.RunResult(true, "No watched workspace.", null);
+        }
+
+        building = true;
+        Changed?.Invoke();
+        try
+        {
+            SolutionBuildService.BuildResult build = await Task.Run(() => new SolutionBuildService().Build(workspace.Settings, configuration));
+            if (build.IsError)
+            {
+                string detail = build.Diagnostics.Count > 0 ? build.Diagnostics[0] : build.Message;
+                return new SolutionRunService.RunResult(true, "Build failed — " + detail, null);
+            }
+
+            return await Task.Run(() => new SolutionRunService().Run(workspace.Settings, configuration));
+        }
+        finally
+        {
+            building = false;
+            Changed?.Invoke();
         }
     }
 

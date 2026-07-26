@@ -31,6 +31,26 @@
     gap: 6px;
 }
 
+.source-toolbar-divider {
+    width: 1px;
+    align-self: stretch;
+    background: #d7e1ea;
+    margin: 2px 4px;
+}
+
+.source-build-config {
+    font-size: .8rem;
+    padding: 4px 6px;
+    border: 1px solid #c2d0dc;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #1f2933;
+}
+
+.source-build-config:disabled {
+    opacity: .55;
+}
+
 .source-layout {
     display: grid;
     grid-template-columns: auto 8px minmax(0, 1fr);

@@ -1,3 +1,4 @@
+using AIMonitor.Workflow;
 using ClaudeWorkbench.Host.Components.Dialogs;
 using Microsoft.AspNetCore.Components;
 using Radzen;
@@ -42,6 +43,32 @@ public partial class SourcePanel : IDisposable
                 Duration = 5000,
             });
         }
+    }
+
+    // Operator Build — real output into bin/<config>; toast the outcome.
+    private async Task OnBuildAsync(string configuration)
+    {
+        SolutionBuildService.BuildResult result = await Workspace.BuildAsync(configuration);
+        Notifications.Notify(new NotificationMessage
+        {
+            Severity = result.IsError ? NotificationSeverity.Error : NotificationSeverity.Success,
+            Summary = result.IsError ? "Build failed" : "Build succeeded",
+            Detail = result.IsError && result.Diagnostics.Count > 0 ? result.Diagnostics[0] : result.Message,
+            Duration = result.IsError ? 8000 : 4000,
+        });
+    }
+
+    // Operator Run — build then launch the executable; toast the outcome.
+    private async Task OnRunAsync(string configuration)
+    {
+        SolutionRunService.RunResult result = await Workspace.RunAsync(configuration);
+        Notifications.Notify(new NotificationMessage
+        {
+            Severity = result.IsError ? NotificationSeverity.Warning : NotificationSeverity.Success,
+            Summary = result.IsError ? "Run" : "Launched",
+            Detail = result.Message,
+            Duration = 5000,
+        });
     }
 
     private void OnChanged()
