@@ -151,6 +151,22 @@
     font-size: .82rem;
 }
 
+/* Subtle "the Files list is git-backed" cue, shown only on the Files tab. */
+.source-git-note {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px 4px;
+    color: #7286a0;
+    font-size: .72rem;
+    font-style: italic;
+}
+
+.source-git-note .rz-icon {
+    font-size: .95rem;
+    font-style: normal;
+}
+
 /* Tree navigation controls — collapse/expand-all + filter toggle, with the file count. */
 .source-tree-toolbar {
     display: flex;

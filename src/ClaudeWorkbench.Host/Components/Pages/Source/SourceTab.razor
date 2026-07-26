@@ -98,6 +98,7 @@
                         @onclick="@(() => SetTree(TreeMode.Solution))">Solution</button>
                 <button type="button"
                         role="tab"
+                        title="Files listed from Git (git ls-files): tracked + new files, respecting .gitignore"
                         class="source-tree-tab @(activeTree == TreeMode.Files ? "active" : string.Empty)"
                         aria-selected="@(activeTree == TreeMode.Files)"
                         @onclick="@(() => SetTree(TreeMode.Files))">Files</button>
@@ -132,11 +133,21 @@
                 </div>
             }
 
+            @if (activeTree == TreeMode.Files)
+            {
+                <div class="source-git-note" title="git ls-files --cached --others --exclude-standard">
+                    <RadzenIcon Icon="account_tree" />
+                    <span>From Git — tracked + new files (respects .gitignore).</span>
+                </div>
+            }
+
             <div class="source-tree-list" @ref="treeList">
                 @if (ActiveTreeNodes.Count == 0)
                 {
                     <div class="source-tree-empty">
-                        @(activeTree == TreeMode.Files ? "No tracked files." : "No indexed source.")
+                        @(activeTree == TreeMode.Files
+                            ? "No files from Git. This list comes from git ls-files — a local repo is enough: run git init here (no remote needed) and Refresh."
+                            : "No indexed source.")
                     </div>
                 }
                 else
