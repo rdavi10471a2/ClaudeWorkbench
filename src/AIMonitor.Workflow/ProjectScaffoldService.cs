@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using AIMonitor.Core;
 
@@ -99,8 +100,10 @@ public sealed class ProjectScaffoldService
             ["new", "list", "--type", "project", "--language", "C#"],
             Environment.CurrentDirectory,
             TimeSpan.FromMinutes(1));
-        if (result.TimedOut || result.ExitCode != 0)
+        if (result.LaunchFailed || result.TimedOut || result.ExitCode != 0)
         {
+            // No dotnet / enumeration failed: degrade to the curated in-box list so the dialog still
+            // opens. Create() surfaces the real "SDK not found" error if they try to use it.
             return FallbackKinds;
         }
 
@@ -197,7 +200,7 @@ public sealed class ProjectScaffoldService
             ["--list-sdks"],
             Environment.CurrentDirectory,
             TimeSpan.FromSeconds(30));
-        if (result.TimedOut || result.ExitCode != 0)
+        if (result.LaunchFailed || result.TimedOut || result.ExitCode != 0)
         {
             return ["net10.0", "net9.0", "net8.0"];
         }
@@ -282,6 +285,14 @@ public sealed class ProjectScaffoldService
         }
 
         ProcessResult created = RunProcess("dotnet", newArgs, solutionRoot, runTimeout);
+        if (created.LaunchFailed)
+        {
+            return Error(
+                "The .NET SDK ('dotnet') wasn't found on PATH. Install the .NET 10 SDK and make sure "
+                    + "'dotnet' runs from a terminal, then retry.",
+                []);
+        }
+
         if (created.TimedOut || created.ExitCode != 0)
         {
             return Error(
@@ -430,7 +441,19 @@ public sealed class ProjectScaffoldService
             process.StartInfo.ArgumentList.Add(argument);
         }
 
-        process.Start();
+        try
+        {
+            process.Start();
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
+        {
+            // `dotnet` isn't on PATH (or otherwise couldn't launch): Start() throws BEFORE any exit code
+            // exists. Signal a launch failure instead of letting it bubble into the Blazor circuit — the
+            // caller turns this into a clear "install the SDK" message.
+            return new ProcessResult(-1, false, true, string.Empty,
+                $"Could not start '{fileName}'. Is the .NET SDK installed and on PATH? ({ex.Message})");
+        }
+
         Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
         Task<string> standardError = process.StandardError.ReadToEndAsync();
         bool exited = process.WaitForExit(timeout);
@@ -448,9 +471,10 @@ public sealed class ProjectScaffoldService
         return new ProcessResult(
             exited ? process.ExitCode : -1,
             !exited,
+            false,
             standardOutput.GetAwaiter().GetResult(),
             standardError.GetAwaiter().GetResult());
     }
 
-    private sealed record ProcessResult(int ExitCode, bool TimedOut, string StandardOutput, string StandardError);
+    private sealed record ProcessResult(int ExitCode, bool TimedOut, bool LaunchFailed, string StandardOutput, string StandardError);
 }
