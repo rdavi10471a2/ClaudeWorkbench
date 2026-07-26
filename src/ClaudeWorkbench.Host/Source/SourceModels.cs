@@ -12,11 +12,14 @@ public sealed record SourceWorkspaceSnapshot(
     SourceFileDocument? SelectedFile,
     string Filter,
     string Message,
-    IReadOnlyList<RunnableProjectEntry> RunnableProjects)
+    IReadOnlyList<RunnableProjectEntry> RunnableProjects,
+    IReadOnlyList<SourceTreeNode> FilesTree,
+    int FilesCount,
+    string FilesFilter)
 {
     public static SourceWorkspaceSnapshot Empty(string message)
     {
-        return new SourceWorkspaceSnapshot(string.Empty, string.Empty, string.Empty, [], [], null, string.Empty, message, []);
+        return new SourceWorkspaceSnapshot(string.Empty, string.Empty, string.Empty, [], [], null, string.Empty, message, [], [], 0, string.Empty);
     }
 }
 

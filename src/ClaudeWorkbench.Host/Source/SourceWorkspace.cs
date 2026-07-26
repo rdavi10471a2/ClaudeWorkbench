@@ -18,11 +18,13 @@ public sealed class SourceWorkspace
 
     private readonly WorkspaceManager workspace;
     private readonly IndexRebuildStatus rebuildStatus;
+    private readonly GitService git;
 
-    public SourceWorkspace(WorkspaceManager workspace, IndexRebuildStatus rebuildStatus)
+    public SourceWorkspace(WorkspaceManager workspace, IndexRebuildStatus rebuildStatus, GitService git)
     {
         this.workspace = workspace;
         this.rebuildStatus = rebuildStatus;
+        this.git = git;
         workspace.Changed += OnWorkspaceChanged;
     }
 
@@ -30,23 +32,32 @@ public sealed class SourceWorkspace
     {
         loaded = false;
         Refresh();
+        _ = ReloadTrackedFilesAsync();
     }
 
     // --- retained state (singleton) so the Source view survives tab switches,
     //     component re-creation, and browser refresh within a host session ----
     private SourceWorkspaceSnapshot current = SourceWorkspaceSnapshot.Empty("Loading source index...");
     private string filter = string.Empty;
+    private string filesFilter = string.Empty;
     private string? selectedPath;
     private int? selectedLine;
     private bool rebuilding;
     private bool building;
     private bool loaded;
 
+    // The Files tree is a plain file browser (VS Explorer style), independent of the code index: the
+    // git-tracked set (plus new-but-not-ignored files) under the watched folder, loaded once and cached
+    // so clicking a file doesn't re-shell git. Symbols tree stays index-backed; only this list is git-fed.
+    private IReadOnlyList<SourceFileEntry> trackedFiles = [];
+
     public event Action? Changed;
 
     public SourceWorkspaceSnapshot Snapshot => current;
 
     public string Filter => filter;
+
+    public string FilesFilter => filesFilter;
 
     public string? SelectedPath => selectedPath;
 
@@ -60,6 +71,8 @@ public sealed class SourceWorkspace
         {
             loaded = true;
             Refresh();
+            // Populate the Files tree in the background (git subprocess); Refresh again when it lands.
+            _ = ReloadTrackedFilesAsync();
         }
     }
 
@@ -73,6 +86,83 @@ public sealed class SourceWorkspace
         Refresh();
     }
 
+    public void SetFilesFilter(string value)
+    {
+        filesFilter = value ?? string.Empty;
+    }
+
+    public void ApplyFilesFilter()
+    {
+        Refresh();
+    }
+
+    // Re-read the git-tracked file set for the Files tree. Runs `git ls-files --cached --others
+    // --exclude-standard` in the watched folder: tracked files PLUS new-but-not-ignored ones (so a
+    // just-created file shows up in the governed loop) MINUS anything .gitignore excludes (bin/obj,
+    // generated corpus, .git). Paths come back relative to the watched folder — the same relative space
+    // the Symbols tree uses — so selection needs no special-casing. Best-effort: a non-repo or missing
+    // git leaves the Files tree empty rather than failing.
+    private async Task ReloadTrackedFilesAsync()
+    {
+        try
+        {
+            if (!workspace.HasWorkspace)
+            {
+                trackedFiles = [];
+                return;
+            }
+
+            string root = Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
+            if (!Directory.Exists(root))
+            {
+                trackedFiles = [];
+                return;
+            }
+
+            GitResult result = await git.RunAsync(
+                root,
+                ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]);
+            if (!result.Ok)
+            {
+                trackedFiles = [];
+                Refresh();
+                return;
+            }
+
+            List<SourceFileEntry> entries = [];
+            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string line in result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string relative = NormalizePath(line.Trim());
+                if (relative.Length == 0 || !seen.Add(relative))
+                {
+                    continue;
+                }
+
+                string full = Path.GetFullPath(Path.Combine(root, relative));
+                if (!File.Exists(full))
+                {
+                    continue;
+                }
+
+                entries.Add(new SourceFileEntry(
+                    relative,
+                    full,
+                    GetLanguage(Path.GetExtension(full)),
+                    GetFileSize(full),
+                    File.GetLastWriteTime(full)));
+            }
+
+            trackedFiles = entries;
+            Refresh();
+        }
+        catch (Exception)
+        {
+            // Best-effort: the Files tree just stays empty if git is unavailable or errors.
+            trackedFiles = [];
+        }
+    }
+
     // Re-read the current source WITHOUT a reindex: rebuild the snapshot from the existing index DB
     // plus fresh file contents from disk (LoadDocument reads the selected file off disk). Cheap; for
     // when the index is current but you want to see the latest saved source. Distinct from
@@ -80,6 +170,8 @@ public sealed class SourceWorkspace
     public void Reload()
     {
         Refresh();
+        // A reload may follow files being added/removed on disk, so refresh the tracked set too.
+        _ = ReloadTrackedFilesAsync();
     }
 
     public void Select(SourceSelection selection)
@@ -110,6 +202,7 @@ public sealed class SourceWorkspace
             selectedLine = null;
             loaded = true;
             Refresh();
+            _ = ReloadTrackedFilesAsync();
         }
     }
 
@@ -199,8 +292,8 @@ public sealed class SourceWorkspace
         string watchedRoot = workspace.Settings.WatchedProjectFolder;
         IReadOnlyList<SourceFileEntry> files = BuildFiles(watchedRoot, documents, filter);
         IReadOnlyList<SourceTreeNode> tree = BuildTree(projects, documents, symbols, watchedRoot, files);
-        SourceFileEntry? selectedEntry = SelectFile(files, selectedRelativePath);
-        SourceFileDocument? selectedFile = selectedEntry is null ? null : LoadDocument(selectedEntry, symbols, selectedLine);
+        IReadOnlyList<SourceFileEntry> fileEntries = BuildFilesEntries(filesFilter);
+        SourceFileDocument? selectedFile = ResolveSelected(files, fileEntries, symbols, watchedRoot, selectedRelativePath, selectedLine);
 
         return new SourceWorkspaceSnapshot(
             watchedRoot,
@@ -211,7 +304,86 @@ public sealed class SourceWorkspace
             selectedFile,
             filter ?? string.Empty,
             files.Count == 0 ? "No indexed source files matched the current filter." : string.Empty,
-            BuildRunnableProjects(projects));
+            BuildRunnableProjects(projects),
+            BuildPlainFileTree(fileEntries),
+            fileEntries.Count,
+            filesFilter);
+    }
+
+    // The Files tree's file set: the cached git-tracked entries, filtered + ranked like the index list.
+    private IReadOnlyList<SourceFileEntry> BuildFilesEntries(string? currentFilesFilter)
+    {
+        IEnumerable<SourceFileEntry> query = trackedFiles;
+        if (!string.IsNullOrWhiteSpace(currentFilesFilter))
+        {
+            query = query.Where(file => file.RelativePath.IndexOf(currentFilesFilter, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        return query
+            .OrderBy(file => GetFileRank(file.RelativePath))
+            .ThenBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    // A plain folder/file tree (no symbols) from a flat entry list — the Files tab. Same node type +
+    // renderer as the Symbols tree, so collapse/expand and click-to-open work identically.
+    private static IReadOnlyList<SourceTreeNode> BuildPlainFileTree(IReadOnlyList<SourceFileEntry> entries)
+    {
+        MutableSourceTreeNode root = new(string.Empty, "root", null);
+        foreach (SourceFileEntry entry in entries)
+        {
+            string[] segments = entry.RelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0)
+            {
+                continue;
+            }
+
+            MutableSourceTreeNode node = root;
+            for (int index = 0; index < segments.Length; index++)
+            {
+                bool isFile = index == segments.Length - 1;
+                node = node.GetOrAdd(segments[index], isFile ? "file" : "folder", isFile ? entry : null);
+            }
+        }
+
+        return root.Children
+            .OrderBy(child => GetTreeNodeRank(child.Kind))
+            .ThenBy(child => child.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(ConvertNode)
+            .ToArray();
+    }
+
+    // Resolve the file shown in the (shared) viewer from a selected relative path. Looks in the index
+    // file list first (so an indexed file keeps its outline), then the Files-tab entries, then falls
+    // back to a raw on-disk path — so a Files-only file loads straight into Monaco with an empty outline.
+    // With nothing selected, defaults to the first indexed file so the viewer isn't blank on open.
+    private SourceFileDocument? ResolveSelected(
+        IReadOnlyList<SourceFileEntry> indexFiles,
+        IReadOnlyList<SourceFileEntry> fileEntries,
+        IReadOnlyList<IndexedSymbolRow> symbols,
+        string watchedRoot,
+        string? selectedRelativePath,
+        int? line)
+    {
+        SourceFileEntry? entry = null;
+        if (!string.IsNullOrWhiteSpace(selectedRelativePath))
+        {
+            string normalized = NormalizePath(selectedRelativePath);
+            entry = indexFiles.FirstOrDefault(file => file.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase))
+                ?? fileEntries.FirstOrDefault(file => file.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+
+            if (entry is null)
+            {
+                string full = Path.GetFullPath(Path.Combine(watchedRoot, normalized));
+                if (File.Exists(full))
+                {
+                    entry = new SourceFileEntry(normalized, full, GetLanguage(Path.GetExtension(full)), GetFileSize(full), File.GetLastWriteTime(full));
+                }
+            }
+        }
+
+        entry ??= indexFiles.FirstOrDefault();
+        return entry is null ? null : LoadDocument(entry, symbols, line);
     }
 
     // The executable projects the operator can Run, straight from the index's OutputType — no disk
@@ -226,18 +398,27 @@ public sealed class SourceWorkspace
             .ToArray();
     }
 
+    // Index-missing / empty paths still get a usable Files tab — it's git-fed, not index-fed, so it
+    // works even before the first index build. The selected file loads by path with no outline.
     private SourceWorkspaceSnapshot WithMessage(MonitorStatusResult status, string? filter, string message)
     {
+        string watchedRoot = workspace.Settings.WatchedProjectFolder;
+        IReadOnlyList<SourceFileEntry> fileEntries = BuildFilesEntries(filesFilter);
+        SourceFileDocument? selectedFile = ResolveSelected([], fileEntries, [], watchedRoot, selectedPath, selectedLine);
+
         return new SourceWorkspaceSnapshot(
-            workspace.Settings.WatchedProjectFolder,
+            watchedRoot,
             workspace.Settings.WatchedSolutionPath,
             status.DatabasePath,
             [],
             [],
-            null,
+            selectedFile,
             filter ?? string.Empty,
             message,
-            []);
+            [],
+            BuildPlainFileTree(fileEntries),
+            fileEntries.Count,
+            filesFilter);
     }
 
     private static IReadOnlyList<SourceFileEntry> BuildFiles(
@@ -367,21 +548,6 @@ public sealed class SourceWorkspace
                 fileEntry,
                 Math.Max(symbol.StartLine, 1));
         }
-    }
-
-    private static SourceFileEntry? SelectFile(IReadOnlyList<SourceFileEntry> files, string? selectedRelativePath)
-    {
-        if (!string.IsNullOrWhiteSpace(selectedRelativePath))
-        {
-            SourceFileEntry? selected = files.FirstOrDefault(file =>
-                file.RelativePath.Equals(NormalizePath(selectedRelativePath), StringComparison.OrdinalIgnoreCase));
-            if (selected is not null)
-            {
-                return selected;
-            }
-        }
-
-        return files.FirstOrDefault();
     }
 
     private static SourceFileDocument LoadDocument(SourceFileEntry entry, IReadOnlyList<IndexedSymbolRow> symbols, int? selectedLine)

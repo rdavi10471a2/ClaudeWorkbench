@@ -75,6 +75,21 @@
 
     <div class="source-layout" @ref="sourceLayout">
         <aside class="source-sidebar" @ref="sourceSidebar" aria-label="Workspace source files">
+            @* Two trees, not a toggle: Symbols (index-backed, code + symbols) and Files (a plain
+               git-tracked file browser). Each keeps its own filter; both feed the same viewer. *@
+            <div class="source-tree-tabs" role="tablist">
+                <button type="button"
+                        role="tab"
+                        class="source-tree-tab @(activeTree == TreeMode.Symbols ? "active" : string.Empty)"
+                        aria-selected="@(activeTree == TreeMode.Symbols)"
+                        @onclick="@(() => SetTree(TreeMode.Symbols))">Symbols</button>
+                <button type="button"
+                        role="tab"
+                        class="source-tree-tab @(activeTree == TreeMode.Files ? "active" : string.Empty)"
+                        aria-selected="@(activeTree == TreeMode.Files)"
+                        @onclick="@(() => SetTree(TreeMode.Files))">Files</button>
+            </div>
+
             <div class="source-tree-toolbar">
                 <div class="source-tree-tools">
                     <RadzenButton Icon="unfold_less"
@@ -90,26 +105,35 @@
                     <RadzenButton Icon="search"
                                   ButtonStyle="@(showFilter ? ButtonStyle.Info : ButtonStyle.Light)"
                                   Size="ButtonSize.Small"
-                                  Title="Filter source files"
+                                  Title="Filter files"
                                   Click="@ToggleFilter" />
                 </div>
-                <span class="source-count">@Snapshot.Files.Count file@(Snapshot.Files.Count == 1 ? string.Empty : "s")</span>
+                <span class="source-count">@ActiveCount file@(ActiveCount == 1 ? string.Empty : "s")</span>
             </div>
 
             @if (showFilter)
             {
                 <div class="source-filter-row">
-                    <RadzenTextBox Value="@Filter" Change="@OnFilterChanged" Placeholder="Filter source files" />
-                    <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@ApplyFilter" />
+                    <RadzenTextBox Value="@ActiveFilter" Change="@OnActiveFilterChanged" Placeholder="Filter files" />
+                    <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@ApplyActiveFilter" />
                 </div>
             }
 
             <div class="source-tree-list" @ref="treeList">
-                @foreach (SourceTreeNode node in Snapshot.Tree)
+                @if (ActiveTreeNodes.Count == 0)
                 {
-                    <SourceProjectTreeNode Node="@node"
-                                           SelectedRelativePath="@SelectedPath"
-                                           OnFileSelected="@SelectFile" />
+                    <div class="source-tree-empty">
+                        @(activeTree == TreeMode.Files ? "No tracked files." : "No indexed symbols.")
+                    </div>
+                }
+                else
+                {
+                    @foreach (SourceTreeNode node in ActiveTreeNodes)
+                    {
+                        <SourceProjectTreeNode Node="@node"
+                                               SelectedRelativePath="@SelectedPath"
+                                               OnFileSelected="@SelectFile" />
+                    }
                 }
             </div>
         </aside>
@@ -152,6 +176,15 @@
     public EventCallback<string> FilterChanged { get; set; }
 
     [Parameter]
+    public string FilesFilter { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> FilesFilterChanged { get; set; }
+
+    [Parameter]
+    public EventCallback ApplyFilesFilter { get; set; }
+
+    [Parameter]
     public string? SelectedPath { get; set; }
 
     [Parameter]
@@ -190,6 +223,36 @@
     private bool showFilter;
     private string buildConfiguration = "Debug";
     private string selectedRunProject = string.Empty;
+
+    private enum TreeMode { Symbols, Files }
+
+    private TreeMode activeTree = TreeMode.Symbols;
+
+    private IReadOnlyList<SourceTreeNode> ActiveTreeNodes =>
+        activeTree == TreeMode.Files ? Snapshot.FilesTree : Snapshot.Tree;
+
+    private int ActiveCount =>
+        activeTree == TreeMode.Files ? Snapshot.FilesCount : Snapshot.Files.Count;
+
+    private string ActiveFilter =>
+        activeTree == TreeMode.Files ? FilesFilter : Filter;
+
+    private void SetTree(TreeMode mode)
+    {
+        activeTree = mode;
+    }
+
+    private Task OnActiveFilterChanged(string? value)
+    {
+        return activeTree == TreeMode.Files
+            ? FilesFilterChanged.InvokeAsync(value ?? string.Empty)
+            : FilterChanged.InvokeAsync(value ?? string.Empty);
+    }
+
+    private Task ApplyActiveFilter()
+    {
+        return activeTree == TreeMode.Files ? ApplyFilesFilter.InvokeAsync() : ApplyFilter.InvokeAsync();
+    }
 
     // Keep the picked startup project valid as the index changes: default to the first executable, and
     // re-default if the selected project was removed or the list came back empty.
