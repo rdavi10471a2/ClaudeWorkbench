@@ -12,8 +12,10 @@ public sealed class AgentToolPolicy
     public bool StrictMcpConfig { get; set; } = true;
 
     // Extra native tools the operator has explicitly turned on (by tool name),
-    // e.g. "Bash", "PowerShell", "Write", "WebFetch". Empty by default.
-    public HashSet<string> EnabledOptionalTools { get; set; } = new(StringComparer.Ordinal);
+    // e.g. "Bash", "PowerShell", "Write", "WebFetch". The non-risky web tools are ON by default so
+    // the agent can look things up; the risky writers (Bash/PowerShell/Write/Edit) stay off.
+    public HashSet<string> EnabledOptionalTools { get; set; } =
+        new(StringComparer.Ordinal) { "WebFetch", "WebSearch" };
 
     // Model id for the agent (empty => inherit the sidecar/subscription default).
     public string Model { get; set; } = string.Empty;

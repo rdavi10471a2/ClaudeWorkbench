@@ -11,7 +11,7 @@ query options; **Save** applies them, **Cancel** discards:
 | **Isolate MCP surface** | Expose only `claude-workbench` and ignore the machine's account/user connectors (e.g. claude.ai connectors). |
 | **Model** | Which Claude model drives the turn |
 | **Reasoning level** | The effort/thinking level — default, `low`, `medium`, `high`, `xhigh`, `max` |
-| **Optional tools** | Off by default. Each checkbox widens what the agent can do **outside** the governed gate; the ⚠ ones (`Bash`, `PowerShell`, `Write`, `Edit`) let it write files directly, bypassing the staged-review gate. `WebFetch`, `WebSearch`, `Agent` and `Workflow` are the non-risky ones. |
+| **Optional tools** | The read-only **web tools** (`WebFetch`, `WebSearch`) — they reach outside the workspace but don't write — are **on by default** so the agent can look things up. The ⚠ writers (`Bash`, `PowerShell`, `Write`, `Edit`) let it write files directly, bypassing the staged-review gate, and stay **off by default**. |
 
 > **Model** and **Reasoning level** apply to **new conversations** — start a fresh conversation
 > (**New** on the composer's conversation bar) for a change to take effect.
