@@ -193,44 +193,44 @@ public sealed class SourceWorkspace
             return;
         }
 
-        // Drop any #fragment or ?query, and URL-decode (%20 etc.).
-        string href = navigation.Href;
-        int cut = href.IndexOfAny(['#', '?']);
-        if (cut >= 0)
-        {
-            href = href[..cut];
-        }
-
-        href = Uri.UnescapeDataString(href.Trim());
-        if (href.Length == 0)
-        {
-            return;
-        }
-
-        string root = Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
-        string fromFull = Path.GetFullPath(Path.Combine(root, navigation.FromRelativePath.Replace('/', Path.DirectorySeparatorChar)));
-        string baseDirectory = Path.GetDirectoryName(fromFull) ?? root;
-
-        string targetFull;
+        // Fully guarded: a malformed href (illegal path chars, odd scheme) must resolve to "do nothing",
+        // never an unhandled exception — that would tear down the Blazor circuit (an app crash).
         try
         {
-            targetFull = Path.GetFullPath(Path.Combine(baseDirectory, href.Replace('/', Path.DirectorySeparatorChar)));
+            // Drop any #fragment or ?query, and URL-decode (%20 etc.).
+            string href = navigation.Href;
+            int cut = href.IndexOfAny(['#', '?']);
+            if (cut >= 0)
+            {
+                href = href[..cut];
+            }
+
+            href = Uri.UnescapeDataString(href.Trim());
+            if (href.Length == 0)
+            {
+                return;
+            }
+
+            string root = Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
+            string fromFull = Path.GetFullPath(Path.Combine(root, navigation.FromRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            string baseDirectory = Path.GetDirectoryName(fromFull) ?? root;
+            string targetFull = Path.GetFullPath(Path.Combine(baseDirectory, href.Replace('/', Path.DirectorySeparatorChar)));
+
+            // Confine to the watched folder and require the target to exist.
+            string relative = Path.GetRelativePath(root, targetFull);
+            if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) || !File.Exists(targetFull))
+            {
+                return;
+            }
+
+            selectedPath = NormalizePath(relative);
+            selectedLine = 1;
+            Refresh();
         }
         catch (Exception)
         {
-            return;
+            // Inert on any failure — a bad link never crashes the viewer.
         }
-
-        // Confine to the watched folder and require the target to exist.
-        string relative = Path.GetRelativePath(root, targetFull);
-        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) || !File.Exists(targetFull))
-        {
-            return;
-        }
-
-        selectedPath = NormalizePath(relative);
-        selectedLine = 1;
-        Refresh();
     }
 
     public async Task RebuildAsync()
@@ -620,7 +620,19 @@ public sealed class SourceWorkspace
                 BuildOutlineFromIndex(symbols, fullPath), info.Length);
         }
 
-        string text = File.ReadAllText(fullPath);
+        string text;
+        try
+        {
+            text = File.ReadAllText(fullPath);
+        }
+        catch (Exception exception)
+        {
+            // A read can fail transiently (a rapid doc switch racing a writer, a sharing violation).
+            // Surface it as document content instead of letting it bubble up through Refresh and crash.
+            return new SourceFileDocument(entry.RelativePath, fullPath, GetLanguage(info.Extension),
+                "Could not read file: " + exception.Message, safeSelectedLine, [], info.Length);
+        }
+
         int lineCount = Math.Max(1, text.Count(character => character == '\n') + 1);
         return new SourceFileDocument(entry.RelativePath, fullPath, GetLanguage(info.Extension), text,
             Math.Min(safeSelectedLine, lineCount), BuildOutlineFromIndex(symbols, fullPath), info.Length);

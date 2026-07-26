@@ -59,43 +59,64 @@
 
     private bool ShowRendered => IsMarkdown && !showRaw;
 
+    // A read-only viewer must NEVER crash the app on content it is merely displaying. Any unhandled
+    // JS-interop exception in a lifecycle method tears down the Blazor circuit (== the "crash"), so all
+    // interop here is guarded: a bad diagram, an odd code fence, or a Monaco hiccup degrades to plain
+    // text instead of killing the host.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        try
         {
-            module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
-            await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
-            // Intercept relative links in the rendered-markdown pane so they open in the viewer instead
-            // of navigating the tab away (which would drop the Blazor circuit).
-            selfRef = DotNetObjectReference.Create(this);
-            await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
-            // Shared markdown decoration (code highlighting + mermaid) — the same functions the chat
-            // transcript uses, so docs render diagrams and colored code exactly like chat.
-            resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
-            ready = true;
-            await OpenAsync();
-        }
+            if (firstRender)
+            {
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
+                await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
+                // Intercept relative links in the rendered-markdown pane so they open in the viewer
+                // instead of navigating the tab away (which would drop the Blazor circuit).
+                selfRef = DotNetObjectReference.Create(this);
+                await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
+                // Shared markdown decoration (code highlighting + mermaid) — the same functions the chat
+                // transcript uses, so docs render diagrams and colored code exactly like chat.
+                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+                ready = true;
+                await OpenAsync();
+            }
 
-        // After the rendered-markdown HTML lands, syntax-highlight its code fences and render its
-        // mermaid diagrams — once per document (the JS guards re-runs, but skip the interop churn).
-        if (ready && ShowRendered && resizeModule is not null && File is not null && decoratedForPath != File.FullPath)
+            // After the rendered-markdown HTML lands, syntax-highlight its code fences and render its
+            // mermaid diagrams — once per document (the JS guards re-runs, but skip the interop churn).
+            if (ready && ShowRendered && resizeModule is not null && File is not null && decoratedForPath != File.FullPath)
+            {
+                decoratedForPath = File.FullPath;
+                await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
+                await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+            }
+        }
+        catch (JSDisconnectedException)
         {
-            decoratedForPath = File.FullPath;
-            await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
-            await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+        }
+        catch (Exception)
+        {
+            // Decoration/interop failure must not crash the host — the doc still shows (plainly).
         }
     }
 
     // Called from JS when a relative in-doc link is clicked. File is the doc it came from.
     [JSInvokable]
-    public Task OpenRelativeLink(string href)
+    public async Task OpenRelativeLink(string href)
     {
         if (File is null || string.IsNullOrWhiteSpace(href))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return OnNavigate.InvokeAsync(new DocLinkNavigation(File.RelativePath, href));
+        try
+        {
+            await OnNavigate.InvokeAsync(new DocLinkNavigation(File.RelativePath, href));
+        }
+        catch (Exception)
+        {
+            // A bad link must never crash the viewer; a failed navigation is simply inert.
+        }
     }
 
     // File changes as the operator clicks tree nodes; push the new content/line into the live editor,
@@ -121,13 +142,24 @@
             return;
         }
 
-        await module.InvokeVoidAsync(
-            "openFile",
-            container,
-            File.FullPath,
-            File.Text,
-            GetMonacoLanguage(File),
-            File.SelectedLine);
+        // Guarded: rapid doc switches (double-tap) can call this while a prior swap is in flight or
+        // the circuit is tearing down — a throw here would crash the host, so swallow interop errors.
+        try
+        {
+            await module.InvokeVoidAsync(
+                "openFile",
+                container,
+                File.FullPath,
+                File.Text,
+                GetMonacoLanguage(File),
+                File.SelectedLine);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private async Task SetRawAsync(bool raw)
@@ -137,7 +169,17 @@
         // reappears so it doesn't paint at 0x0, then re-reveal the current line.
         if (raw && module is not null && ready)
         {
-            await module.InvokeVoidAsync("relayout", container);
+            try
+            {
+                await module.InvokeVoidAsync("relayout", container);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (Exception)
+            {
+            }
+
             await OpenAsync();
         }
     }
