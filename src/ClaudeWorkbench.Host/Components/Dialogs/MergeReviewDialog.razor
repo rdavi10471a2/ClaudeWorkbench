@@ -136,6 +136,15 @@
                     </select>
                     <label class="staged-review-reindex-toggle"
                            title="@(IsTerminalAccept()
+                               ? "Launch the built executable after the build. Off by default. Requires Build after accept (you can't run what isn't built). Single-executable solutions only for now — pick from the Source tab for multi-exe."
+                               : "Run happens on the FINAL file — this toggle is only active there.")">
+                        <input type="checkbox"
+                               @bind="runAfterAccept"
+                               disabled="@(!IsTerminalAccept() || actionBusy || !buildAfterAccept)" />
+                        <span>Run</span>
+                    </label>
+                    <label class="staged-review-reindex-toggle"
+                           title="@(IsTerminalAccept()
                                ? "Rebuild the solution index after this accept. Uncheck to DEFER the (expensive) reindex — the change still writes, but the index stays stale until the next reindex. Useful for tight single-file/markup loops that don't need the cross-file graph yet."
                                : "The session's index rebuild runs on the FINAL file — this toggle is only active there.")">
                         <input type="checkbox"

@@ -74,7 +74,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         return Load(next.StagedRecordId);
     }
 
-    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, string? buildConfiguration = null)
+    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, string? buildConfiguration = null, bool runAfterAccept = false)
     {
         StagedEditRecord record = workspace.EditService.GetStagedRecord(stagedRecordId);
         EnsureValidatedAndLaunched(record);
@@ -327,6 +327,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             string buildNote = string.Empty;
             if (buildConfiguration is not null)
             {
+                bool buildSucceeded = false;
                 try
                 {
                     SolutionBuildService.BuildResult build = new SolutionBuildService().Build(workspace.Settings, buildConfiguration);
@@ -335,6 +336,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                         "Host",
                         "post-accept-build",
                         build.IsError ? build.Message + " " + string.Join(" | ", build.Diagnostics) : build.Message);
+                    buildSucceeded = !build.IsError;
                     buildNote = build.IsError
                         ? $" Build ({build.Configuration}) FAILED — source is written but no runnable output was produced: {string.Join("; ", build.Diagnostics.Take(5))}"
                         : $" Built {build.Configuration} output.";
@@ -343,6 +345,27 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 {
                     buildNote = $" Build did not run: {buildException.Message}";
                     logger.Write(MonitorLogLevel.Warning, "Host", "post-accept-build", buildNote);
+                }
+
+                // Launch the built app only when the operator asked to run it AND the build produced
+                // output. Best-effort — a launch failure never affects the (already-committed) accept.
+                if (runAfterAccept && buildSucceeded)
+                {
+                    try
+                    {
+                        SolutionRunService.RunResult run = new SolutionRunService().Run(workspace.Settings, buildConfiguration);
+                        logger.Write(
+                            run.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
+                            "Host",
+                            "post-accept-run",
+                            run.Message);
+                        buildNote += " " + run.Message;
+                    }
+                    catch (Exception runException)
+                    {
+                        buildNote += $" Run did not start: {runException.Message}";
+                        logger.Write(MonitorLogLevel.Warning, "Host", "post-accept-run", runException.Message);
+                    }
                 }
             }
 

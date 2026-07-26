@@ -54,6 +54,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
     private bool buildAfterAccept = true;
     private string buildConfiguration = "Debug";
 
+    // "Run after accept" — launch the built executable once the build succeeds. OFF by default (never
+    // auto-launch an app unless asked), and only meaningful when Build after accept is on.
+    private bool runAfterAccept;
+
     // Busy-overlay text for the terminal accept — names only the phases that will actually run, each
     // gated on its own checkbox, so "building …" only shows when Build after accept is checked and
     // "rebuilding the solution index" only when Rebuild index is checked.
@@ -65,6 +69,11 @@ public partial class MergeReviewDialog : IAsyncDisposable
             if (buildAfterAccept)
             {
                 steps.Add($"building {buildConfiguration} output");
+            }
+
+            if (buildAfterAccept && runAfterAccept)
+            {
+                steps.Add("launching the app");
             }
 
             if (rebuildIndexOnAccept)
@@ -176,7 +185,9 @@ public partial class MergeReviewDialog : IAsyncDisposable
             // Build only on the terminal accept (once the whole session is on disk), and only when the
             // operator wants output. Null = no build.
             string? buildConfig = terminal && buildAfterAccept ? buildConfiguration : null;
-            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, buildConfig));
+            // Run only when building (can't run what wasn't built) and the operator opted in.
+            bool runNow = terminal && buildAfterAccept && runAfterAccept;
+            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, buildConfig, runNow));
             errorMessage = result.Message;
             if (result.OverrideAvailable)
             {

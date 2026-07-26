@@ -24,11 +24,14 @@ public interface IReviewWorkflow
     // runnable artifact. Null = no build (the default; the programmatic/agent accept path never
     // builds). Best-effort: the source is already written, so a build failure is reported, not
     // rolled back. Sequenced after the reindex (they run serially — no MSBuild handle contention).
+    // runAfterAccept launches the built executable after a successful build (requires buildConfiguration
+    // non-null — you can't run what wasn't built). Off by default. Operator-only.
     ReviewActionResult Accept(
         string stagedRecordId,
         bool forceApproveValidation,
         bool rebuildIndex = true,
-        string? buildConfiguration = null);
+        string? buildConfiguration = null,
+        bool runAfterAccept = false);
 
     ReviewActionResult Reject(string stagedRecordId);
 }
