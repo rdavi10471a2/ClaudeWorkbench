@@ -24,7 +24,7 @@
         </div>
     }
 
-    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")">
+    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")" @ref="markdownContainer">
         @((MarkupString)renderedHtml)
     </div>
 
@@ -35,9 +35,18 @@
     [Parameter]
     public SourceFileDocument? File { get; set; }
 
+    // Raised when a relative link inside a rendered markdown doc is clicked; the parent resolves it
+    // against the current doc and navigates the viewer to the target file.
+    [Parameter]
+    public EventCallback<DocLinkNavigation> OnNavigate { get; set; }
+
     private ElementReference container;
+    private ElementReference markdownContainer;
     private IJSObjectReference? module;
+    private IJSObjectReference? resizeModule;
+    private DotNetObjectReference<SourceCodeViewer>? selfRef;
     private bool ready;
+    private string? decoratedForPath;
 
     // Markdown view state. showRaw is a sticky operator preference across files; ShowRendered gates
     // which pane is visible (rendered markdown vs the Monaco source pane).
@@ -52,15 +61,41 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender)
         {
-            return;
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
+            await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
+            // Intercept relative links in the rendered-markdown pane so they open in the viewer instead
+            // of navigating the tab away (which would drop the Blazor circuit).
+            selfRef = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
+            // Shared markdown decoration (code highlighting + mermaid) — the same functions the chat
+            // transcript uses, so docs render diagrams and colored code exactly like chat.
+            resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+            ready = true;
+            await OpenAsync();
         }
 
-        module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
-        await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
-        ready = true;
-        await OpenAsync();
+        // After the rendered-markdown HTML lands, syntax-highlight its code fences and render its
+        // mermaid diagrams — once per document (the JS guards re-runs, but skip the interop churn).
+        if (ready && ShowRendered && resizeModule is not null && File is not null && decoratedForPath != File.FullPath)
+        {
+            decoratedForPath = File.FullPath;
+            await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
+            await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+        }
+    }
+
+    // Called from JS when a relative in-doc link is clicked. File is the doc it came from.
+    [JSInvokable]
+    public Task OpenRelativeLink(string href)
+    {
+        if (File is null || string.IsNullOrWhiteSpace(href))
+        {
+            return Task.CompletedTask;
+        }
+
+        return OnNavigate.InvokeAsync(new DocLinkNavigation(File.RelativePath, href));
     }
 
     // File changes as the operator clicks tree nodes; push the new content/line into the live editor,
@@ -120,6 +155,19 @@
             {
             }
         }
+
+        if (resizeModule is not null)
+        {
+            try
+            {
+                await resizeModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        selfRef?.Dispose();
     }
 
     private static string GetExtension(SourceFileDocument file)

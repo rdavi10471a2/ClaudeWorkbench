@@ -159,7 +159,7 @@
                     </div>
                 </header>
 
-                <SourceCodeViewer File="@Snapshot.SelectedFile" />
+                <SourceCodeViewer File="@Snapshot.SelectedFile" OnNavigate="@NavigateDocLink" />
             }
         </section>
     </div>
@@ -213,6 +213,9 @@
 
     [Parameter]
     public EventCallback<SourceSelection> SelectFile { get; set; }
+
+    [Parameter]
+    public EventCallback<DocLinkNavigation> NavigateDocLink { get; set; }
 
     private ElementReference sourceLayout;
     private ElementReference sourceSidebar;
