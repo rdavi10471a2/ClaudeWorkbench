@@ -161,6 +161,18 @@ export function attachDocLinks(container, dotnetRef) {
     }, true);
 }
 
+// Set the rendered-markdown pane's HTML. This DOM is owned by JS, not Blazor — Blazor renders the
+// container empty and never diffs its children, so the decoration passes (mermaid/highlight/link
+// neutralize) can safely mutate it without the "removeChild of null" reconciliation crash. Neutralizes
+// relative links in the same pass so a click can never hit a still-navigable <a>.
+export function setMarkdown(container, html) {
+    if (!(container instanceof Element)) {
+        return;
+    }
+    container.innerHTML = html || '';
+    decorateDocLinks(container);
+}
+
 // Neutralize relative in-doc links so NEITHER the browser NOR Blazor can navigate the tab away (which
 // dropped the circuit). We move the href onto data-doc-href and remove href entirely — an <a> with no
 // href is not navigable, so there is no race to lose. External (target=_blank), scheme (http:/mailto:),

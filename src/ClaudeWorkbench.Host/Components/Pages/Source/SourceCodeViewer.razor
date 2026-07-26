@@ -5,8 +5,14 @@
 
 @* Read-only source viewer. Code renders in one persistent in-app Monaco instance (no iframe), model
    swapped per file. Markdown renders as formatted HTML by default (via the shared, HTML-sanitizing
-   MarkdownRenderer), with a Raw toggle that drops back to Monaco source. Monaco stays mounted the whole
-   time (hidden under the rendered pane) so the toggle is instant and never re-initializes. *@
+   MarkdownRenderer), with a Raw toggle that drops back to Monaco source.
+
+   IMPORTANT: the rendered-markdown pane's innerHTML is owned ENTIRELY by JS (setMarkdown), NOT by a
+   Blazor MarkupString. This is deliberate — the decoration passes (mermaid replaces <pre>, highlight
+   rewrites <code>, decorateDocLinks strips href) mutate that DOM, and if Blazor also managed those
+   nodes it would try to reconcile the mutated tree on the next render and crash with
+   "Cannot read properties of null (reading 'removeChild')". Blazor sees an EMPTY div and never diffs
+   its contents — the same pattern the Monaco container uses. *@
 <div class="source-viewer">
     @if (IsMarkdown)
     {
@@ -24,9 +30,8 @@
         </div>
     }
 
-    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")" @ref="markdownContainer">
-        @((MarkupString)renderedHtml)
-    </div>
+    @* Empty by design — JS fills this (see comment above). Never put @@MarkupString content here. *@
+    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")" @ref="markdownContainer"></div>
 
     <div class="source-monaco @(ShowRendered ? "hidden" : string.Empty)" @ref="container"></div>
 </div>
@@ -46,13 +51,11 @@
     private IJSObjectReference? resizeModule;
     private DotNetObjectReference<SourceCodeViewer>? selfRef;
     private bool ready;
-    private string? decoratedForPath;
 
     // Markdown view state. showRaw is a sticky operator preference across files; ShowRendered gates
-    // which pane is visible (rendered markdown vs the Monaco source pane).
+    // which pane is visible. pushedForPath tracks which doc's HTML is currently in the JS-owned pane.
     private bool showRaw;
-    private string renderedHtml = string.Empty;
-    private string? renderedForPath;
+    private string? pushedForPath;
 
     private bool IsMarkdown =>
         File is not null && GetExtension(File) is ".md" or ".markdown";
@@ -61,8 +64,7 @@
 
     // A read-only viewer must NEVER crash the app on content it is merely displaying. Any unhandled
     // JS-interop exception in a lifecycle method tears down the Blazor circuit (== the "crash"), so all
-    // interop here is guarded: a bad diagram, an odd code fence, or a Monaco hiccup degrades to plain
-    // text instead of killing the host.
+    // interop here is guarded.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         try
@@ -71,35 +73,20 @@
             {
                 // ?v= cache-buster: the launcher's app-window caches JS aggressively; bump on JS change
                 // so a republish is actually picked up instead of serving a stale module.
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=2");
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=3");
                 await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
-                // Intercept relative links in the rendered-markdown pane so they open in the viewer
-                // instead of navigating the tab away (which would drop the Blazor circuit).
+                // Click handler for neutralized relative links in the rendered-markdown pane.
                 selfRef = DotNetObjectReference.Create(this);
                 await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
-                // Shared markdown decoration (code highlighting + mermaid) — the same functions the chat
-                // transcript uses, so docs render diagrams and colored code exactly like chat.
-                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=2");
+                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=3");
                 ready = true;
                 await OpenAsync();
             }
 
-            // After the rendered-markdown HTML lands, syntax-highlight its code fences and render its
-            // mermaid diagrams — once per document (the JS guards re-runs, but skip the interop churn).
-            if (ready && ShowRendered && File is not null && decoratedForPath != File.FullPath)
+            // Push the doc's HTML into the JS-owned pane once per document (markdown only).
+            if (ready && IsMarkdown && File is not null && pushedForPath != File.FullPath)
             {
-                decoratedForPath = File.FullPath;
-                // Neutralize relative links FIRST so a fast click can't hit a still-navigable <a>.
-                if (module is not null)
-                {
-                    await module.InvokeVoidAsync("decorateDocLinks", markdownContainer);
-                }
-
-                if (resizeModule is not null)
-                {
-                    await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
-                    await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
-                }
+                await RenderMarkdownAsync();
             }
         }
         catch (JSDisconnectedException)
@@ -107,11 +94,40 @@
         }
         catch (Exception)
         {
-            // Decoration/interop failure must not crash the host — the doc still shows (plainly).
+            // Rendering/interop failure must not crash the host.
         }
     }
 
-    // Called from JS when a relative in-doc link is clicked. File is the doc it came from.
+    // Build the doc's HTML in C#, then hand the whole pane to JS: setMarkdown sets innerHTML and
+    // neutralizes relative links; highlight + mermaid decorate it. Blazor never touches this DOM.
+    private async Task RenderMarkdownAsync()
+    {
+        if (module is null || File is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string html = MarkdownRenderer.ToHtml(File.Text);
+            await module.InvokeVoidAsync("setMarkdown", markdownContainer, html);
+            if (resizeModule is not null)
+            {
+                await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
+                await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+            }
+
+            pushedForPath = File.FullPath;
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    // Called from JS when a neutralized relative in-doc link is clicked. File is the doc it came from.
     [JSInvokable]
     public async Task OpenRelativeLink(string href)
     {
@@ -130,16 +146,10 @@
         }
     }
 
-    // File changes as the operator clicks tree nodes; push the new content/line into the live editor,
-    // and (for markdown) re-render the HTML pane when the file actually changes.
+    // File changes as the operator clicks tree nodes; push the new content/line into the live editor.
+    // The markdown pane is refreshed from OnAfterRenderAsync (guarded by pushedForPath).
     protected override async Task OnParametersSetAsync()
     {
-        if (IsMarkdown && File is not null && renderedForPath != File.FullPath)
-        {
-            renderedHtml = MarkdownRenderer.ToHtml(File.Text);
-            renderedForPath = File.FullPath;
-        }
-
         if (ready)
         {
             await OpenAsync();
