@@ -171,6 +171,9 @@ export function setMarkdown(container, html) {
     }
     container.innerHTML = html || '';
     decorateDocLinks(container);
+    // New doc starts at the top — swapping innerHTML leaves the pane scrolled where the last doc was.
+    container.scrollTop = 0;
+    container.scrollLeft = 0;
 }
 
 // Neutralize relative in-doc links so NEITHER the browser NOR Blazor can navigate the tab away (which

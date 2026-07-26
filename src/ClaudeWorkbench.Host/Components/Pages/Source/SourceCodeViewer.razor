@@ -73,7 +73,7 @@
             {
                 // ?v= cache-buster: the launcher's app-window caches JS aggressively; bump on JS change
                 // so a republish is actually picked up instead of serving a stale module.
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=3");
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=4");
                 await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
                 // Click handler for neutralized relative links in the rendered-markdown pane.
                 selfRef = DotNetObjectReference.Create(this);
