@@ -370,14 +370,28 @@
     color: transparent;
 }
 
-/* "Rebuild index after accept" toggle — sits just above the action buttons, right-aligned
-   to match. Muted + non-interactive on non-terminal files (see :has(input:disabled)). */
+/* The accept toggles ("Build after accept" + config, and "Rebuild index after accept") grouped on
+   one row just above the action buttons, right-aligned to match the buttons. */
+.staged-review-toggles {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding: 8px 12px 0;
+}
+
+.staged-review-build-config {
+    font-size: 0.85rem;
+    padding: 2px 4px;
+}
+
+/* Individual toggle — alignment/padding come from the .staged-review-toggles wrapper.
+   Muted + non-interactive on non-terminal files (see :has(input:disabled)). */
 .staged-review-reindex-toggle {
     display: flex;
     align-items: center;
     gap: 6px;
-    justify-content: flex-end;
-    padding: 8px 12px 0;
     font-size: 0.85rem;
     color: #48586a;
     cursor: pointer;

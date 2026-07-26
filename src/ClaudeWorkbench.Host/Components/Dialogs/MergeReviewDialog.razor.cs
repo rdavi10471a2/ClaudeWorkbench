@@ -54,6 +54,41 @@ public partial class MergeReviewDialog : IAsyncDisposable
     private bool buildAfterAccept = true;
     private string buildConfiguration = "Debug";
 
+    // Busy-overlay text for the terminal accept — names only the phases that will actually run, each
+    // gated on its own checkbox, so "building …" only shows when Build after accept is checked and
+    // "rebuilding the solution index" only when Rebuild index is checked.
+    private string AcceptBusyMessage
+    {
+        get
+        {
+            List<string> steps = new() { "submitting the accepted files" };
+            if (buildAfterAccept)
+            {
+                steps.Add($"building {buildConfiguration} output");
+            }
+
+            if (rebuildIndexOnAccept)
+            {
+                steps.Add("rebuilding the solution index");
+            }
+
+            string joined;
+            if (steps.Count == 1)
+            {
+                joined = steps[0];
+            }
+            else
+            {
+                string last = steps[steps.Count - 1];
+                steps.RemoveAt(steps.Count - 1);
+                joined = string.Join(", ", steps) + ", and " + last;
+            }
+
+            string deferred = rebuildIndexOnAccept ? string.Empty : " (index rebuild deferred)";
+            return char.ToUpperInvariant(joined[0]) + joined.Substring(1) + deferred + ". Please wait…";
+        }
+    }
+
     // Provenance sync points (per the thread model): accumulate the records approved in THIS edit
     // session, commit them to the live thread on the TERMINAL accept (the write actually happens),
     // and discard them on a REJECT (which voids the EDIT session only — writing nothing — while the
