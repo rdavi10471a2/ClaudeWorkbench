@@ -69,7 +69,9 @@
         {
             if (firstRender)
             {
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
+                // ?v= cache-buster: the launcher's app-window caches JS aggressively; bump on JS change
+                // so a republish is actually picked up instead of serving a stale module.
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=2");
                 await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
                 // Intercept relative links in the rendered-markdown pane so they open in the viewer
                 // instead of navigating the tab away (which would drop the Blazor circuit).
@@ -77,18 +79,27 @@
                 await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
                 // Shared markdown decoration (code highlighting + mermaid) — the same functions the chat
                 // transcript uses, so docs render diagrams and colored code exactly like chat.
-                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=2");
                 ready = true;
                 await OpenAsync();
             }
 
             // After the rendered-markdown HTML lands, syntax-highlight its code fences and render its
             // mermaid diagrams — once per document (the JS guards re-runs, but skip the interop churn).
-            if (ready && ShowRendered && resizeModule is not null && File is not null && decoratedForPath != File.FullPath)
+            if (ready && ShowRendered && File is not null && decoratedForPath != File.FullPath)
             {
                 decoratedForPath = File.FullPath;
-                await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
-                await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+                // Neutralize relative links FIRST so a fast click can't hit a still-navigable <a>.
+                if (module is not null)
+                {
+                    await module.InvokeVoidAsync("decorateDocLinks", markdownContainer);
+                }
+
+                if (resizeModule is not null)
+                {
+                    await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
+                    await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+                }
             }
         }
         catch (JSDisconnectedException)

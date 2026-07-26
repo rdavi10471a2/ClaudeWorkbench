@@ -137,29 +137,55 @@ export function attachDocLinks(container, dotnetRef) {
         return;
     }
     container.__docLinksAttached = true;
+    container.__docLinkRef = dotnetRef;
 
+    // CAPTURE phase, so this runs before Blazor's own document-level navigation handler and wins the
+    // race that was intermittently letting a relative link navigate the tab (drop the circuit = crash).
     container.addEventListener('click', (event) => {
-        const anchor = event.target.closest ? event.target.closest('a') : null;
+        const anchor = event.target && event.target.closest ? event.target.closest('a') : null;
         if (!anchor || !container.contains(anchor)) {
             return;
         }
 
-        // Real new-tab links (external / local-file) already open safely — leave them.
+        // Neutralized relative link (decorateDocLinks moved its href here): route it to the viewer.
+        const docHref = anchor.getAttribute('data-doc-href');
+        if (docHref) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (container.__docLinkRef) {
+                container.__docLinkRef.invokeMethodAsync('OpenRelativeLink', docHref);
+            }
+            return;
+        }
+        // Real new-tab links (external / local-file: target=_blank) and #fragment anchors: leave them.
+    }, true);
+}
+
+// Neutralize relative in-doc links so NEITHER the browser NOR Blazor can navigate the tab away (which
+// dropped the circuit). We move the href onto data-doc-href and remove href entirely — an <a> with no
+// href is not navigable, so there is no race to lose. External (target=_blank), scheme (http:/mailto:),
+// and #fragment links are left as real links. Idempotent; run after each markdown render.
+export function decorateDocLinks(container) {
+    if (!(container instanceof Element)) {
+        return;
+    }
+
+    container.querySelectorAll('a[href]').forEach((anchor) => {
         if (anchor.target === '_blank') {
             return;
         }
-
         const href = anchor.getAttribute('href') || '';
-        // In-page anchor (#heading): let the browser scroll; it never drops the circuit.
         if (href === '' || href.startsWith('#')) {
             return;
         }
-
-        // Anything else is a relative in-doc link. NEVER let it navigate the tab; route it instead.
-        event.preventDefault();
-        if (dotnetRef) {
-            dotnetRef.invokeMethodAsync('OpenRelativeLink', href);
+        // Absolute scheme (http:, https:, mailto:, file:, …) — leave it a real link.
+        if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+            return;
         }
+        // Relative in-doc link — make it non-navigable; the click handler routes it to the viewer.
+        anchor.setAttribute('data-doc-href', href);
+        anchor.removeAttribute('href');
+        anchor.classList.add('doc-link');
     });
 }
 

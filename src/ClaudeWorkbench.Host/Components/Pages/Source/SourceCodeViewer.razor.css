@@ -123,6 +123,18 @@
     text-decoration: underline;
 }
 
+/* Neutralized relative in-doc links (decorateDocLinks removes their href to stop tab navigation);
+   keep them looking and behaving like links. */
+.source-markdown ::deep a.doc-link {
+    color: #1f4e8c;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.source-markdown ::deep a.doc-link:hover {
+    text-decoration: underline;
+}
+
 /* Inline code, code blocks, syntax-highlight tokens, and mermaid diagrams are styled globally in
    wwwroot/app.css (shared with the chat transcript), so they are not re-declared here. */
 
