@@ -74,7 +74,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         return Load(next.StagedRecordId);
     }
 
-    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true)
+    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, string? buildConfiguration = null)
     {
         StagedEditRecord record = workspace.EditService.GetStagedRecord(stagedRecordId);
         EnsureValidatedAndLaunched(record);
@@ -317,10 +317,39 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             string restoreNote = postAcceptRestore is { IsError: true }
                 ? $" NuGet restore FAILED for the accepted project change — the reference is written but the package is NOT restored, so it will not resolve in the build or index until this is fixed: {string.Join("; ", postAcceptRestore.Diagnostics)}"
                 : string.Empty;
+
+            // Produce REAL output in the watched tree's own bin/<config> so the operator can run what
+            // was just accepted. A capability call (SolutionBuildService) invoked here as a step in the
+            // accept flow — best-effort: the source is already written and indexed, so a build failure is
+            // reported as a note, never a rollback. Runs AFTER the reindex (they're sequential, so no
+            // concurrent MSBuild handles contend on the watched tree). Skipped when buildConfiguration is
+            // null (operator unchecked "Build after accept", or a programmatic/agent accept).
+            string buildNote = string.Empty;
+            if (buildConfiguration is not null)
+            {
+                try
+                {
+                    SolutionBuildService.BuildResult build = new SolutionBuildService().Build(workspace.Settings, buildConfiguration);
+                    logger.Write(
+                        build.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
+                        "Host",
+                        "post-accept-build",
+                        build.IsError ? build.Message + " " + string.Join(" | ", build.Diagnostics) : build.Message);
+                    buildNote = build.IsError
+                        ? $" Build ({build.Configuration}) FAILED — source is written but no runnable output was produced: {string.Join("; ", build.Diagnostics.Take(5))}"
+                        : $" Built {build.Configuration} output.";
+                }
+                catch (Exception buildException)
+                {
+                    buildNote = $" Build did not run: {buildException.Message}";
+                    logger.Write(MonitorLogLevel.Warning, "Host", "post-accept-build", buildNote);
+                }
+            }
+
             string message = writtenPaths.Count == 1
-                ? $"Accepted. {record.RelativePath} written; {indexNote}.{restoreNote}"
-                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.{restoreNote}";
-            string agentSummary = BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex) + restoreNote;
+                ? $"Accepted. {record.RelativePath} written; {indexNote}.{restoreNote}{buildNote}"
+                : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.{restoreNote}{buildNote}";
+            string agentSummary = BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex) + restoreNote + buildNote;
             return new ReviewActionResult(message, agentSummary);
         }
         catch (Exception exception)

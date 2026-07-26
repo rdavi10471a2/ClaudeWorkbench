@@ -87,7 +87,7 @@ public sealed class SolutionIndexStore
             // No cross-symbol FK exists anymore (the *_stable_key columns are plain text after the schema upgrade), so
             // this single-project delete+reinsert cannot cascade-delete other projects' inbound rows. Insert order no
             // longer matters and no foreign-key toggling is required. The scoped->full inbound-dependent guard still
-            // lives in PostAcceptIndexRefreshService for the stale-key case (a target symbol that genuinely moved).
+            // lives in IndexRefreshService for the stale-key case (a target symbol that genuinely moved).
             using (SqliteTransaction transaction = connection.BeginTransaction())
             {
                 long projectId = Measure("index.sqlite.get-project-id", timingSink, () => GetProjectId(connection, transaction, normalizedProjectPath));

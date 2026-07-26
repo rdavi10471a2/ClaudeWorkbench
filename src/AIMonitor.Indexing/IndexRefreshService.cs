@@ -7,7 +7,10 @@ using AIMonitor.Workflow;
 
 namespace AIMonitor.Indexing;
 
-public sealed class PostAcceptIndexRefreshService
+// Refreshes the solution index after an accepted edit — scoped to changed files when safe, else a full
+// rebuild. A capability, not a workflow phase: the manual "Rebuild Index" button and the accept flow
+// both call it, so its name says what it does, not when it runs.
+public sealed class IndexRefreshService
 {
     public PostAcceptIndexRefreshResult RebuildAfterAcceptedDecision(
         MonitorSettings settings,

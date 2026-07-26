@@ -131,6 +131,24 @@
                     <span>Rebuild index after accept@(IsTerminalAccept() ? string.Empty : " (set on the final file)")</span>
                 </label>
 
+                <div class="staged-review-build-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <label class="staged-review-reindex-toggle"
+                           title="@(IsTerminalAccept()
+                               ? "Build the accepted source in place after this accept — produces real output in each project's bin/<config> so you can run it. Uncheck for no output (and no build time). Honored on the final file."
+                               : "The build runs on the FINAL file — this toggle is only active there.")">
+                        <input type="checkbox"
+                               @bind="buildAfterAccept"
+                               disabled="@(!IsTerminalAccept() || actionBusy)" />
+                        <span>Build after accept@(IsTerminalAccept() ? string.Empty : " (set on the final file)")</span>
+                    </label>
+                    <select @bind="buildConfiguration"
+                            title="Build configuration for the output"
+                            disabled="@(!IsTerminalAccept() || actionBusy || !buildAfterAccept)">
+                        <option value="Debug">Debug</option>
+                        <option value="Release">Release</option>
+                    </select>
+                </div>
+
                 <div class="staged-review-detail-actions">
                     <button class="staged-review-primary-action"
                             type="button"

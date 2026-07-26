@@ -60,7 +60,7 @@ public sealed class SolutionIndexDatabaseSchemaVersionTests
         Assert.True(TableExists(databasePath, "solution_state"));
 
         // The recreate set the needs_full_rebuild marker; the index is INVALID until a full rebuild repopulates it.
-        // PostAcceptIndexRefreshService reads exactly this flag to set useFileRefresh = false, forcing the full
+        // IndexRefreshService reads exactly this flag to set useFileRefresh = false, forcing the full
         // RebuildAsync path instead of a scoped project/file refresh.
         Assert.True(database.IsFullRebuildRequired());
     }

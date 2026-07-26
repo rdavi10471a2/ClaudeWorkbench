@@ -33,8 +33,8 @@ public sealed class StagedDecisionWorkflow
         if (record.Classification is "accepted" or "accepted-normalized")
         {
             indexRefresh = deferIndexRefresh
-                ? PostAcceptIndexRefreshService.DeferredUntilPlannedFilesComplete()
-                : new PostAcceptIndexRefreshService().RebuildAfterAcceptedDecision(
+                ? IndexRefreshService.DeferredUntilPlannedFilesComplete()
+                : new IndexRefreshService().RebuildAfterAcceptedDecision(
                     settings,
                     logger,
                     record,
@@ -43,7 +43,7 @@ public sealed class StagedDecisionWorkflow
         }
         else if (!deferIndexRefresh && refreshPlan is not null && refreshPlan.ChangedFilePaths.Count > 0)
         {
-            indexRefresh = new PostAcceptIndexRefreshService().RebuildAfterAcceptedDecision(
+            indexRefresh = new IndexRefreshService().RebuildAfterAcceptedDecision(
                 settings,
                 logger,
                 record,

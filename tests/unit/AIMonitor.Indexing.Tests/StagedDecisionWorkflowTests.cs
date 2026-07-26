@@ -439,7 +439,7 @@ public sealed class StagedDecisionWorkflowTests
             }
             """);
 
-        PostAcceptIndexRefreshResult refresh = new PostAcceptIndexRefreshService().RebuildAfterAcceptedDecision(
+        PostAcceptIndexRefreshResult refresh = new IndexRefreshService().RebuildAfterAcceptedDecision(
             settings,
             NullMonitorLogger.Instance,
             serviceRecord,

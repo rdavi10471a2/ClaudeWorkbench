@@ -47,6 +47,13 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // next reindex). Disabled/ignored on non-terminal files, which never reindex anyway.
     private bool rebuildIndexOnAccept = true;
 
+    // "Build after accept" — on the terminal accept, run a real in-place `dotnet build` so the watched
+    // tree's own bin/<config> holds a runnable artifact (the governed loop otherwise only writes source,
+    // never binaries). On by default so an accept normally leaves a runnable tree; uncheck for no output
+    // (and no build cost). buildConfiguration is the chosen build config; Debug is the iterate/run default.
+    private bool buildAfterAccept = true;
+    private string buildConfiguration = "Debug";
+
     // Provenance sync points (per the thread model): accumulate the records approved in THIS edit
     // session, commit them to the live thread on the TERMINAL accept (the write actually happens),
     // and discard them on a REJECT (which voids the EDIT session only — writing nothing — while the
@@ -131,7 +138,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
             // rebuildIndexOnAccept is honored only on the terminal accept; the workflow ignores it
             // on non-terminal files (they never reindex). Pass the terminal-guarded value.
             bool rebuildIndex = !terminal || rebuildIndexOnAccept;
-            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex));
+            // Build only on the terminal accept (once the whole session is on disk), and only when the
+            // operator wants output. Null = no build.
+            string? buildConfig = terminal && buildAfterAccept ? buildConfiguration : null;
+            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, buildConfig));
             errorMessage = result.Message;
             if (result.OverrideAvailable)
             {

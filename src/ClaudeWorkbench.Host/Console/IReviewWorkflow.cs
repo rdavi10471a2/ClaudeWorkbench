@@ -18,7 +18,17 @@ public interface IReviewWorkflow
     // Default true = current behavior. False defers the (expensive) post-accept index rebuild:
     // the files still write, but the index goes stale until the next reindex — for tight
     // single-file/markup loops where the cross-file graph isn't needed yet.
-    ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true);
+    //
+    // buildConfiguration, when non-null (e.g. "Debug"/"Release"), runs a real in-place
+    // `dotnet build` after the terminal accept so the watched tree's own bin/<config> holds a
+    // runnable artifact. Null = no build (the default; the programmatic/agent accept path never
+    // builds). Best-effort: the source is already written, so a build failure is reported, not
+    // rolled back. Sequenced after the reindex (they run serially — no MSBuild handle contention).
+    ReviewActionResult Accept(
+        string stagedRecordId,
+        bool forceApproveValidation,
+        bool rebuildIndex = true,
+        string? buildConfiguration = null);
 
     ReviewActionResult Reject(string stagedRecordId);
 }
