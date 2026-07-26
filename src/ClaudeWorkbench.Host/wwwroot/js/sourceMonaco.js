@@ -123,6 +123,14 @@ export function openFile(container, path, text, language, line) {
     }]);
 }
 
+// Force a layout pass — used when the editor becomes visible again after being hidden (e.g. toggling
+// back from a rendered-markdown pane), where it may otherwise have measured itself at 0x0.
+export function relayout(container) {
+    if (container && container.__monacoEditor) {
+        container.__monacoEditor.layout();
+    }
+}
+
 export function dispose(container) {
     if (container && container.__monacoEditor) {
         container.__monacoEditor.dispose();

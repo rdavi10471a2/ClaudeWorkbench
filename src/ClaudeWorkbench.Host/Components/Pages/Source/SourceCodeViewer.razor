@@ -1,10 +1,35 @@
 @inject IJSRuntime JS
 @inject Microsoft.AspNetCore.Components.NavigationManager Nav
 @implements IAsyncDisposable
+@using ClaudeWorkbench.Host.Services
 
-@* Read-only source viewer: one persistent in-app Monaco instance (no iframe), model swapped per file
-   via JS interop. Click-a-node -> OpenAsync(path, line) reveals the line — same navigation as before. *@
-<div class="source-monaco" @ref="container"></div>
+@* Read-only source viewer. Code renders in one persistent in-app Monaco instance (no iframe), model
+   swapped per file. Markdown renders as formatted HTML by default (via the shared, HTML-sanitizing
+   MarkdownRenderer), with a Raw toggle that drops back to Monaco source. Monaco stays mounted the whole
+   time (hidden under the rendered pane) so the toggle is instant and never re-initializes. *@
+<div class="source-viewer">
+    @if (IsMarkdown)
+    {
+        <div class="source-view-toggle" role="tablist" aria-label="Markdown view mode">
+            <button type="button"
+                    role="tab"
+                    class="@(showRaw ? string.Empty : "active")"
+                    aria-selected="@(!showRaw)"
+                    @onclick="@(() => SetRawAsync(false))">Rendered</button>
+            <button type="button"
+                    role="tab"
+                    class="@(showRaw ? "active" : string.Empty)"
+                    aria-selected="@showRaw"
+                    @onclick="@(() => SetRawAsync(true))">Raw</button>
+        </div>
+    }
+
+    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")">
+        @((MarkupString)renderedHtml)
+    </div>
+
+    <div class="source-monaco @(ShowRendered ? "hidden" : string.Empty)" @ref="container"></div>
+</div>
 
 @code {
     [Parameter]
@@ -13,6 +38,17 @@
     private ElementReference container;
     private IJSObjectReference? module;
     private bool ready;
+
+    // Markdown view state. showRaw is a sticky operator preference across files; ShowRendered gates
+    // which pane is visible (rendered markdown vs the Monaco source pane).
+    private bool showRaw;
+    private string renderedHtml = string.Empty;
+    private string? renderedForPath;
+
+    private bool IsMarkdown =>
+        File is not null && GetExtension(File) is ".md" or ".markdown";
+
+    private bool ShowRendered => IsMarkdown && !showRaw;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -27,9 +63,16 @@
         await OpenAsync();
     }
 
-    // File changes as the operator clicks tree nodes; push the new content/line into the live editor.
+    // File changes as the operator clicks tree nodes; push the new content/line into the live editor,
+    // and (for markdown) re-render the HTML pane when the file actually changes.
     protected override async Task OnParametersSetAsync()
     {
+        if (IsMarkdown && File is not null && renderedForPath != File.FullPath)
+        {
+            renderedHtml = MarkdownRenderer.ToHtml(File.Text);
+            renderedForPath = File.FullPath;
+        }
+
         if (ready)
         {
             await OpenAsync();
@@ -52,6 +95,18 @@
             File.SelectedLine);
     }
 
+    private async Task SetRawAsync(bool raw)
+    {
+        showRaw = raw;
+        // Monaco was hidden (zero-sized) while the rendered pane showed; force a relayout as it
+        // reappears so it doesn't paint at 0x0, then re-reveal the current line.
+        if (raw && module is not null && ready)
+        {
+            await module.InvokeVoidAsync("relayout", container);
+            await OpenAsync();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (module is not null)
@@ -67,10 +122,14 @@
         }
     }
 
+    private static string GetExtension(SourceFileDocument file)
+    {
+        return Path.GetExtension(file.RelativePath).ToLowerInvariant();
+    }
+
     private static string GetMonacoLanguage(SourceFileDocument file)
     {
-        string extension = Path.GetExtension(file.RelativePath);
-        return extension.ToLowerInvariant() switch
+        return GetExtension(file) switch
         {
             ".cs" => "csharp",
             ".razor" => "html",
@@ -79,6 +138,7 @@
             ".xml" => "xml",
             ".xaml" => "xml",
             ".md" => "markdown",
+            ".markdown" => "markdown",
             ".css" => "css",
             ".html" => "html",
             ".js" => "javascript",

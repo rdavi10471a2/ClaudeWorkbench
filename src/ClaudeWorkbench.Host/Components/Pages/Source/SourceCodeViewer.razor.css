@@ -1,3 +1,51 @@
+/* Viewer shell: an optional view-toggle bar on top, the active pane (rendered markdown OR Monaco)
+   filling the rest. */
+.source-viewer {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Rendered / Raw segmented toggle for markdown. */
+.source-view-toggle {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e4ebf1;
+    background: #f6f8fa;
+}
+
+.source-view-toggle button {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 3px 12px;
+    font-size: .78rem;
+    font-weight: 700;
+    color: #526a82;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.source-view-toggle button:hover {
+    background: #eaf0f6;
+    color: #1f2933;
+}
+
+.source-view-toggle button.active {
+    background: #ffffff;
+    border-color: #c2d0dc;
+    color: #1f4e8c;
+}
+
 .source-monaco {
     flex: 1 1 auto;
     display: block;
@@ -12,4 +60,126 @@
    decoration has to reach it via ::deep. */
 .source-monaco ::deep .selected-source-line {
     background: rgba(38, 112, 214, 0.18);
+}
+
+/* Rendered-markdown pane: readable prose in the same light theme as the rest of the app. */
+.source-markdown {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 20px 28px 40px;
+    background: #ffffff;
+    color: #1f2933;
+    font-size: .92rem;
+    line-height: 1.6;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.source-markdown ::deep h1,
+.source-markdown ::deep h2,
+.source-markdown ::deep h3,
+.source-markdown ::deep h4 {
+    margin: 1.4em 0 .5em;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.source-markdown ::deep h1 {
+    font-size: 1.7rem;
+    padding-bottom: .3em;
+    border-bottom: 1px solid #e4ebf1;
+}
+
+.source-markdown ::deep h2 {
+    font-size: 1.35rem;
+    padding-bottom: .3em;
+    border-bottom: 1px solid #eef2f6;
+}
+
+.source-markdown ::deep h3 {
+    font-size: 1.12rem;
+}
+
+.source-markdown ::deep p {
+    margin: 0 0 1em;
+}
+
+.source-markdown ::deep ul,
+.source-markdown ::deep ol {
+    margin: 0 0 1em;
+    padding-left: 1.6em;
+}
+
+.source-markdown ::deep li {
+    margin: .25em 0;
+}
+
+.source-markdown ::deep a {
+    color: #1f4e8c;
+    text-decoration: none;
+}
+
+.source-markdown ::deep a:hover {
+    text-decoration: underline;
+}
+
+.source-markdown ::deep code {
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: .86em;
+    background: #f3f5f8;
+    border: 1px solid #e4ebf1;
+    border-radius: 4px;
+    padding: .1em .35em;
+}
+
+.source-markdown ::deep pre {
+    margin: 0 0 1em;
+    padding: 12px 14px;
+    background: #f6f8fa;
+    border: 1px solid #e4ebf1;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+.source-markdown ::deep pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: .84rem;
+}
+
+.source-markdown ::deep blockquote {
+    margin: 0 0 1em;
+    padding: .2em 1em;
+    color: #526a82;
+    border-left: 3px solid #c2d0dc;
+}
+
+.source-markdown ::deep table {
+    border-collapse: collapse;
+    margin: 0 0 1em;
+    display: block;
+    overflow-x: auto;
+}
+
+.source-markdown ::deep th,
+.source-markdown ::deep td {
+    border: 1px solid #d7e1ea;
+    padding: 6px 10px;
+    text-align: left;
+}
+
+.source-markdown ::deep th {
+    background: #f6f8fa;
+    font-weight: 700;
+}
+
+.source-markdown ::deep img {
+    max-width: 100%;
+}
+
+.source-markdown ::deep hr {
+    border: none;
+    border-top: 1px solid #e4ebf1;
+    margin: 1.6em 0;
 }

@@ -114,6 +114,43 @@
     resize: both;
 }
 
+/* Symbols | Files sub-tabs at the top of the sidebar. */
+.source-tree-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px 0;
+    border-bottom: 1px solid #e4ebf1;
+}
+
+.source-tree-tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #526a82;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    border-bottom: 2px solid transparent;
+}
+
+.source-tree-tab:hover {
+    background: #eef3f8;
+    color: #1f2933;
+}
+
+.source-tree-tab.active {
+    color: #1f4e8c;
+    border-bottom-color: #2670d6;
+}
+
+.source-tree-empty {
+    padding: 14px 10px;
+    color: #65798d;
+    font-size: .82rem;
+}
+
 /* Tree navigation controls — collapse/expand-all + filter toggle, with the file count. */
 .source-tree-toolbar {
     display: flex;
