@@ -7,12 +7,13 @@ How to operate ClaudeWorkbench. (For how it works inside, see
 2. [The Governed Loop](the-governed-loop.md) — what happens when you prompt, and where you're in control
 3. [Workspaces](workspaces.md) — selecting/switching the watched solution; the runtime folder
 4. [Merge Review](merge-review.md) — accept/reject staged edits (the human gate)
-5. [The Git Panel](git-panel.md) — commit/push accepted changes; prompt-driven gated git
-6. [Conversations](conversations.md) — named, resumable, autosaved conversations (replaced the Tasks board)
-7. [Settings & Usage](settings-and-usage.md) — model/reasoning, auto-approve, usage meters, auth
-8. [Troubleshooting](troubleshooting.md) — common issues and fixes
-9. [Deploying](deploying.md) — the Launcher, publishing a live install, how paths resolve
-10. [Testing](testing.md) — what is covered, grouped by capability, and the known gaps
+5. [The Source Tab](source-tab.md) — browse (Solution + Files), view/render source, Build/Run, add projects
+6. [The Git Panel](git-panel.md) — commit/push accepted changes; prompt-driven gated git
+7. [Conversations](conversations.md) — named, resumable, autosaved conversations (replaced the Tasks board)
+8. [Settings & Usage](settings-and-usage.md) — model/reasoning, auto-approve, usage meters, auth
+9. [Troubleshooting](troubleshooting.md) — common issues and fixes
+10. [Deploying](deploying.md) — the Launcher, publishing a live install, how paths resolve
+11. [Testing](testing.md) — what is covered, grouped by capability, and the known gaps
 
 **The one rule to remember:** the agent proposes and stages; **you** accept; only the
 accept writes real source.

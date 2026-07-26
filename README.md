@@ -4,7 +4,7 @@ A Blazor operator console for **governed, watched-source AI edits**, driven by *
 
 An agent proposes changes to a watched .NET solution. Every change is composed against a local *Working* candidate, staged, and held at a human **accept / reject** gate before it ever touches real source. The engine that enforces this — Roslyn indexing, edit sessions, staging, two compile gates, and an MCP tool surface — runs UI-agnostic behind a Blazor host and a Node sidecar.
 
-**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversations** (autosaved per session, with a Conversations modal to resume/rename/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
+**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversations** (autosaved per session, with a Conversations modal to resume/rename/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), a read-only **Source** browser (Solution + Files trees, an in-app Monaco viewer with markdown rendering, and in-app Build/Run to real output), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
 
 ---
 
@@ -122,6 +122,15 @@ Re-running the script updates an install **without touching `runtime\`** (worksp
 
 Full detail: **[docs/guide/deploying.md](docs/guide/deploying.md)**.
 
+### The Source tab
+
+A read-only browser of the watched solution, with two trees in sidebar sub-tabs:
+
+- **Solution** — projects → files → symbols, built from the in-process index (the code model). Types and members are navigable; click a symbol to jump to its line.
+- **Files** — a plain file browser fed by `git ls-files --cached --others --exclude-standard` in the watched folder: tracked **plus** new-but-not-ignored files (so a just-created file shows up before it's committed), minus `.gitignore`'d junk (`bin/obj`, generated output, `.git`) — no hand-maintained ignore list. It's index-independent, so it works even before the first index build, and surfaces the non-code files the index never had (README, docs, scripts, `.slnx`, decision docs).
+
+Both trees drive one persistent in-app **Monaco** viewer (vendored locally, not an iframe), model-swapped per file. **Markdown** files render as formatted HTML (via the same `MarkdownRenderer` the chat uses) with a **Rendered / Raw** toggle — Raw drops back to Monaco source. The top toolbar adds operator **Build** / **Run** (Debug/Release, with a startup-project picker) that produce real `bin/<config>` output, **Refresh** (re-read source) / **Rebuild Index**, and **Add project** (below). Build/Run are **operator** actions run host-side — they are *not* part of the agent's tool surface. Full detail: **[docs/guide/source-tab.md](docs/guide/source-tab.md)**.
+
 ### Creating projects
 
 Greenfield-to-running without leaving the app: the Launcher's **New blank solution** writes an empty
@@ -189,7 +198,7 @@ workflow rather than the whole product.
 
 ## Roadmap
 
-Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); **greenfield project creation** (Launcher *New blank solution* + Source-tab *Add project*, SDK-template-driven, operator-run, C# only); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
+Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); **greenfield project creation** (Launcher *New blank solution* + Source-tab *Add project*, SDK-template-driven, operator-run, C# only); the **Source** browser (Solution + Files sub-tabs, an in-app Monaco viewer with markdown Rendered/Raw rendering, and in-app Build/Run to real `bin/<config>` output with a startup-project picker); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
 
 Next:
 
