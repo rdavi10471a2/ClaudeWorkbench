@@ -108,6 +108,16 @@ export function attachSourceSplitter(layout, sidebar, detail, splitter) {
     attachColumnSplitter(layout, sidebar, detail, splitter, 260, 460);
 }
 
+// Collapse/expand-all for the source tree. The tree is native <details> elements, so we just set
+// their .open flag directly — no Blazor state to thread. One-shot: stays until the tree re-renders.
+export function setTreeExpanded(container, expanded) {
+    if (!(container instanceof Element)) {
+        return;
+    }
+
+    container.querySelectorAll("details").forEach(node => { node.open = !!expanded; });
+}
+
 // Git tab: changed-files list on the left, diff on the right.
 export function attachGitSplitter(layout, sidebar, detail, splitter) {
     attachColumnSplitter(layout, sidebar, detail, splitter, 280, 380);

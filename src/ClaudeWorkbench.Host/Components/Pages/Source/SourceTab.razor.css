@@ -1,10 +1,44 @@
+/* Shell: a workspace-ops toolbar on top, the sidebar+editor split filling the rest. */
+.source-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: calc(98vh - 190px);
+    min-height: 0;
+}
+
+.source-top-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    background: #f6f8fa;
+    border: 1px solid #d7e1ea;
+    border-radius: 8px;
+}
+
+.source-top-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.source-top-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .source-layout {
     display: grid;
     grid-template-columns: auto 8px minmax(0, 1fr);
     gap: 12px;
     align-items: start;
     justify-content: stretch;
-    height: calc(98vh - 190px);
+    flex: 1 1 auto;
+    height: auto;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
@@ -44,17 +78,36 @@
     resize: both;
 }
 
-.source-toolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+/* Tree navigation controls — collapse/expand-all + filter toggle, with the file count. */
+.source-tree-toolbar {
+    display: flex;
+    align-items: center;
     gap: 6px;
     border-bottom: 1px solid #e4ebf1;
     padding: 8px;
 }
 
+.source-tree-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.source-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 8px 0;
+}
+
+.source-filter-row .rz-textbox {
+    flex: 1 1 auto;
+}
+
 .source-count {
+    margin-left: auto;
     flex: 0 0 auto;
-    padding: 7px 10px;
+    padding: 0 4px;
     color: #526a82;
     font-size: .78rem;
     font-weight: 800;

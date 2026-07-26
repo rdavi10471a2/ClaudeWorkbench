@@ -1,11 +1,11 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<div class="source-layout" @ref="sourceLayout">
-    <aside class="source-sidebar" @ref="sourceSidebar" aria-label="Workspace source files">
-        <div class="source-toolbar">
-            <RadzenTextBox Value="@Filter" Change="@OnFilterChanged" Placeholder="Filter source files" />
-            <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@ApplyFilter" />
+<div class="source-shell">
+    @* Workspace ops up top — index/solution actions that act on the whole workspace. Tree navigation
+       controls live with the tree (below). *@
+    <div class="source-top-toolbar">
+        <div class="source-top-left">
             <RadzenButton Icon="sync"
                           Text="Refresh"
                           ButtonStyle="ButtonStyle.Light"
@@ -17,8 +17,11 @@
                           BusyText="Indexing..."
                           ButtonStyle="ButtonStyle.Light"
                           Size="ButtonSize.Small"
+                          Title="Re-index the whole solution"
                           Click="@RebuildIndex"
                           IsBusy="@IsRebuildingIndex" />
+        </div>
+        <div class="source-top-right">
             <RadzenButton Icon="add"
                           Text="Add project"
                           ButtonStyle="ButtonStyle.Primary"
@@ -26,43 +29,74 @@
                           Title="Scaffold a new C# project into the watched solution"
                           Click="@AddProject" />
         </div>
+    </div>
 
-        <div class="source-count">@Snapshot.Files.Count file@(Snapshot.Files.Count == 1 ? string.Empty : "s") indexed</div>
-
-        <div class="source-tree-list">
-            @foreach (SourceTreeNode node in Snapshot.Tree)
-            {
-                <SourceProjectTreeNode Node="@node"
-                                       SelectedRelativePath="@SelectedPath"
-                                       OnFileSelected="@SelectFile" />
-            }
-        </div>
-    </aside>
-
-    <div class="source-splitter" @ref="sourceSplitter" title="Drag to resize source panes" aria-hidden="true"></div>
-
-    <section class="source-detail" @ref="sourceDetail" aria-label="Selected source file">
-        @if (!string.IsNullOrWhiteSpace(Snapshot.Message))
-        {
-            <div class="inline-error">@Snapshot.Message</div>
-        }
-
-        @if (Snapshot.SelectedFile is null)
-        {
-            <div class="empty-source">Select a source file.</div>
-        }
-        else
-        {
-            <header class="source-detail-header">
-                <div>
-                    <h2>@Snapshot.SelectedFile.RelativePath</h2>
-                    <span>@Snapshot.SelectedFile.Language - @Snapshot.SelectedFile.Size.ToString("n0") bytes</span>
+    <div class="source-layout" @ref="sourceLayout">
+        <aside class="source-sidebar" @ref="sourceSidebar" aria-label="Workspace source files">
+            <div class="source-tree-toolbar">
+                <div class="source-tree-tools">
+                    <RadzenButton Icon="unfold_less"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Size="ButtonSize.Small"
+                                  Title="Collapse all"
+                                  Click="@CollapseAll" />
+                    <RadzenButton Icon="unfold_more"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Size="ButtonSize.Small"
+                                  Title="Expand all"
+                                  Click="@ExpandAll" />
+                    <RadzenButton Icon="search"
+                                  ButtonStyle="@(showFilter ? ButtonStyle.Info : ButtonStyle.Light)"
+                                  Size="ButtonSize.Small"
+                                  Title="Filter source files"
+                                  Click="@ToggleFilter" />
                 </div>
-            </header>
+                <span class="source-count">@Snapshot.Files.Count file@(Snapshot.Files.Count == 1 ? string.Empty : "s")</span>
+            </div>
 
-            <SourceCodeViewer File="@Snapshot.SelectedFile" />
-        }
-    </section>
+            @if (showFilter)
+            {
+                <div class="source-filter-row">
+                    <RadzenTextBox Value="@Filter" Change="@OnFilterChanged" Placeholder="Filter source files" />
+                    <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@ApplyFilter" />
+                </div>
+            }
+
+            <div class="source-tree-list" @ref="treeList">
+                @foreach (SourceTreeNode node in Snapshot.Tree)
+                {
+                    <SourceProjectTreeNode Node="@node"
+                                           SelectedRelativePath="@SelectedPath"
+                                           OnFileSelected="@SelectFile" />
+                }
+            </div>
+        </aside>
+
+        <div class="source-splitter" @ref="sourceSplitter" title="Drag to resize source panes" aria-hidden="true"></div>
+
+        <section class="source-detail" @ref="sourceDetail" aria-label="Selected source file">
+            @if (!string.IsNullOrWhiteSpace(Snapshot.Message))
+            {
+                <div class="inline-error">@Snapshot.Message</div>
+            }
+
+            @if (Snapshot.SelectedFile is null)
+            {
+                <div class="empty-source">Select a source file.</div>
+            }
+            else
+            {
+                <header class="source-detail-header">
+                    <div>
+                        <h2>@Snapshot.SelectedFile.RelativePath</h2>
+                        <span>@Snapshot.SelectedFile.Language - @Snapshot.SelectedFile.Size.ToString("n0") bytes</span>
+                    </div>
+                </header>
+
+                <SourceCodeViewer File="@Snapshot.SelectedFile" />
+            }
+        </section>
+    </div>
 </div>
 
 @code {
@@ -100,11 +134,34 @@
     private ElementReference sourceSidebar;
     private ElementReference sourceDetail;
     private ElementReference sourceSplitter;
+    private ElementReference treeList;
     private IJSObjectReference? resizeModule;
+    private bool showFilter;
 
     private Task OnFilterChanged(string? value)
     {
         return FilterChanged.InvokeAsync(value ?? string.Empty);
+    }
+
+    private void ToggleFilter()
+    {
+        showFilter = !showFilter;
+    }
+
+    private async Task CollapseAll()
+    {
+        if (resizeModule is not null)
+        {
+            await resizeModule.InvokeVoidAsync("setTreeExpanded", treeList, false);
+        }
+    }
+
+    private async Task ExpandAll()
+    {
+        if (resizeModule is not null)
+        {
+            await resizeModule.InvokeVoidAsync("setTreeExpanded", treeList, true);
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
