@@ -34,6 +34,12 @@ public sealed record SourceRunRequest(
     string Configuration,
     string ProjectPath);
 
+// A relative link clicked inside a rendered markdown doc: the doc it came from (relative path) and the
+// raw href. Resolved against the source doc's folder to navigate the viewer to the target file.
+public sealed record DocLinkNavigation(
+    string FromRelativePath,
+    string Href);
+
 public sealed record SourceFileEntry(
     string RelativePath,
     string FullPath,

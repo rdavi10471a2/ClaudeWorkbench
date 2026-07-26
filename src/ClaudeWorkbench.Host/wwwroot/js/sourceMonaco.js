@@ -123,6 +123,46 @@ export function openFile(container, path, text, language, line) {
     }]);
 }
 
+// Intercept clicks on links inside the rendered-markdown pane (Source viewer ONLY — the chat
+// transcript renders elsewhere and never gets this handler, so its links are untouched).
+//
+// Why this exists: a relative in-doc link (e.g. ../architecture/Architecture.md) is same-origin and
+// has no target=_blank, so a normal click NAVIGATES THE APP TAB — which drops the Blazor circuit and
+// looks like a full app crash. We preventDefault EVERY in-pane link except real new-tab links
+// (target=_blank, set by MarkdownRenderer for external/local-file) and pure #fragment anchors, then
+// hand the relative href back to Blazor to open the target file in the viewer. Delegated + idempotent:
+// one listener on the persistent container survives per-file re-renders.
+export function attachDocLinks(container, dotnetRef) {
+    if (!(container instanceof Element) || container.__docLinksAttached) {
+        return;
+    }
+    container.__docLinksAttached = true;
+
+    container.addEventListener('click', (event) => {
+        const anchor = event.target.closest ? event.target.closest('a') : null;
+        if (!anchor || !container.contains(anchor)) {
+            return;
+        }
+
+        // Real new-tab links (external / local-file) already open safely — leave them.
+        if (anchor.target === '_blank') {
+            return;
+        }
+
+        const href = anchor.getAttribute('href') || '';
+        // In-page anchor (#heading): let the browser scroll; it never drops the circuit.
+        if (href === '' || href.startsWith('#')) {
+            return;
+        }
+
+        // Anything else is a relative in-doc link. NEVER let it navigate the tab; route it instead.
+        event.preventDefault();
+        if (dotnetRef) {
+            dotnetRef.invokeMethodAsync('OpenRelativeLink', href);
+        }
+    });
+}
+
 // Force a layout pass — used when the editor becomes visible again after being hidden (e.g. toggling
 // back from a rendered-markdown pane), where it may otherwise have measured itself at 0x0.
 export function relayout(container) {

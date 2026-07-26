@@ -24,7 +24,7 @@
         </div>
     }
 
-    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")">
+    <div class="source-markdown @(ShowRendered ? string.Empty : "hidden")" @ref="markdownContainer">
         @((MarkupString)renderedHtml)
     </div>
 
@@ -35,8 +35,15 @@
     [Parameter]
     public SourceFileDocument? File { get; set; }
 
+    // Raised when a relative link inside a rendered markdown doc is clicked; the parent resolves it
+    // against the current doc and navigates the viewer to the target file.
+    [Parameter]
+    public EventCallback<DocLinkNavigation> OnNavigate { get; set; }
+
     private ElementReference container;
+    private ElementReference markdownContainer;
     private IJSObjectReference? module;
+    private DotNetObjectReference<SourceCodeViewer>? selfRef;
     private bool ready;
 
     // Markdown view state. showRaw is a sticky operator preference across files; ShowRendered gates
@@ -59,8 +66,24 @@
 
         module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
         await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
+        // Intercept relative links in the rendered-markdown pane so they open in the viewer instead of
+        // navigating the tab away (which would drop the Blazor circuit).
+        selfRef = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
         ready = true;
         await OpenAsync();
+    }
+
+    // Called from JS when a relative in-doc link is clicked. File is the doc it came from.
+    [JSInvokable]
+    public Task OpenRelativeLink(string href)
+    {
+        if (File is null || string.IsNullOrWhiteSpace(href))
+        {
+            return Task.CompletedTask;
+        }
+
+        return OnNavigate.InvokeAsync(new DocLinkNavigation(File.RelativePath, href));
     }
 
     // File changes as the operator clicks tree nodes; push the new content/line into the live editor,
@@ -120,6 +143,8 @@
             {
             }
         }
+
+        selfRef?.Dispose();
     }
 
     private static string GetExtension(SourceFileDocument file)

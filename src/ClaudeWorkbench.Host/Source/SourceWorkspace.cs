@@ -181,6 +181,58 @@ public sealed class SourceWorkspace
         Refresh();
     }
 
+    // Follow a relative link clicked inside a rendered markdown doc — a mini in-viewer docs browser.
+    // Resolves the href against the SOURCE doc's folder (so ../architecture/Architecture.md from
+    // docs/guide/x.md lands correctly), confines the result to the watched folder, and selects it if it
+    // exists on disk. Anything off-tree or missing is ignored — the click never navigates the app tab
+    // (that guard is in JS), so a dead link is simply inert, never a crash.
+    public void NavigateRelative(DocLinkNavigation navigation)
+    {
+        if (!workspace.HasWorkspace || string.IsNullOrWhiteSpace(navigation.Href))
+        {
+            return;
+        }
+
+        // Drop any #fragment or ?query, and URL-decode (%20 etc.).
+        string href = navigation.Href;
+        int cut = href.IndexOfAny(['#', '?']);
+        if (cut >= 0)
+        {
+            href = href[..cut];
+        }
+
+        href = Uri.UnescapeDataString(href.Trim());
+        if (href.Length == 0)
+        {
+            return;
+        }
+
+        string root = Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
+        string fromFull = Path.GetFullPath(Path.Combine(root, navigation.FromRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        string baseDirectory = Path.GetDirectoryName(fromFull) ?? root;
+
+        string targetFull;
+        try
+        {
+            targetFull = Path.GetFullPath(Path.Combine(baseDirectory, href.Replace('/', Path.DirectorySeparatorChar)));
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        // Confine to the watched folder and require the target to exist.
+        string relative = Path.GetRelativePath(root, targetFull);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) || !File.Exists(targetFull))
+        {
+            return;
+        }
+
+        selectedPath = NormalizePath(relative);
+        selectedLine = 1;
+        Refresh();
+    }
+
     public async Task RebuildAsync()
     {
         rebuilding = true;
