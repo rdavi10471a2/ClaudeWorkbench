@@ -43,8 +43,10 @@
     private ElementReference container;
     private ElementReference markdownContainer;
     private IJSObjectReference? module;
+    private IJSObjectReference? resizeModule;
     private DotNetObjectReference<SourceCodeViewer>? selfRef;
     private bool ready;
+    private string? decoratedForPath;
 
     // Markdown view state. showRaw is a sticky operator preference across files; ShowRendered gates
     // which pane is visible (rendered markdown vs the Monaco source pane).
@@ -59,19 +61,29 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender)
         {
-            return;
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
+            await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
+            // Intercept relative links in the rendered-markdown pane so they open in the viewer instead
+            // of navigating the tab away (which would drop the Blazor circuit).
+            selfRef = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
+            // Shared markdown decoration (code highlighting + mermaid) — the same functions the chat
+            // transcript uses, so docs render diagrams and colored code exactly like chat.
+            resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+            ready = true;
+            await OpenAsync();
         }
 
-        module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js");
-        await module.InvokeVoidAsync("initEditor", container, Nav.BaseUri);
-        // Intercept relative links in the rendered-markdown pane so they open in the viewer instead of
-        // navigating the tab away (which would drop the Blazor circuit).
-        selfRef = DotNetObjectReference.Create(this);
-        await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
-        ready = true;
-        await OpenAsync();
+        // After the rendered-markdown HTML lands, syntax-highlight its code fences and render its
+        // mermaid diagrams — once per document (the JS guards re-runs, but skip the interop churn).
+        if (ready && ShowRendered && resizeModule is not null && File is not null && decoratedForPath != File.FullPath)
+        {
+            decoratedForPath = File.FullPath;
+            await resizeModule.InvokeVoidAsync("highlightCodeBlocks", markdownContainer);
+            await resizeModule.InvokeVoidAsync("renderMermaidBlocks", markdownContainer);
+        }
     }
 
     // Called from JS when a relative in-doc link is clicked. File is the doc it came from.
@@ -138,6 +150,17 @@
             {
                 await module.InvokeVoidAsync("dispose", container);
                 await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        if (resizeModule is not null)
+        {
+            try
+            {
+                await resizeModule.DisposeAsync();
             }
             catch (JSDisconnectedException)
             {

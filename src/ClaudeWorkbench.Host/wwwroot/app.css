@@ -110,3 +110,75 @@ h1:focus {
 .activity-row { display: flex; gap: 12px; padding: 4px 8px; border-bottom: 1px solid #e6edf3; }
 .activity-type { color: #7286a0; min-width: 150px; }
 .activity-detail { color: #1b2836; word-break: break-word; }
+
+/* Rendered markdown — SHARED by the chat transcript (.message-body) and the Source viewer
+   (.source-markdown). Both inject MarkdownRenderer HTML and decorate it with the same
+   highlightCodeBlocks + renderMermaidBlocks (sourceResize.js), so the code-block, syntax-token,
+   and mermaid styling live here once instead of being re-declared per component. */
+
+/* Inline code — a light pill. Block code (pre code) overrides this below. */
+.message-body code,
+.source-markdown code {
+    font-family: Consolas, "Courier New", monospace;
+    border-radius: 4px;
+    padding: 1px 4px;
+    background: #eef3f7;
+}
+
+/* Code blocks — dark surface (a dark block on a light page, GitHub-style). */
+.message-body pre,
+.source-markdown pre {
+    overflow: auto;
+    border-radius: 8px;
+    padding: 10px;
+    background: #0f1722;
+    color: #d9e6f2;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: Consolas, "Courier New", monospace;
+}
+
+.message-body pre code,
+.source-markdown pre code {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+}
+
+/* Lightweight syntax-highlight token colors (dark palette; see highlightCodeBlocks). */
+.message-body pre code .hl-kw,  .source-markdown pre code .hl-kw  { color: #7cc7ff; }
+.message-body pre code .hl-str, .source-markdown pre code .hl-str { color: #b5e8a0; }
+.message-body pre code .hl-com, .source-markdown pre code .hl-com { color: #7d8ca0; font-style: italic; }
+.message-body pre code .hl-num, .source-markdown pre code .hl-num { color: #f0b072; }
+
+/* Rendered ```mermaid diagrams (renderMermaidBlocks replaces <pre class="mermaid"> with this div).
+   Mermaid's theme is light, so give it its own light surface rather than the dark code background. */
+.message-body .mermaid-rendered,
+.source-markdown .mermaid-rendered {
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: #fbfdff;
+    border: 1px solid #e2e8f0;
+}
+
+.message-body .mermaid-rendered svg,
+.source-markdown .mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Shown when the mermaid bundle failed to load or the diagram source is malformed. */
+.message-body .mermaid-error,
+.source-markdown .mermaid-error {
+    margin: 8px 0 2px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #fff4f4;
+    border: 1px solid #f0c4c4;
+    color: #a12d2d;
+    font-size: 0.85em;
+}
