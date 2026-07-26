@@ -75,7 +75,16 @@ export async function initEditor(container, baseUrl) {
         wordWrap: 'off',
         fontFamily: 'Cascadia Code, Consolas, monospace',
         fontSize: 13,
-        renderWhitespace: 'selection'
+        renderWhitespace: 'selection',
+        // Kill the 1px overview-ruler edge line + scrollbar shadow that otherwise double up on the
+        // container's own border and read as an overlapping outline on the right edge.
+        overviewRulerBorder: false,
+        hideCursorInOverviewRuler: true,
+        scrollbar: {
+            verticalScrollbarSize: 12,
+            horizontalScrollbarSize: 12,
+            useShadows: false
+        }
     });
     container.__monacoDecorations = [];
 }
