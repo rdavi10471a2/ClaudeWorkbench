@@ -78,9 +78,13 @@ dotnet test  ClaudeWorkbench.slnx
 - **Everything runs under `dotnet test`** — no console runners, no flags to remember. Suite-by-suite detail: **[docs/guide/testing.md](docs/guide/testing.md)**.
 - **A build-time dead-code gate** (`EnforceCodeStyleInBuild` + `.editorconfig`) reports unused members/params as warnings.
 
-### Browser-visible end-to-end tests
+### Browser-visible end-to-end tests — a tested, verified capability kept on the shelf
 
-`tests/e2e` drives the **real Blazor UI** through Playwright — a scripted agent-loop that types a prompt, submits, watches tool calls stream in, and accepts in Merge Review, optionally recording video/trace. It is self-gating (skips cleanly when no Host or browsers are present), so it never breaks the main suite. See **[tests/e2e/ClaudeWorkbench.E2E.Tests/README.md](tests/e2e/ClaudeWorkbench.E2E.Tests/README.md)**.
+`tests/e2e` drives the **real Blazor UI** through Playwright — a scripted agent-loop that types a prompt, submits, watches tool calls stream in, and accepts in Merge Review, optionally recording video/trace. See **[tests/e2e/ClaudeWorkbench.E2E.Tests/README.md](tests/e2e/ClaudeWorkbench.E2E.Tests/README.md)**.
+
+This is a **proven, verified capability — deliberately not part of the default build/test.** It is *not* referenced by `ClaudeWorkbench.slnx`, so `dotnet build/test ClaudeWorkbench.slnx` doesn't touch it. Driving a **real** agent against the live UI costs real tokens and wall-clock, can't be fully deterministic, and the Host is single-operator (a run can even contend with your own use), so it is **too expensive to run in general**. The value is having *proven agent-in-the-middle E2E works* and keeping it ready — not running it every change.
+
+It stays in the repo and is **one line from live**: `dotnet sln add tests/e2e/ClaudeWorkbench.E2E.Tests` folds it back into the solution, or build/run it standalone with `dotnet test tests/e2e/ClaudeWorkbench.E2E.Tests` (it has no project references — it drives the app through the browser, so it builds on its own). The tests are self-gating anyway (`[SkippableFact]` + an opt-in `LiveEnabled` switch): even when present they skip cleanly unless a Host is up and you opt in, so they never redden the main suite. The one maintenance cost of shelving it: `data-testid` selectors can drift on a UI refactor without anything flagging it — but a re-add then fails **loud and obvious** ("selector not found"), never silently wrong.
 
 Requirements beyond `dotnet test`: a **one-time `playwright install`** for the browser binaries (Chromium etc., in `%LOCALAPPDATA%\ms-playwright`), a running Host, and — for the live driver — a Claude sign-in. Only a **minimal set of `data-testid` hooks** exists today (the composer → transcript → merge-review path); broader UI coverage (Source viewer, Git panel, Settings, the questions dialog, …) will need more hooks added per scenario. The **Conversations** modal is instrumented (`open-conversations`, `threads-tab`, `thread-row`, resume/rename/delete hooks) and covered by a smoke test plus the live driver.
 
