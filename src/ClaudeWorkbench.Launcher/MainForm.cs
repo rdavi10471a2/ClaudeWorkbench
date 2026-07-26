@@ -68,6 +68,7 @@ public sealed class MainForm : Form
             Padding = new Padding(6),
         };
         toolbar.Controls.Add(Button("Add workspace", (_, _) => OnAdd()));
+        toolbar.Controls.Add(Button("New blank solution", (_, _) => OnNewBlankSolution()));
         toolbar.Controls.Add(Button("Start", (_, _) => StartSelected()));
         toolbar.Controls.Add(Button("Stop", (_, _) => StopSelected()));
         toolbar.Controls.Add(Button("Remove", (_, _) => OnRemove()));
@@ -292,6 +293,69 @@ public sealed class MainForm : Form
         state.Workspaces.Add(entry);
         state.Save();
         RebuildRows();
+    }
+
+    // Greenfield bootstrap: write an empty .slnx into a chosen folder (solution name = folder name),
+    // register it as a workspace, and let the operator Start it. Projects are then added from the
+    // Blazor Source tab. The Launcher stays dumb — it only creates the blank solution file.
+    private void OnNewBlankSolution()
+    {
+        using FolderBrowserDialog dialog = new()
+        {
+            Description = "Pick (or create) an empty folder for the new solution",
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = true,
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        string folder = dialog.SelectedPath;
+        string name = new DirectoryInfo(folder).Name;
+        string slnxPath = Path.Combine(folder, name + ".slnx");
+
+        if (File.Exists(slnxPath))
+        {
+            MessageBox.Show(
+                this,
+                "A solution already exists here:\r\n" + slnxPath + "\r\n\r\nUse \"Add workspace\" to watch it instead.",
+                "New blank solution",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(slnxPath, "<Solution>\r\n</Solution>\r\n");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                "Couldn't create the solution:\r\n" + ex.Message,
+                "New blank solution",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
+        WorkspaceEntry entry = new()
+        {
+            SolutionPath = slnxPath,
+            Name = name,
+        };
+        state.Workspaces.Add(entry);
+        state.Save();
+        RebuildRows();
+
+        MessageBox.Show(
+            this,
+            "Created a blank solution:\r\n" + slnxPath + "\r\n\r\nSelect it and click Start to launch it — then add projects from the Source tab.",
+            "New blank solution",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 
     private void OnRemove()

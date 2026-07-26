@@ -91,6 +91,9 @@ internal static class Program
         builder.Services.AddScoped<IApprovalQueue>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddSingleton<IReviewWorkflow, EngineReviewWorkflow>();
         builder.Services.AddSingleton<Source.SourceWorkspace>();
+        // Operator-driven "Add project" scaffolding for the Source tab. Runs the .NET SDK
+        // (dotnet new / sln add / restore) out-of-process; not part of the agent surface.
+        builder.Services.AddSingleton<AIMonitor.Workflow.ProjectScaffoldService>();
 
         // Operator-driven git backing for the watched solution (host-side; the agent
         // never runs git). GitService is a stateless CLI wrapper; GitWorkspaceService

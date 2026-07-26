@@ -19,6 +19,12 @@
                           Size="ButtonSize.Small"
                           Click="@RebuildIndex"
                           IsBusy="@IsRebuildingIndex" />
+            <RadzenButton Icon="add"
+                          Text="Add project"
+                          ButtonStyle="ButtonStyle.Primary"
+                          Size="ButtonSize.Small"
+                          Title="Scaffold a new C# project into the watched solution"
+                          Click="@AddProject" />
         </div>
 
         <div class="source-count">@Snapshot.Files.Count file@(Snapshot.Files.Count == 1 ? string.Empty : "s") indexed</div>
@@ -80,6 +86,9 @@
 
     [Parameter]
     public EventCallback RebuildIndex { get; set; }
+
+    [Parameter]
+    public EventCallback AddProject { get; set; }
 
     [Parameter]
     public EventCallback Reload { get; set; }

@@ -1,4 +1,6 @@
+using ClaudeWorkbench.Host.Components.Dialogs;
 using Microsoft.AspNetCore.Components;
+using Radzen;
 
 namespace ClaudeWorkbench.Host.Components.Pages.Source;
 
@@ -10,10 +12,36 @@ public partial class SourcePanel : IDisposable
     [Inject]
     private ClaudeWorkbench.Host.Source.SourceWorkspace Workspace { get; set; } = default!;
 
+    [Inject]
+    private DialogService Dialogs { get; set; } = default!;
+
+    [Inject]
+    private NotificationService Notifications { get; set; } = default!;
+
     protected override void OnInitialized()
     {
         Workspace.Changed += OnChanged;
         Workspace.EnsureLoaded();
+    }
+
+    // Open the Add-project popup. On success the dialog has already scaffolded + reindexed (which fires
+    // WorkspaceManager.Changed -> SourceWorkspace refresh, so the tree updates itself); we just toast.
+    private async Task OpenAddProjectAsync()
+    {
+        object? result = await Dialogs.OpenAsync<NewProjectDialog>(
+            "Add a project",
+            options: new DialogOptions { Width = "560px", Resizable = false, Draggable = false });
+
+        if (result is NewProjectDialog.Created created)
+        {
+            Notifications.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Project added",
+                Detail = created.Message,
+                Duration = 5000,
+            });
+        }
     }
 
     private void OnChanged()

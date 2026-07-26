@@ -111,12 +111,24 @@ Re-running the script updates an install **without touching `runtime\`** (worksp
 
 `ClaudeWorkbench.Launcher` is a small WinForms control panel — the normal way to start the app. It runs **several watched solutions side by side, one window per solution, each fully isolated** (its own port, runtime, and index).
 
-- **Workspaces** — **Add workspace** (pick a `.sln`/`.slnx`; it gets a free port and an isolated runtime), **Start** (launches that workspace's host + sidecar and opens a browser window), **Stop**, **Remove**, and **Settings** (host exe path, sidecar folder, runtime folder, browser choice).
+- **Workspaces** — **Add workspace** (pick a `.sln`/`.slnx`; it gets a free port and an isolated runtime), **New blank solution** (pick/create an empty folder → writes an empty `.slnx` named after it and registers it, so you can start greenfield from nothing and fill it from the Source tab), **Start** (launches that workspace's host + sidecar and opens a browser window), **Stop**, **Remove**, and **Settings** (host exe path, sidecar folder, runtime folder, browser choice).
 - **Sign in (Claude / GitHub)** — buttons that open a terminal on each CLI's own login flow (Sign in / Check status / Sign out). Sign-in is **machine-wide, not per-workspace**: Claude caches under `~/.claude` (the sidecar inherits it) and `gh` under the user profile (the Git panel uses it), so it's once per machine until the credential expires. Force a fresh login by signing out first.
 - **Lifecycle — kill one, kill all.** Closing the browser window stops that instance's backend on its own; **Stop** (or closing the Launcher) terminates that instance's host + sidecar + browser together; and a Launcher crash can't orphan a backend, because every instance is held in a **Windows Job Object** that dies with the Launcher.
 - **Isolation & placement.** Each instance provisions into `<workbench>\runtime\<workspace>` — its index, config, and `host.log` live there; the folder is claimed on first Start and kept, so renaming a workspace never strands its index. The Launcher exe can live anywhere (shortcut, Release build, publish folder); it finds the workbench from the host exe in Settings, so instances land next to the code they watch. Browser choice: Chrome/Edge open a clean `--app` window that closes as a unit; a custom Chromium path is supported; the default browser just opens a tab.
 
 Full detail: **[docs/guide/deploying.md](docs/guide/deploying.md)**.
+
+### Creating projects
+
+Greenfield-to-running without leaving the app: the Launcher's **New blank solution** writes an empty
+`.slnx` you can Start, and the **Source** tab's **Add project** popup fills it. Add-project enumerates
+the installed SDK's templates (`dotnet new list`) and target frameworks (`dotnet --list-sdks`) at open
+time — so the dropdowns show exactly what this machine can create — then scaffolds with `dotnet new`,
+registers the project in the `.slnx` (`dotnet sln add`), restores, and reindexes. **C# only**, and new
+projects must live inside the solution folder (containment). This is an **operator** action run
+host-side out-of-process — it is *not* part of the agent's tool surface; the agent never runs the SDK.
+Because it shells the SDK, a template that needs a framework/workload you don't have will fail with the
+SDK's own message — install it and retry.
 
 ## Repository layout
 
@@ -167,7 +179,7 @@ workflow rather than the whole product.
 
 ## Roadmap
 
-Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
+Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); **greenfield project creation** (Launcher *New blank solution* + Source-tab *Add project*, SDK-template-driven, operator-run, C# only); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
 
 Next:
 

@@ -1,0 +1,109 @@
+@using Microsoft.AspNetCore.Components.Web
+@using AIMonitor.Workflow
+@inject DialogService DialogService
+@inject ProjectScaffoldService Scaffolder
+@inject AIMonitor.McpServer.WorkspaceManager Workspace
+
+@* Add a new C# project to the watched solution. Templates and target frameworks are enumerated from
+   the installed .NET SDK at open time (not hard-coded), so the operator sees exactly what this machine
+   can create. On Create we run `dotnet new` + `dotnet sln add` + restore, then reindex — all host-side.
+   Returns a Created result on success (dialog closes), or stays open showing inline diagnostics. *@
+<div class="new-project-dialog" data-testid="new-project-dialog">
+    @if (loading)
+    {
+        <div class="new-project-loading">
+            <RadzenIcon Icon="hourglass_empty" />
+            <span>Reading installed project templates…</span>
+        </div>
+    }
+    else
+    {
+        <div class="new-project-grid">
+            <label class="new-project-label" for="new-project-kind">
+                <RadzenIcon Icon="category" /> Project type
+            </label>
+            <select id="new-project-kind" class="new-project-select" @bind="kind" data-testid="new-project-kind">
+                @foreach (ProjectScaffoldService.ProjectKind option in kinds)
+                {
+                    <option value="@option.ShortName">@option.DisplayName (@option.ShortName)</option>
+                }
+            </select>
+
+            <label class="new-project-label" for="new-project-name">
+                <RadzenIcon Icon="badge" /> Project name
+            </label>
+            <input id="new-project-name"
+                   class="new-project-input"
+                   @bind="projectName" @bind:event="oninput"
+                   @onkeydown="OnKeyDown"
+                   placeholder="e.g. Calculator.Core"
+                   autofocus
+                   data-testid="new-project-name" />
+
+            <label class="new-project-label" for="new-project-tfm">
+                <RadzenIcon Icon="dns" /> Target framework
+            </label>
+            <select id="new-project-tfm" class="new-project-select" @bind="framework" data-testid="new-project-tfm">
+                @foreach (string option in frameworks)
+                {
+                    <option value="@option">@option</option>
+                }
+            </select>
+
+            <label class="new-project-label" for="new-project-subfolder">
+                <RadzenIcon Icon="folder" /> Subfolder <span class="new-project-optional">(optional)</span>
+            </label>
+            <input id="new-project-subfolder"
+                   class="new-project-input"
+                   @bind="subfolder" @bind:event="oninput"
+                   @onkeydown="OnKeyDown"
+                   placeholder="e.g. src"
+                   data-testid="new-project-subfolder" />
+        </div>
+
+        <p class="new-project-path">
+            <RadzenIcon Icon="subdirectory_arrow_right" />
+            <code>@PreviewPath</code>
+        </p>
+
+        @if (!string.IsNullOrEmpty(validationError))
+        {
+            <div class="new-project-validation">@validationError</div>
+        }
+
+        @if (errorMessage is not null)
+        {
+            <div class="new-project-error">
+                <div class="new-project-error-title"><RadzenIcon Icon="error_outline" /> @errorMessage</div>
+                @if (diagnostics.Count > 0)
+                {
+                    <ul class="new-project-diagnostics">
+                        @foreach (string line in diagnostics)
+                        {
+                            <li>@line</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        <div class="new-project-actions">
+            <RadzenButton Text="@(busy ? "Creating…" : "Create project")"
+                          Icon="add"
+                          ButtonStyle="ButtonStyle.Primary"
+                          Size="ButtonSize.Small"
+                          Disabled="@(busy || !CanCreate)"
+                          Click="@CreateAsync"
+                          data-testid="new-project-create" />
+            <RadzenButton Text="Cancel"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Disabled="@busy"
+                          Click="@(() => DialogService.Close(null))" />
+            @if (busy)
+            {
+                <span class="new-project-busy"><RadzenIcon Icon="autorenew" /> running the .NET SDK — this can take a moment</span>
+            }
+        </div>
+    }
+</div>

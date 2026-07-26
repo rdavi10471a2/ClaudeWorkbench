@@ -1,0 +1,126 @@
+.new-project-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 4px 2px;
+}
+
+.new-project-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 18px 6px;
+    font-size: 0.9rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+/* Label / control pairs on a two-column grid so the fields line up cleanly. */
+.new-project-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, max-content) 1fr;
+    align-items: center;
+    gap: 10px 12px;
+}
+
+.new-project-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.new-project-label .rz-icon,
+.new-project-label .rzi {
+    font-size: 1rem;
+}
+
+.new-project-optional {
+    font-weight: 400;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.new-project-input,
+.new-project-select {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #333);
+    font: inherit;
+}
+
+.new-project-select {
+    cursor: pointer;
+}
+
+.new-project-path {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--rz-text-secondary-color, #52606d);
+    word-break: break-all;
+}
+
+.new-project-path code {
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-size: 0.78rem;
+}
+
+.new-project-validation {
+    font-size: 0.83rem;
+    color: var(--rz-warning-dark, #b26a00);
+}
+
+.new-project-error {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--rz-danger, #d1242f);
+    border-radius: 6px;
+    background: var(--rz-danger-lighter, rgba(209, 36, 47, 0.08));
+}
+
+.new-project-error-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.new-project-diagnostics {
+    margin: 0;
+    padding-left: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-size: 0.76rem;
+    color: var(--rz-text-secondary-color, #52606d);
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.new-project-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.new-project-busy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+    font-size: 0.8rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
