@@ -31,6 +31,7 @@ public sealed class SourceWorkspace
     private void OnWorkspaceChanged()
     {
         loaded = false;
+        ClearHistory();
         Refresh();
         _ = ReloadTrackedFilesAsync();
     }
@@ -50,6 +51,11 @@ public sealed class SourceWorkspace
     // git-tracked set (plus new-but-not-ignored files) under the watched folder, loaded once and cached
     // so clicking a file doesn't re-shell git. Symbols tree stays index-backed; only this list is git-fed.
     private IReadOnlyList<SourceFileEntry> trackedFiles = [];
+
+    // Browser-style back/forward history — FILE-granular: one entry per distinct file viewed. Intra-file
+    // symbol/line jumps (same path) don't add entries, so Back returns to the previous FILE.
+    private readonly List<(string Path, int Line)> history = [];
+    private int historyIndex = -1;
 
     public event Action? Changed;
 
@@ -178,7 +184,69 @@ public sealed class SourceWorkspace
     {
         selectedPath = selection.RelativePath;
         selectedLine = selection.Line;
+        PushHistory(selection.RelativePath, selection.Line);
         Refresh();
+    }
+
+    public bool CanGoBack => historyIndex > 0;
+
+    public bool CanGoForward => historyIndex >= 0 && historyIndex < history.Count - 1;
+
+    // Step to the previous / next FILE in the view history without recording a new entry.
+    public void Back()
+    {
+        if (CanGoBack)
+        {
+            GoTo(historyIndex - 1);
+        }
+    }
+
+    public void Forward()
+    {
+        if (CanGoForward)
+        {
+            GoTo(historyIndex + 1);
+        }
+    }
+
+    private void GoTo(int index)
+    {
+        historyIndex = index;
+        (string path, int line) = history[index];
+        selectedPath = path;
+        selectedLine = line;
+        Refresh();
+    }
+
+    // Record a file view. File-granular: viewing the same file again (e.g. an intra-file symbol jump)
+    // does NOT add an entry, so Back/Forward move between files. A new file truncates any forward stack.
+    private void PushHistory(string? relativePath, int line)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return;
+        }
+
+        string path = NormalizePath(relativePath);
+        if (historyIndex >= 0 && historyIndex < history.Count
+            && history[historyIndex].Path.Equals(path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (historyIndex < history.Count - 1)
+        {
+            history.RemoveRange(historyIndex + 1, history.Count - 1 - historyIndex);
+        }
+
+        history.Add((path, line));
+        historyIndex = history.Count - 1;
+    }
+
+    private void ClearHistory()
+    {
+        history.Clear();
+        historyIndex = -1;
     }
 
     // Follow a relative link clicked inside a rendered markdown doc — a mini in-viewer docs browser.
@@ -225,6 +293,7 @@ public sealed class SourceWorkspace
 
             selectedPath = NormalizePath(relative);
             selectedLine = 1;
+            PushHistory(selectedPath, 1);
             Refresh();
         }
         catch (Exception)
@@ -252,6 +321,7 @@ public sealed class SourceWorkspace
             rebuilding = false;
             selectedPath = null;
             selectedLine = null;
+            ClearHistory();
             loaded = true;
             Refresh();
             _ = ReloadTrackedFilesAsync();
