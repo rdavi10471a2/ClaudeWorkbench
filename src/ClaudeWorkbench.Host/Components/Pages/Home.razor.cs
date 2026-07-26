@@ -4,7 +4,6 @@ using ClaudeWorkbench.Host.Components.Pages.Tabs;
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Console.Models;
 using ClaudeWorkbench.Host.Services;
-using ClaudeWorkbench.Host.Threads;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using Radzen;
@@ -30,23 +29,6 @@ public partial class Home : IDisposable
 
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
-
-    [Inject]
-    private ThreadService Threads { get; set; } = default!;
-
-    [Inject]
-    private SidecarEventStream Events { get; set; } = default!;
-
-    [Inject]
-    private NotificationService Notifications { get; set; } = default!;
-
-    // The current conversation's saved-thread name (null = not saved yet). Shown as a clickable chip
-    // on the top bar's RHS that opens the Conversations modal. Cached; refreshed only when the live
-    // session id changes (no per-render DB hit).
-    private string? currentThreadName;
-    private string? lastThreadSessionId;
-
-    private string ThreadChipLabel => currentThreadName is null ? "Unsaved" : currentThreadName;
 
     // Browser tab title: solution name first so it's readable in a narrow tab and each
     // launcher window is distinguishable.
@@ -86,52 +68,6 @@ public partial class Home : IDisposable
         Session.Changed += OnChanged;
         Workspace.Changed += OnChanged;
         IndexStatus.Changed += OnChanged;
-        Threads.ThreadCreated += OnThreadCreated;
-        RefreshThreadName();
-    }
-
-    // A new conversation was autosaved as a thread — toast its name and reflect it in the top bar.
-    private void OnThreadCreated(ThreadRecord thread) => InvokeAsync(() =>
-    {
-        currentThreadName = thread.Name;
-        lastThreadSessionId = thread.SessionId;
-        Notifications.Notify(new NotificationMessage
-        {
-            Severity = NotificationSeverity.Info,
-            Summary = "Thread saved",
-            Detail = $"Saving thread as “{thread.Name}”",
-            Duration = 4000,
-        });
-        StateHasChanged();
-    });
-
-    // Refresh the top-bar thread name, but only when the live session actually changed — not on every
-    // streamed chunk (which also raises Changed).
-    private void RefreshThreadName()
-    {
-        string? sessionId = Events.CurrentSessionId;
-        if (string.Equals(sessionId, lastThreadSessionId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        lastThreadSessionId = sessionId;
-        currentThreadName = string.IsNullOrEmpty(sessionId) ? null : Threads.ActiveThread()?.Name;
-    }
-
-    // Open the Conversations board (the thread list) as a modal from the top-bar chip.
-    private async Task OpenConversationsAsync()
-    {
-        await Dialogs.OpenAsync<ThreadsTab>(
-            "Conversations",
-            null,
-            new DialogOptions
-            {
-                Width = "90vw",
-                Height = "82vh",
-                Resizable = true,
-                Draggable = false,
-            });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -158,7 +94,6 @@ public partial class Home : IDisposable
     {
         InvokeAsync(async () =>
         {
-            RefreshThreadName();
             StateHasChanged();
             await MaybeOpenReviewAsync();
         });
@@ -236,6 +171,5 @@ public partial class Home : IDisposable
         Session.Changed -= OnChanged;
         Workspace.Changed -= OnChanged;
         IndexStatus.Changed -= OnChanged;
-        Threads.ThreadCreated -= OnThreadCreated;
     }
 }

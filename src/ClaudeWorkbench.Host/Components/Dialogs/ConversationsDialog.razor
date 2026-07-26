@@ -1,4 +1,4 @@
-@using ClaudeWorkbench.Host.Threads
+@using ClaudeWorkbench.Host.Conversations
 
 <div class="threads-tab" data-testid="threads-tab">
     <div class="threads-toolbar">
@@ -35,10 +35,10 @@
                         <div class="thread-group-hint">The live session's thread appears here.</div>
                     }
 
-                    @foreach (ThreadRecord thread in ColumnThreads(key))
+                    @foreach (ConversationRecord thread in ColumnThreads(key))
                     {
                         <button type="button"
-                                class="thread-chip @(IsSelected(thread) ? "selected" : string.Empty)"
+                                class="thread-chip @(IsActive(thread) ? "active" : string.Empty) @(IsSelected(thread) ? "selected" : string.Empty)"
                                 data-testid="thread-row"
                                 @onclick="@(() => Select(thread))">
                             <span class="thread-chip-name" data-testid="thread-name">@thread.Name</span>
@@ -65,20 +65,24 @@
             }
             else
             {
-                ThreadRecord thread = SelectedThread;
+                ConversationRecord thread = SelectedThread;
                 bool active = IsActive(thread);
                 <div class="thread-details-head">
-                    <span class="thread-status @(active ? "active" : thread.Status)">@(active ? "Active" : char.ToUpperInvariant(thread.Status[0]) + thread.Status[1..])</span>
+                    <span class="thread-status @(active ? "active" : thread.Status)">@(active ? "Current" : "Archived")</span>
                 </div>
 
+                @* oninput (not the default onchange/blur): the board reloads on every sidecar event —
+                   for the live Active thread that's frequent — and an onchange field would repaint to
+                   its last-committed value mid-typing, eating keystrokes. oninput commits each keystroke
+                   so re-renders keep what you typed. *@
                 <label class="thread-field-label">Name</label>
-                <input class="thread-detail-input" @bind="editName" data-testid="thread-detail-name" />
+                <input class="thread-detail-input" @bind="editName" @bind:event="oninput" data-testid="thread-detail-name" />
 
                 <label class="thread-field-label">Description</label>
-                <input class="thread-detail-input" @bind="editDescription" placeholder="What this thread is about" />
+                <input class="thread-detail-input" @bind="editDescription" @bind:event="oninput" placeholder="What this thread is about" />
 
                 <label class="thread-field-label">Note</label>
-                <textarea class="thread-note-input" @bind="editNote" rows="4" placeholder="Freeform notes"></textarea>
+                <textarea class="thread-note-input" @bind="editNote" @bind:event="oninput" rows="4" placeholder="Freeform notes"></textarea>
 
                 <div class="thread-details-actions">
                     <RadzenButton Icon="save" Text="Save" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
@@ -89,18 +93,6 @@
                                       Disabled="@(busy || active || TurnActive)" Click="@(() => ResumeAsync(thread))"
                                       Title="@(active ? "This is the live thread." : TurnActive ? "Finish the current turn first." : "Reopen and continue this conversation.")"
                                       data-testid="thread-resume" />
-                    }
-                    @if (thread.Status == ThreadStatus.Abandoned)
-                    {
-                        <RadzenButton Icon="unarchive" Text="Restore" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                      Disabled="@busy" Click="@(() => SetStatus(thread, ThreadStatus.Archived))"
-                                      Title="Restore to Archived" data-testid="thread-restore" />
-                    }
-                    else
-                    {
-                        <RadzenButton Icon="block" Text="Abandon" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                      Disabled="@busy" Click="@(() => SetStatus(thread, ThreadStatus.Abandoned))"
-                                      Title="Mark abandoned (discarded, kept until deleted)" data-testid="thread-abandon" />
                     }
                     <RadzenButton Icon="delete" Text="Delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
                                   Disabled="@busy" Click="@(() => DeleteAsync(thread))"
@@ -114,6 +106,7 @@
                     {
                         <div><span>Session</span> <code>@thread.SessionId</code></div>
                     }
+                    <div><span>Transcript</span> <code>@(string.IsNullOrWhiteSpace(thread.TranscriptFile) ? "— (saved on first turn)" : thread.TranscriptFile)</code></div>
                     <div><span>Folder</span> <code>@thread.Cwd</code></div>
                     <div><span>Accepted edits</span> @thread.AcceptedEditRefs.Count</div>
                 </div>

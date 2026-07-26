@@ -4,7 +4,7 @@ A Blazor operator console for **governed, watched-source AI edits**, driven by *
 
 An agent proposes changes to a watched .NET solution. Every change is composed against a local *Working* candidate, staged, and held at a human **accept / reject** gate before it ever touches real source. The engine that enforces this — Roslyn indexing, edit sessions, staging, two compile gates, and an MCP tool surface — runs UI-agnostic behind a Blazor host and a Node sidecar.
 
-**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversation threads** (autosaved per session, with a Conversations modal to resume/rename/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
+**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversations** (autosaved per session, with a Conversations modal to resume/rename/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
 
 ---
 
@@ -15,6 +15,7 @@ choose workspace → index → refresh_file / new_file → governed edit
    → stage session → operator review → accept / reject → post-accept reindex
 ```
 
+- **You work in conversations.** The working unit is a named, resumable **conversation** with Claude — it autosaves, you name/reopen/delete it from the Conversations list, and it records the exact edits it produced. (It replaced the old Tasks board; see [docs/guide/conversations.md](docs/guide/conversations.md).)
 - **Reason in the cloud, edit locally.** The model reasons from compact context; watched-source changes are composed against explicit local Working candidates and promoted only through review.
 - **The gate is code, not a prompt.** Mutations (file writes, staged-review accept) are intercepted by the sidecar's `canUseTool` / `PreToolUse` hook, surfaced to the Blazor UI, and applied only on operator approval.
 - **Review is an in-app diff/merge.** The staged candidate vs. current watched source is rendered by [DiffPlex](https://github.com/mmanela/diffplex) in a resizable **Merge Review** dialog; the operator accepts or rejects there, and Accept is the only path that writes watched source. No external diff tool is involved.
@@ -166,12 +167,9 @@ workflow rather than the whole product.
 
 ## Roadmap
 
-Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); session continuity + New Thread; `AskUserQuestion` operator dialog; per-thread auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
-
-In progress: the conversation-**threads** rewrite (named, resumable, deletable threads that replace the retired Tasks board) — see [docs/plans/task-to-thread-rewrite.md](docs/plans/task-to-thread-rewrite.md).
+Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
 
 Next:
 
-- [ ] **Thread ↔ task workflow** — on New Thread, offer save-as-task / keep-as-discussion / discard; link threads to a task.
 - [ ] **Injected skill-cards** — bring guidance in as SDK skill-cards (today it is MCP-served via `get_staging_guide` + the role card).
 - [ ] **Governed reversible delete** — there is no delete tool by design; a governed, reversible one is the leading candidate feature.

@@ -1,8 +1,39 @@
 .new-thread-dialog {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 14px;
     padding: 4px 2px;
+}
+
+/* Each question (leaving / new) is a tight group; the dialog gap spaces the groups apart. */
+.new-thread-leaving-group,
+.new-thread-new-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* The leaving group is the point the operator kept missing — give it a card so it reads as the
+   primary, consequential action (name it or it's gone). */
+.new-thread-leaving-group {
+    padding: 10px 12px;
+    border: 1px solid var(--rz-warning, #b26a00);
+    border-radius: 6px;
+    background: var(--rz-warning-lighter, rgba(178, 106, 0, 0.08));
+}
+
+.new-thread-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.new-thread-label .rz-icon,
+.new-thread-label .rzi {
+    font-size: 1rem;
 }
 
 .new-thread-hint {
@@ -11,9 +42,31 @@
     color: var(--rz-text-secondary-color, #52606d);
 }
 
+.new-thread-warn {
+    color: var(--rz-text-color, #3a2a00);
+}
+
 .new-thread-hint code {
     font-family: var(--rz-font-family-monospace, monospace);
     font-size: 0.78rem;
+}
+
+.new-thread-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+    cursor: pointer;
+    user-select: none;
+}
+
+.new-thread-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--rz-primary, #0969da);
+    cursor: pointer;
 }
 
 .new-thread-input {
@@ -24,6 +77,12 @@
     background: var(--rz-base-background-color, #fff);
     color: var(--rz-text-color, #333);
     font: inherit;
+}
+
+.new-thread-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--rz-base-200, #f0f2f5);
 }
 
 .new-thread-actions {

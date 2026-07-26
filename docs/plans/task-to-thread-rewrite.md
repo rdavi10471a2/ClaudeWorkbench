@@ -1,4 +1,10 @@
-# Plan — Retire the Tasks board, rewrite as conversation Threads
+# Plan — Retire the Tasks board, rewrite as Conversations
+
+> **SHIPPED (2026-07-26).** This plan is complete and live: named, resumable **Conversations** replaced
+> the Tasks board (own `conversations.sqlite`, transcript mirror + resume, Current/Archived, a
+> Conversations modal from the composer's conversation bar, persist-immediately naming, hard delete).
+> The final naming is **Conversation** (not "thread"); see [../guide/conversations.md](../guide/conversations.md).
+> Kept as a historical design record — the wording below predates the rename and says "thread".
 
 **Status:** proposed (2026-07-25). No code written yet — this is for review.
 **Supersedes:** `docs/ThreadTaskWorkflow.md` (the deferred thread↔task design).

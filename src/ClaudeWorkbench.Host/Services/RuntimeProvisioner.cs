@@ -20,7 +20,7 @@ public sealed class RuntimeProvisioner
         // never sneak an edit into governed source. See AIMonitorTools.Notes.
         "agent-notes",
         // App-owned MIRROR of conversation transcripts (~/.claude stays the primary). See
-        // ThreadService.MirrorTranscript / ClaudeTranscriptStore.
+        // ConversationService.MirrorTranscript / ClaudeTranscriptStore.
         "sessions",
     ];
 

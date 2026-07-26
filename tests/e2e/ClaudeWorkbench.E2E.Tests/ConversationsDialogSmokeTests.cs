@@ -4,14 +4,14 @@ namespace ClaudeWorkbench.E2E.Tests;
 
 // Browser coverage for the Conversations modal (the conversation-thread board that replaced the Tasks
 // board), opened from the composer toolbar's `open-conversations` button. Deterministic and agent-free:
-// it only proves the modal opens and renders, exercising the data-testid hooks on ThreadsTab.razor
+// it only proves the modal opens and renders, exercising the data-testid hooks on ThreadsDialog.razor
 // (threads-tab, threads-refresh, and — when any thread exists in the target workspace — thread-row).
 // The autosave->UI path (a driven conversation showing up as a row) is asserted by the live driver.
-public sealed class ThreadsTabSmokeTests : IClassFixture<PlaywrightFixture>
+public sealed class ConversationsDialogSmokeTests : IClassFixture<PlaywrightFixture>
 {
     private readonly PlaywrightFixture fixture;
 
-    public ThreadsTabSmokeTests(PlaywrightFixture fixture)
+    public ConversationsDialogSmokeTests(PlaywrightFixture fixture)
     {
         this.fixture = fixture;
     }

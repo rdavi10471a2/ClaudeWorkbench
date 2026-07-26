@@ -69,7 +69,7 @@ flowchart TB
     end
 
     idx[(SQLite solution index)]
-    threads[(SQLite thread index<br/>+ ~/.claude transcript mirror)]
+    threads[(SQLite conversation index<br/>+ ~/.claude transcript mirror)]
     watched[(Watched solution files)]
     claudecli([claude CLI → Claude])
     remote([GitHub])

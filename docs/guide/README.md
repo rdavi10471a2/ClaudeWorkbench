@@ -8,7 +8,7 @@ How to operate ClaudeWorkbench. (For how it works inside, see
 3. [Workspaces](workspaces.md) — selecting/switching the watched solution; the runtime folder
 4. [Merge Review](merge-review.md) — accept/reject staged edits (the human gate)
 5. [The Git Panel](git-panel.md) — commit/push accepted changes; prompt-driven gated git
-6. [Conversation Threads](threads.md) — named, resumable, autosaved threads (replaced the Tasks board)
+6. [Conversations](conversations.md) — named, resumable, autosaved conversations (replaced the Tasks board)
 7. [Settings & Usage](settings-and-usage.md) — model/reasoning, auto-approve, usage meters, auth
 8. [Troubleshooting](troubleshooting.md) — common issues and fixes
 9. [Deploying](deploying.md) — the Launcher, publishing a live install, how paths resolve

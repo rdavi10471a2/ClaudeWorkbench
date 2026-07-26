@@ -1,15 +1,15 @@
 using AIMonitor.Core;
 using AIMonitor.McpServer;
 
-namespace ClaudeWorkbench.Host.Threads;
+namespace ClaudeWorkbench.Host.Conversations;
 
-// The per-workspace facts the thread layer needs: where threads.sqlite lives and the cwd a
-// resumed session must use. An interface so ThreadService is testable without the full
+// The per-workspace facts the thread layer needs: where conversations.sqlite lives and the cwd a
+// resumed session must use. An interface so ConversationService is testable without the full
 // WorkspaceManager, and so the paths retarget when the operator switches watched workspaces.
-public interface IThreadWorkspace
+public interface IConversationWorkspace
 {
-    // runtime\<workspace>\data\threads.sqlite — its OWN db, beside (not inside) the solution index.
-    string ThreadsDatabasePath { get; }
+    // runtime\<workspace>\data\conversations.sqlite — its OWN db, beside (not inside) the solution index.
+    string ConversationsDatabasePath { get; }
 
     // The watched-solution folder = the SDK cwd. REQUIRED for a correct resume (resuming from a
     // different cwd silently starts a fresh session).
@@ -21,19 +21,19 @@ public interface IThreadWorkspace
 }
 
 // Live adapter over the current watched workspace.
-public sealed class WorkspaceThreadPaths : IThreadWorkspace
+public sealed class WorkspaceConversationPaths : IConversationWorkspace
 {
     private readonly WorkspaceManager workspace;
 
-    public WorkspaceThreadPaths(WorkspaceManager workspace)
+    public WorkspaceConversationPaths(WorkspaceManager workspace)
     {
         this.workspace = workspace;
     }
 
-    public string ThreadsDatabasePath => Path.Combine(
+    public string ConversationsDatabasePath => Path.Combine(
         MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings),
         "data",
-        "threads.sqlite");
+        "conversations.sqlite");
 
     public string Cwd => Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
 

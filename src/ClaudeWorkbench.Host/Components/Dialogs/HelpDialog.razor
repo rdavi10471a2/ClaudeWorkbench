@@ -34,7 +34,6 @@
                 <section>
                     <h3>The tabs</h3>
                     <dl class="help-tabs">
-                        <div><dt>Tasks <span class="help-wip">WIP</span></dt><dd><em>Unpublished work in progress</em> &mdash; a kanban board + durable task memory for the agent. Currently disabled while the thread&#8596;task workflow is designed; it returns in a later build.</dd></div>
                         <div><dt>Workbench</dt><dd>Chat with Claude, approve gate requests, watch the transcript, check usage.</dd></div>
                         <div><dt>Source</dt><dd>Browse the watched solution's indexed source tree. <b>Refresh</b> re-reads the current source; <b>Rebuild Index</b> re-indexes the whole solution.</dd></div>
                         <div><dt>Git</dt><dd>Branch, stage / commit / push accepted changes, view diffs. Or just ask Claude to commit &mdash; it's gated.</dd></div>
@@ -44,10 +43,10 @@
                 <section>
                     <h3>Key controls</h3>
                     <ul class="help-list">
-                        <li><b>Composer toolbar</b> &mdash; the icon bar under the prompt: <b>Attach</b> files (paperclip), the <b>Auto-approve</b> checkbox, and <b>Activity</b> (opens the live engine event log as a modal). The watched solution is chosen at launch.</li>
-                        <li><b>Auto-approve</b> &mdash; per-thread: candidate edits skip the per-call gate. The merge-review Accept still gates every real write.</li>
+                        <li><b>Conversation bar</b> &mdash; the strip atop the composer shows the current conversation and its actions: <b>New</b> (start a fresh conversation &mdash; a popup names it, and offers to keep or name the one you're leaving) and <b>History</b> (opens the <b>Conversations</b> modal to browse, resume, rename, or delete &mdash; Current on top, then Archived). Conversations autosave; nothing is lost if you close mid-chat.</li>
+                        <li><b>Composer toolbar</b> &mdash; the icon bar under the conversation bar: <b>Activity</b> (opens the live engine event log as a modal) and the <b>Auto-approve</b> checkbox. Attach files by pasting or dropping them on the paste zone. The watched solution is chosen at launch.</li>
+                        <li><b>Auto-approve</b> &mdash; per-conversation: candidate edits skip the per-call gate. The merge-review Accept still gates every real write. New resets it.</li>
                         <li><b>Copy</b> &mdash; each message has its own copy button; the transcript header <b>Copy</b> grabs the whole conversation.</li>
-                        <li><b>New Thread</b> &mdash; start a fresh conversation (resets auto-approve).</li>
                         <li><b>Commit / Push</b> (Git tab) &mdash; deliberate and operator-driven; nothing reaches GitHub without your click.</li>
                         <li><b>Settings</b> &mdash; model, reasoning level, native read tools.</li>
                     </ul>

@@ -1,32 +1,126 @@
 @using Microsoft.AspNetCore.Components.Web
 @inject DialogService DialogService
 
-@* Small popup shown when the operator clicks New Thread: name the upcoming conversation (optional).
-   Returns the entered name (possibly empty -> default date name) on Start, or null on Cancel/Esc. *@
+@* Popup shown when the operator clicks New Thread. Two parts, both optional:
+     1. If the conversation being LEFT is still on a default name (LeavingName set), decide whether to
+        KEEP it (checkbox). The name is prefilled with the default so it's never blank; edit it to give
+        it a better name. Unchecked -> it's discarded (transcript removed from our runtime).
+     2. Name the NEW conversation you're about to start.
+   Returns Names(KeepLeaving, LeavingName, NewName) on Start, or null on Cancel/Esc. *@
 <div class="new-thread-dialog">
-    <p class="new-thread-hint">Give this conversation a name, or leave blank for the default (<code>discussion-YYYY-MM-DD-N</code>). You can rename it later.</p>
-    <input class="new-thread-input"
-           @bind="name" @bind:event="oninput"
-           @onkeydown="OnKeyDown"
-           placeholder="e.g. add Dapper + repository"
-           autofocus
-           data-testid="new-thread-name" />
+    @if (LeavingName is not null)
+    {
+        <div class="new-thread-leaving-group">
+            <label class="new-thread-label">
+                <RadzenIcon Icon="logout" />
+                The conversation you're leaving
+            </label>
+
+            <label class="new-thread-check">
+                <input type="checkbox" @bind="keepLeaving" data-testid="new-thread-keep-leaving" />
+                <span>Keep this conversation</span>
+            </label>
+
+            <input class="new-thread-input"
+                   @bind="leaving" @bind:event="oninput"
+                   @onkeydown="OnKeyDown"
+                   disabled="@(!keepLeaving)"
+                   autofocus
+                   data-testid="new-thread-leaving-name" />
+
+            <p class="new-thread-hint">
+                @if (keepLeaving)
+                {
+                    <text>Kept in Conversations. It only has a default name (<code>@LeavingName</code>) — give it a memorable one here if you like.</text>
+                }
+                else
+                {
+                    <text><strong>Won't be saved.</strong> This conversation is discarded when the new one starts.</text>
+                }
+            </p>
+        </div>
+    }
+
+    <div class="new-thread-new-group">
+        <label class="new-thread-label" for="new-thread-new">
+            <RadzenIcon Icon="add_comment" />
+            Name your new conversation
+        </label>
+        <p class="new-thread-hint">Prefilled with the default (<code>@NewDefaultName</code>) — rename it here or later, whenever you like.</p>
+        <input id="new-thread-new"
+               class="new-thread-input"
+               @bind="newName" @bind:event="oninput"
+               @onkeydown="OnKeyDown"
+               placeholder="e.g. add Dapper + repository"
+               autofocus="@(LeavingName is null ? "autofocus" : null)"
+               data-testid="new-thread-name" />
+    </div>
+
     <div class="new-thread-actions">
-        <RadzenButton Text="Start thread" Icon="add_comment" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
-                      Click="@(() => DialogService.Close(name))" data-testid="new-thread-start" />
+        <RadzenButton Text="Start conversation" Icon="add_comment" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                      Click="@Confirm" data-testid="new-thread-start" />
         <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                       Click="@(() => DialogService.Close(null))" />
     </div>
 </div>
 
 @code {
-    private string name = string.Empty;
+    // The current thread's default name, when it should be offered for keep/rename; null hides the
+    // whole leaving section (nothing to leave, or it was already named).
+    [Parameter]
+    public string? LeavingName { get; set; }
+
+    // The default name the new conversation would get — prefilled so the field is never blank.
+    [Parameter]
+    public string NewDefaultName { get; set; } = string.Empty;
+
+    // Keep the conversation being left. Defaults to true: leaving is non-destructive unless the
+    // operator deliberately unchecks it.
+    private bool keepLeaving = true;
+    private string leaving = string.Empty;
+    private string newName = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        // Prefill both fields with their default names so nothing is ever blank — it all just flows.
+        if (LeavingName is not null && leaving.Length == 0)
+        {
+            leaving = LeavingName;
+        }
+
+        if (newName.Length == 0)
+        {
+            newName = NewDefaultName;
+        }
+    }
+
+    // The dialog result. KeepLeaving decides keep vs discard of the conversation left behind;
+    // LeavingName is its (possibly renamed) name when kept, else null; NewName names the upcoming
+    // conversation (may be blank -> default).
+    public sealed record Names(bool KeepLeaving, string? LeavingName, string NewName);
+
+    private void Confirm()
+    {
+        // No leaving section -> KeepLeaving is irrelevant; report true so callers never misread it.
+        bool keep = LeavingName is null || keepLeaving;
+        string? leavingResult = null;
+        if (LeavingName is not null && keepLeaving)
+        {
+            string trimmed = leaving.Trim();
+            leavingResult = trimmed.Length > 0 ? trimmed : LeavingName;
+        }
+
+        // Always carry the chosen name forward — including the prefilled default — so the top-bar chip
+        // can show it immediately (the conversation "knows its name" the moment you hit Start). Blank
+        // only if the operator cleared the field entirely, in which case a default is computed later.
+        DialogService.Close(new Names(keep, leavingResult, newName.Trim()));
+    }
 
     private void OnKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
-            DialogService.Close(name);
+            Confirm();
         }
         else if (e.Key == "Escape")
         {

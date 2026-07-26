@@ -2,7 +2,7 @@ using System.Text;
 using ClaudeWorkbench.Host.Components.Dialogs;
 using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
-using ClaudeWorkbench.Host.Threads;
+using ClaudeWorkbench.Host.Conversations;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using Radzen;
@@ -21,7 +21,17 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private DialogService Dialogs { get; set; } = default!;
 
     [Inject]
-    private ThreadService ThreadStore { get; set; } = default!;
+    private ConversationService ConversationStore { get; set; } = default!;
+
+    [Inject]
+    private SidecarEventStream Events { get; set; } = default!;
+
+    // The current conversation shown in the composer's conversation bar. Provisioned on load so it's
+    // named before the first turn; refreshed only when the live session actually changes (not per chunk).
+    private string? currentConversationName;
+    private string? lastConversationSessionId;
+
+    private string ConversationLabel => currentConversationName ?? "Unsaved";
 
     private ElementReference assistantLayout;
     private ElementReference chatComposer;
@@ -55,6 +65,49 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     protected override void OnInitialized()
     {
         Session.Changed += OnChanged;
+        ConversationStore.ConversationCreated += OnConversationCreated;
+        ConversationStore.ConversationsChanged += OnConversationsChanged;
+        // Provision (or reuse) the current conversation so its name shows before the first turn.
+        currentConversationName = ConversationStore.EnsureCurrentConversation().Name;
+        lastConversationSessionId = Events.CurrentSessionId;
+    }
+
+    // A new conversation was created (New Thread / first-turn autosave) — reflect its name in the bar.
+    private void OnConversationCreated(ConversationRecord conversation) => InvokeAsync(() =>
+    {
+        currentConversationName = conversation.Name;
+        lastConversationSessionId = conversation.SessionId;
+        StateHasChanged();
+    });
+
+    // A conversation was renamed/deleted — re-read the current one so the bar stays honest.
+    private void OnConversationsChanged() => InvokeAsync(() =>
+    {
+        currentConversationName = ConversationStore.ActiveConversation()?.Name;
+        StateHasChanged();
+    });
+
+    // Refresh the bar's name only when the live session actually changed (resume/new), not on every
+    // streamed chunk (which also raises Session.Changed).
+    private void RefreshConversationName()
+    {
+        string? sessionId = Events.CurrentSessionId;
+        if (string.Equals(sessionId, lastConversationSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        lastConversationSessionId = sessionId;
+        currentConversationName = ConversationStore.ActiveConversation()?.Name;
+    }
+
+    // Open the Conversations board (browse / resume / rename / delete) as a modal.
+    private async Task OpenConversationsAsync()
+    {
+        await Dialogs.OpenAsync<ConversationsDialog>(
+            "Conversations",
+            null,
+            new DialogOptions { Width = "90vw", Height = "82vh", Resizable = true, Draggable = false });
     }
 
     private void OnChanged()
@@ -69,6 +122,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             }
 
             wasWorking = working;
+            RefreshConversationName();
             // The session changed (message streamed/added/status) — the transcript may have grown,
             // so the next render must re-run the transcript-wide JS.
             transcriptDirty = true;
@@ -210,26 +264,78 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         await Session.StopAsync();
     }
 
+    // True from the moment New Thread is clicked until its session reset finishes. Disables the New
+    // button for the whole operation (not just during a turn) so a second click can't race the reset
+    // still in flight — the click would otherwise be swallowed and no dialog would open.
+    private bool newThreadInProgress;
+
     private async Task NewThreadAsync()
     {
-        if (Working)
+        if (Working || newThreadInProgress)
         {
             return;
         }
 
-        // Popup to name the upcoming conversation. Cancel (null) aborts; a name (possibly blank ->
-        // the default discussion-YYYY-MM-DD-N) is held and applied to the thread that autosaves on
-        // the first turn.
+        newThreadInProgress = true;
+        try
+        {
+            await RunNewThreadAsync();
+        }
+        finally
+        {
+            newThreadInProgress = false;
+        }
+    }
+
+    private async Task RunNewThreadAsync()
+    {
+        // The conversation being left. If it's still on a machine default name, offer to name it now
+        // in the popup (otherwise it lingers in Conversations as conversation-YYYY-MM-DD-N). Captured
+        // BEFORE the reset, which clears the live session id.
+        ConversationRecord? leaving = ConversationStore.ActiveConversation();
+        string? leavingDefaultName = leaving is not null && ConversationRepository.IsDefaultName(leaving.Name)
+            ? leaving.Name
+            : null;
+
+        // Popup to (optionally) rename the conversation being left AND name the upcoming one. Cancel
+        // (null) aborts. The new name (possibly blank -> the default) is held and applied to the
+        // thread that autosaves on the first turn.
         object? chosen = await Dialogs.OpenAsync<NewThreadDialog>(
-            "Start a new thread",
-            null,
+            "Start a new conversation",
+            new Dictionary<string, object?>
+            {
+                [nameof(NewThreadDialog.LeavingName)] = leavingDefaultName,
+                [nameof(NewThreadDialog.NewDefaultName)] = ConversationStore.PeekNextDefaultName(),
+            },
             new DialogOptions { Width = "440px", Resizable = false, Draggable = false });
-        if (chosen is null)
+        if (chosen is not NewThreadDialog.Names names)
         {
             return;
         }
 
-        ThreadStore.SetPendingName(chosen as string ?? string.Empty);
+        // The conversation being left (only offered when it's still on a default name): the operator
+        // ticked Keep or not. Keep -> rename it if they gave it a better name (else leave the default).
+        // Don't keep -> discard it, reclaiming its runtime row + mirror, so Conversations doesn't fill
+        // with junk conversation-YYYY-MM-DD-N threads. (Cancel returns null above and skips all of this.)
+        if (leaving is not null && leavingDefaultName is not null)
+        {
+            if (names.KeepLeaving)
+            {
+                if (!string.IsNullOrWhiteSpace(names.LeavingName)
+                    && !string.Equals(names.LeavingName, leaving.Name, StringComparison.Ordinal))
+                {
+                    ConversationStore.Rename(leaving.ConversationId, names.LeavingName);
+                }
+            }
+            else
+            {
+                ConversationStore.DeleteConversation(leaving.ConversationId);
+            }
+        }
+
+        // Persist the new conversation immediately so it's the Active thread and shows on the top bar
+        // and in Conversations at once; its first turn adopts this row.
+        ConversationStore.StartNamedConversation(names.NewName);
 
         // Auto-approve is per-thread; a fresh thread starts back at the gate.
         autoApprove = false;
@@ -366,6 +472,8 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     public void Dispose()
     {
         Session.Changed -= OnChanged;
+        ConversationStore.ConversationCreated -= OnConversationCreated;
+        ConversationStore.ConversationsChanged -= OnConversationsChanged;
     }
 
     public async ValueTask DisposeAsync()

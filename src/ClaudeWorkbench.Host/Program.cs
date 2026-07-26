@@ -80,10 +80,10 @@ internal static class Program
         builder.Services.AddSingleton<SidecarEventStream>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<SidecarEventStream>());
         // Conversation-thread persistence (own per-workspace threads.sqlite; NOT the index DB).
-        builder.Services.AddSingleton<Threads.ClaudeTranscriptStore>();
-        builder.Services.AddSingleton<Threads.IThreadWorkspace, Threads.WorkspaceThreadPaths>();
+        builder.Services.AddSingleton<Conversations.ClaudeTranscriptStore>();
+        builder.Services.AddSingleton<Conversations.IConversationWorkspace, Conversations.WorkspaceConversationPaths>();
         builder.Services.AddSingleton<ICurrentSession>(provider => provider.GetRequiredService<SidecarEventStream>());
-        builder.Services.AddSingleton<Threads.ThreadService>();
+        builder.Services.AddSingleton<Conversations.ConversationService>();
         builder.Services.AddSingleton<AuthStatusProbe>();
         builder.Services.AddHostedService(provider => provider.GetRequiredService<AuthStatusProbe>());
         builder.Services.AddScoped<SidecarOperatorConsole>();
@@ -123,13 +123,13 @@ internal static class Program
         // Autosave threads: when the sidecar reports a live/resumed SDK session, persist or touch
         // its thread. Wrapped so a persistence hiccup can never break the event stream.
         SidecarEventStream sessionStream = app.Services.GetRequiredService<SidecarEventStream>();
-        Threads.ThreadService threadService = app.Services.GetRequiredService<Threads.ThreadService>();
+        Conversations.ConversationService threadService = app.Services.GetRequiredService<Conversations.ConversationService>();
         IMonitorLogger threadLogger = app.Services.GetRequiredService<IMonitorLogger>();
         sessionStream.SessionStarted += sessionId =>
         {
             try
             {
-                threadService.EnsureThreadForSession(sessionId);
+                threadService.EnsureConversationForSession(sessionId);
             }
             catch (Exception exception)
             {

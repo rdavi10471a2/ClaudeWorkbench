@@ -13,13 +13,13 @@ query options; **Save** applies them, **Cancel** discards:
 | **Reasoning level** | The effort/thinking level — default, `low`, `medium`, `high`, `xhigh`, `max` |
 | **Optional tools** | Off by default. Each checkbox widens what the agent can do **outside** the governed gate; the ⚠ ones (`Bash`, `PowerShell`, `Write`, `Edit`) let it write files directly, bypassing the staged-review gate. `WebFetch`, `WebSearch`, `Agent` and `Workflow` are the non-risky ones. |
 
-> **Model** and **Reasoning level** apply to **new threads** — start a **New Thread** for a
-> change to take effect.
+> **Model** and **Reasoning level** apply to **new conversations** — start a fresh conversation
+> (**New** on the composer's conversation bar) for a change to take effect.
 
 **Auto-approve** is *not* in this dialog — it's a toggle on the **composer** in the
-Workbench tab. Per-**thread**: `claude-workbench` candidate mutations proceed without a
+Workbench tab. Per-**conversation**: `claude-workbench` candidate mutations proceed without a
 per-call gate prompt. The **merge-review Accept still gates every write to watched
-source.** New Thread turns it back off.
+source.** Starting a new conversation turns it back off.
 
 ## Usage meters
 
@@ -30,14 +30,15 @@ handle:
 - **Weekly / 5-hour** — subscription utilization, with reset times.
 - **Plan / monthly overage** — when available.
 
-Usage appears once a turn has run in the current thread. Hit **Refresh** to update it.
+Usage appears once a turn has run in the current conversation. Hit **Refresh** to update it.
 
-## Threads & continuity
+## Conversations & continuity
 
-- **New Thread** starts a fresh conversation (and resets Auto-approve, and picks up any
-  changed Model / Reasoning level). The prior thread's session ends.
-- Within a thread, the session **resumes** — the agent remembers the conversation, and a
-  turn survives a host rebuild mid-turn.
+- **New** (conversation bar) starts a fresh conversation (and resets Auto-approve, and picks up any
+  changed Model / Reasoning level). The prior conversation is kept — name it in the popup, or discard
+  it if it was still on a default name.
+- Within a conversation, the session **resumes** — the agent remembers the chat, and a turn survives a
+  host rebuild mid-turn. See **[conversations.md](conversations.md)** for the full model.
 
 ## Auth
 

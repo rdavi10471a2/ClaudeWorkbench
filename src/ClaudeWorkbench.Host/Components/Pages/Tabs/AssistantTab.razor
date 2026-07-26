@@ -1,6 +1,23 @@
 <div class="assistant-host">
     <div class="assistant-layout" @ref="assistantLayout">
         <div class="chat-composer" @ref="chatComposer">
+            @* Conversation bar: the current conversation's identity + its lifecycle actions (New,
+               History) live here, next to where you drive it — not split across the top bar. *@
+            <div class="composer-convo-bar">
+                <span class="composer-convo-id" title="The conversation you're in">
+                    <RadzenIcon Icon="forum" />
+                    <span class="composer-convo-caption">Conversation</span>
+                    <span class="composer-convo-name" data-testid="thread-chip-label">@ConversationLabel</span>
+                </span>
+                <div class="composer-convo-actions">
+                    <RadzenButton Icon="add_comment" Text="New" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Title="Start a fresh conversation — a popup lets you name it (resets auto-approve)."
+                                  Click="@NewThreadAsync" data-testid="new-thread" Disabled="@(Session.Status.Working || newThreadInProgress)" />
+                    <RadzenButton Icon="expand_more" Text="History" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Title="Browse, resume, rename, or delete saved conversations."
+                                  Click="@OpenConversationsAsync" data-testid="open-conversations" />
+                </div>
+            </div>
             <div class="chat-composer-toolbar">
                 <button type="button" class="composer-icon-btn"
                         title="Activity — tool calls and events for this run"
@@ -145,13 +162,6 @@
                             </div>
                         }
                     </div>
-                    <RadzenButton Icon="add_comment"
-                                  Text="New Thread"
-                                  ButtonStyle="ButtonStyle.Light"
-                                  Size="ButtonSize.Small"
-                                  Title="Start a fresh conversation — a popup lets you name it (resets auto-approve)."
-                                  Click="@NewThreadAsync"
-                                  Disabled="@(Session.Status.Working)" />
                     <RadzenButton Icon="content_copy"
                                   Text="Copy"
                                   ButtonStyle="ButtonStyle.Light"

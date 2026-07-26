@@ -85,12 +85,8 @@
     gap: 6px;
 }
 
-.thread-group.computed {
-    padding: 8px;
-    border: 1px solid var(--rz-success, #2ea043);
-    border-radius: 8px;
-    background: var(--rz-success-lighter, rgba(46, 160, 67, 0.08));
-}
+/* No frame around the Active group: the active chip itself carries the green highlight, so the whole
+   card is the click target (a wrapping frame left dead padding that didn't select). */
 
 .thread-group-head {
     display: flex;
@@ -98,10 +94,6 @@
     justify-content: space-between;
     padding-bottom: 2px;
     border-bottom: 1px solid var(--rz-border-color, #eef0f2);
-}
-
-.thread-group.computed .thread-group-head {
-    border-bottom: none;
 }
 
 .thread-group-name {
@@ -147,6 +139,14 @@
 }
 
 .thread-chip:hover { background: var(--rz-base-200, #eef0f2); }
+
+/* The live/current conversation: green highlight on the card itself (was a wrapping frame). */
+.thread-chip.active {
+    border-color: var(--rz-success, #2ea043);
+    background: var(--rz-success-lighter, rgba(46, 160, 67, 0.08));
+}
+
+.thread-chip.active:hover { background: rgba(46, 160, 67, 0.14); }
 
 .thread-chip.selected {
     border-color: var(--rz-primary, #3b82f6);

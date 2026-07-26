@@ -38,10 +38,51 @@
     box-sizing: border-box;
 }
 
+/* Conversation bar at the top of the composer: identity (name) on the left, lifecycle actions on the
+   right. Where you see and steer the conversation you're driving. */
+.composer-convo-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 2px 2px 6px;
+    border-bottom: 1px solid #e1e8f0;
+}
+
+.composer-convo-id {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.composer-convo-caption {
+    text-transform: uppercase;
+    font-size: .6rem;
+    letter-spacing: .05em;
+    font-weight: 700;
+    color: #7b8794;
+}
+
+.composer-convo-name {
+    font-weight: 600;
+    font-size: .9rem;
+    color: #16202c;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-convo-actions {
+    display: flex;
+    gap: 6px;
+}
+
 .chat-composer-input {
     flex: 1 1 auto;
     width: 100%;
-    min-height: 120px;
+    min-height: 92px;
     overflow-y: auto;
     scrollbar-gutter: stable;
     resize: none;

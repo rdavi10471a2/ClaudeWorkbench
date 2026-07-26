@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace ClaudeWorkbench.Host.Threads;
+namespace ClaudeWorkbench.Host.Conversations;
 
 // Locates and hard-deletes Claude Agent SDK transcript files, which live OUTSIDE this app at
 // ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl. The SDK's cwd-encoding scheme is an
@@ -46,12 +46,13 @@ public sealed class ClaudeTranscriptStore
         return matches;
     }
 
-    // Copy the primary ~/.claude transcript for a session into destDir as <sessionId>.jsonl (the
-    // app-owned mirror). Overwrites so the mirror always reflects the latest turn. Best-effort:
-    // returns the destination path if copied, null if there was nothing to copy or the copy failed.
-    public string? MirrorTo(string sessionId, string destinationDirectory)
+    // Copy the primary ~/.claude transcript for a session into destDir under the caller-chosen readable
+    // fileName (e.g. "AddDapperReposito.jsonl"). Overwrites so the mirror always reflects the latest
+    // turn. Best-effort: returns the destination path if copied, null if there was nothing to copy or
+    // the copy failed.
+    public string? MirrorTo(string sessionId, string fileName, string destinationDirectory)
     {
-        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(destinationDirectory))
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(destinationDirectory))
         {
             return null;
         }
@@ -65,7 +66,7 @@ public sealed class ClaudeTranscriptStore
         try
         {
             Directory.CreateDirectory(destinationDirectory);
-            string destination = Path.Combine(destinationDirectory, sessionId + ".jsonl");
+            string destination = Path.Combine(destinationDirectory, fileName);
             File.Copy(source, destination, overwrite: true);
             return destination;
         }

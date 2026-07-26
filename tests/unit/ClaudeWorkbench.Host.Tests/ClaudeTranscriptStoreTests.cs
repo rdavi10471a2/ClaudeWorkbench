@@ -1,4 +1,4 @@
-using ClaudeWorkbench.Host.Threads;
+using ClaudeWorkbench.Host.Conversations;
 
 namespace ClaudeWorkbench.Host.Tests;
 
@@ -53,7 +53,7 @@ public sealed class ClaudeTranscriptStoreTests : IDisposable
     }
 
     [Fact]
-    public void Mirror_to_copies_the_transcript_into_the_destination_as_session_jsonl()
+    public void Mirror_to_copies_the_transcript_into_the_destination_under_the_given_readable_name()
     {
         string root = NewProjectsRoot();
         WriteTranscript(root, "proj", "sess-1", "{\"m\":1}");
@@ -61,10 +61,10 @@ public sealed class ClaudeTranscriptStoreTests : IDisposable
         string dest = Path.Combine(Path.GetTempPath(), "cwb-mirror-" + Guid.NewGuid().ToString("N"));
         tempDirs.Add(dest);
 
-        string? mirror = store.MirrorTo("sess-1", dest);
+        string? mirror = store.MirrorTo("sess-1", "AddDapper.jsonl", dest);
 
         Assert.NotNull(mirror);
-        Assert.Equal(Path.Combine(dest, "sess-1.jsonl"), mirror);
+        Assert.Equal(Path.Combine(dest, "AddDapper.jsonl"), mirror);
         Assert.Equal("{\"m\":1}", File.ReadAllText(mirror!));
     }
 
@@ -73,8 +73,9 @@ public sealed class ClaudeTranscriptStoreTests : IDisposable
     {
         string root = NewProjectsRoot();
         ClaudeTranscriptStore store = new(root);
-        Assert.Null(store.MirrorTo("missing", Path.Combine(Path.GetTempPath(), "cwb-mirror-none")));
+        Assert.Null(store.MirrorTo("missing", "x.jsonl", Path.Combine(Path.GetTempPath(), "cwb-mirror-none")));
     }
+
 
     [Fact]
     public void Restore_from_mirror_overwrites_the_existing_primary_in_place()

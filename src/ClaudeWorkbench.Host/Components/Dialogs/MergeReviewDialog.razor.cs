@@ -22,7 +22,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
     private Services.SidecarClient Sidecar { get; set; } = default!;
 
     [Inject]
-    private Threads.ThreadService Threads { get; set; } = default!;
+    private Conversations.ConversationService Conversations { get; set; } = default!;
 
     [Parameter]
     public string? SessionId { get; set; }
@@ -144,7 +144,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
                 acceptedRecordIds.Add(recordId);
                 if (terminal)
                 {
-                    Threads.RecordAcceptedEdits(acceptedRecordIds);
+                    Conversations.RecordAcceptedEdits(acceptedRecordIds);
                     acceptedRecordIds.Clear();
                 }
             }

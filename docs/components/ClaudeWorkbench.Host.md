@@ -18,7 +18,7 @@ The load-bearing invariant: the agent **never** writes watched source. It stages
 ## What it hosts (three surfaces in one process)
 
 - **MCP HTTP surface** — `app.MapMcp("/mcp")`. An `AddMcpServer(...).WithHttpTransport()` server named `claude-workbench` v0.1.0, composed from two tool types: `WithTools<AIMonitorTools>()` (the engine's edit/index/search surface plus the agent notes scratchpad, from `AIMonitor.McpServer`) and `WithTools<GitMcpTools>()` (governed git). Together these are the **73-tool surface** the sidecar's Claude Agent SDK query consumes = `AIMonitorTools` (69) + `GitMcpTools` (4). (The 3 former `TaskMcpTools` were removed with the Tasks board.)
-- **Blazor operator console** — `app.MapRazorComponents<App>().AddInteractiveServerRenderMode()`. Radzen + interactive Server components; the `Home` page hosts the tab shell (Tasks / Workbench / Source / Git / Activity).
+- **Blazor operator console** — `app.MapRazorComponents<App>().AddInteractiveServerRenderMode()`. Radzen + interactive Server components; the `Home` page hosts the tab shell (Workbench / Source / Git), with Conversations and Activity as modals.
 - **Sidecar supervisor** — `SidecarProcessHost` (an `IHostedService`) launches `node dist/index.js` as a child process, passing `SIDECAR_PORT` and `WORKBENCH_MCP_URL=http://localhost:6100/mcp` so the sidecar loops back to this process's MCP surface.
 
 ## Service graph
@@ -62,9 +62,9 @@ flowchart TD
     wm --> gws
     gws --> gitmcp
 
-    subgraph threads["Threads seam"]
-        tsvc["ThreadService"]
-        trepo["ThreadRepository\n(threads.sqlite)"]
+    subgraph conversations["Conversations seam"]
+        tsvc["ConversationService"]
+        trepo["ConversationRepository\n(conversations.sqlite)"]
         tstore["ClaudeTranscriptStore\n(~/.claude mirror)"]
     end
     tsvc --> trepo
@@ -99,8 +99,8 @@ flowchart TD
 | `SidecarOperatorConsole` (+ `.Approvals`) | `Services/SidecarOperatorConsole*.cs` | Scoped adapter implementing both `IOperatorConsole` (transcript/activity/status, SendAsync, StopAsync, NewThread, usage) and `IApprovalQueue` (pending gates → `ApprovalRequest`, elicitations, resolve). The one place aware of sidecar event shapes. |
 | `GitService` | `Services/GitService.cs` | Stateless wrapper that launches the `git` executable via `ProcessStartInfo.ArgumentList` (argv, `UseShellExecute=false`) — **no shell, no injection surface**. Never throws on non-zero exit; caller inspects `GitResult.Ok`. |
 | `GitWorkspaceService` | `Services/GitWorkspaceService.cs` | Singleton binding `GitService` to the current watched repo (resolves the repo root so porcelain paths line up). Shared by both the operator Git panel and the agent's `GitMcpTools`. |
-| `ThreadService` (+ `ThreadRepository` / `ThreadDatabase`) | `Threads/*.cs` | Conversation-thread lifecycle over the per-workspace `threads.sqlite` (own DB, not the index): autosave on `session_started`, computed Active, provenance, resume (restore-from-mirror), hard delete. |
-| `ClaudeTranscriptStore` | `Threads/ClaudeTranscriptStore.cs` | Locates / mirrors / restores / deletes the SDK `~/.claude` transcript JSONL; the runtime mirror (`runtime\<workspace>\sessions`) is authoritative for resume. |
+| `ConversationService` (+ `ConversationRepository` / `ConversationDatabase`) | `Conversations/*.cs` | Conversation-thread lifecycle over the per-workspace `conversations.sqlite` (own DB, not the index): autosave on `session_started`, computed Active, provenance, resume (restore-from-mirror), hard delete. |
+| `ClaudeTranscriptStore` | `Conversations/ClaudeTranscriptStore.cs` | Locates / mirrors / restores / deletes the SDK `~/.claude` transcript JSONL; the runtime mirror (`runtime\<workspace>\sessions`) is authoritative for resume. |
 | `Source.SourceWorkspace` | `Source/SourceWorkspace.cs` | Builds the source-browser snapshot from the in-process AIMonitor index and rebuilds it; retargets when the watched workspace changes. |
 | `WorkspaceCoordinator` / `RuntimeProvisioner` | `Services/*.cs` | Selecting a watched solution: point the manager at it, persist the choice, provision its runtime skeleton (idempotent, also on startup). Persistence targets the registered `MonitorConfigPath` — **the same file the host was started with** (`--config`), not a default path, so reader and writer cannot drift. |
 | `AgentSettingsService` / `UploadService` / `DirectoryBrowserService` | `Services/*.cs` | Operator tool-policy (persisted `AgentToolPolicy`), file attachments into the runtime `uploads/` folder, and filesystem navigation for the workspace picker (opening at the watched solution's folder, or the user profile on first run — never the process cwd, which under the Launcher is the install folder). |
@@ -171,8 +171,8 @@ sequenceDiagram
 
 Hosted on `Components/Pages/Home.razor`:
 
-- **Conversations** (`Tabs/ThreadsTab`, opened as a modal from the Workbench toolbar — not a tab) — the conversation-thread board (replaced the Tasks board): resume/rename/abandon/restore/delete named, autosaved threads. Backed by `ThreadService` over the per-workspace `threads.sqlite`.
-- **Workbench / Assistant** (`Tabs/AssistantTab`) — the chat surface: prompt the agent, watch the transcript, resolve gates/elicitations via `AgentActionModal`, start a new thread.
+- **Conversations** (`Components/Dialogs/ConversationsDialog`, opened as a modal from the composer's conversation bar — not a tab) — the conversation list (replaced the Tasks board): resume / rename / delete named, autosaved conversations, grouped Current + Archived. Backed by `ConversationService` over the per-workspace `conversations.sqlite`.
+- **Workbench / Assistant** (`Tabs/AssistantTab`) — the chat surface: the conversation bar (current name + New + History), prompt the agent, watch the transcript, resolve gates/elicitations via `AgentActionModal`.
 - **Source** (`Pages/Source/*`) — read-only browser of the watched solution from the in-process AIMonitor index (`SourceWorkspace`).
 - **Git** (`Tabs/GitTab`) — the operator's git panel over `GitWorkspaceService`: status, stage/unstage/discard, diff, commit, push, branches.
 - **Activity** (`Tabs/ActivityTab`) — the reverse-chronological event feed derived from `SidecarEventStream` snapshots.
