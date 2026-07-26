@@ -258,7 +258,39 @@ internal static class Program
         // fetched by the sidecar at startup — so the card's wording lives in one place, not
         // restated in the sidecar's TypeScript.
         app.MapGet("/guidance/card", (WorkspaceManager workspace) =>
-            Results.Text(AgentGuidance.ComposeGovernanceCard(workspace.WatchedSolutionPath ?? string.Empty), "text/markdown"));
+        {
+            string card = AgentGuidance.ComposeGovernanceCard(workspace.WatchedSolutionPath ?? string.Empty);
+
+            // Load the agent's durable preferences into the card so they're always in context — the
+            // agent shouldn't have to remember to read them each session. Written by the agent via
+            // write_note to runtime\<workspace>\agent-notes\user-preferences.md.
+            if (workspace.HasWorkspace)
+            {
+                try
+                {
+                    string prefsPath = Path.Combine(
+                        MonitorWorkspacePaths.GetWatchedSolutionWorkspaceRoot(workspace.Settings),
+                        "agent-notes",
+                        "user-preferences.md");
+                    if (File.Exists(prefsPath))
+                    {
+                        string prefs = File.ReadAllText(prefsPath).Trim();
+                        if (prefs.Length > 0)
+                        {
+                            card += "\n\n## Your durable preferences (from user-preferences.md — update it with write_note)\n\n" + prefs;
+                        }
+                    }
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+
+            return Results.Text(card, "text/markdown");
+        });
 
         // --- test-only review HTTP surface -------------------------------------
         // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY
