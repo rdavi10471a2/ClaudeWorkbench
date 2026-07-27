@@ -117,11 +117,14 @@ public sealed class ClaudeTranscriptStore
     // own copy is gone, so the folder must be recreated from scratch.
     internal static string EncodeCwd(string cwd)
     {
+        // Match the Claude CLI's project-folder scheme exactly: fold EVERY non-alphanumeric character to
+        // '-' (not just : \ / .). A path with spaces or punctuation (e.g. "…V 1.1 - Copy (2)") otherwise
+        // encodes to a folder the SDK never reads, so the mirror restore silently misses on that path.
         string full = Path.GetFullPath(cwd);
         StringBuilder builder = new(full.Length);
         foreach (char character in full)
         {
-            builder.Append(character is ':' or '\\' or '/' or '.' ? '-' : character);
+            builder.Append(char.IsAsciiLetterOrDigit(character) ? character : '-');
         }
 
         return builder.ToString();
