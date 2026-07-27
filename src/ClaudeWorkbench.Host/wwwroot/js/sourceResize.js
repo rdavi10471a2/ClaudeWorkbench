@@ -405,6 +405,10 @@ function ensureMermaid() {
             securityLevel: "strict",
             theme: "default",
             fontFamily: "inherit",
+            // On a parse error, DON'T let mermaid draw its "bomb" error graphic — it attaches that to
+            // <body> and orphans it (a big banner pinned to the bottom with no way to close). We catch
+            // the error ourselves and show a small inline note instead.
+            suppressErrorRendering: true,
         });
         mermaidReady = true;
     }
@@ -464,6 +468,12 @@ export async function renderMermaidBlocks(container) {
             host.innerHTML = svg;
             pre.replaceWith(host);
         } catch (e) {
+            // Belt to suppressErrorRendering: older mermaid can still leave its temporary render /
+            // measuring nodes attached to <body> on a parse error. Remove them so a bad diagram never
+            // leaves a giant orphaned graphic pinned to the bottom of the app.
+            document.getElementById("dmmd-" + mermaidSeq)?.remove();
+            document.getElementById("mmd-" + mermaidSeq)?.remove();
+
             // The diagram itself is malformed: surface the parse error and keep the source.
             const note = document.createElement("div");
             note.className = "mermaid-error";
