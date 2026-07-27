@@ -21,17 +21,59 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico?v=2" sizes="any" />
     <link rel="icon" type="image/png" href="favicon.png?v=2" />
     <title>ClaudeWorkbench</title>
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <style>
+        /* Startup splash shown until the Blazor circuit connects and first renders. With prerender
+           off (see NoPrerender below) the shell + this splash flush immediately once the host is
+           serving, so a cold-start machine shows "Loading…" instead of a white void. */
+        #app-boot {
+            position: fixed; inset: 0; z-index: 99999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 1rem; background: #1e1e1e; color: #d4d4d4;
+            font: 500 0.95rem/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+            transition: opacity .35s ease;
+        }
+        #app-boot.app-boot--hide { opacity: 0; pointer-events: none; }
+        #app-boot .app-boot__spinner {
+            width: 42px; height: 42px; border-radius: 50%;
+            border: 4px solid #3a3a3a; border-top-color: #4aa3ff;
+            animation: app-boot-spin .9s linear infinite;
+        }
+        @@keyframes app-boot-spin { to { transform: rotate(360deg); } }
+    </style>
+    <HeadOutlet @rendermode="NoPrerender" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <div id="app-boot">
+        <div class="app-boot__spinner"></div>
+        <div>Loading ClaudeWorkbench…</div>
+    </div>
+    <Routes @rendermode="NoPrerender" />
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
     @* Mermaid, vendored locally (no CDN) so ```mermaid fences render inline as diagrams.
        Served via an explicit /vendor route (see Program.cs) because MapStaticAssets 404s this
        blob. The bundle sets window.mermaid; sourceResize.js initializes it lazily on first use. *@
     <script src="vendor/mermaid.min.js"></script>
-    <script src="_framework/blazor.web.js"></script>
+    @* Manual start so we can drop the startup splash once the circuit is up (autostart would give
+       us no completion hook). Safety timeout ensures the splash never gets stuck. *@
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script>
+        Blazor.start().then(function () { setTimeout(hideAppBoot, 150); });
+        function hideAppBoot() {
+            var el = document.getElementById('app-boot');
+            if (!el) return;
+            el.classList.add('app-boot--hide');
+            setTimeout(function () { el.remove(); }, 400);
+        }
+        setTimeout(hideAppBoot, 20000);
+    </script>
 </body>
 
 </html>
+
+@code {
+    // Prerender off: flush the shell + startup splash immediately once the host is serving, rather
+    // than waiting on a cold-start server prerender before anything paints. The splash covers the
+    // circuit-connect gap; hideAppBoot() (above) fades it when Blazor.start() resolves.
+    private static readonly Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode NoPrerender = new(prerender: false);
+}

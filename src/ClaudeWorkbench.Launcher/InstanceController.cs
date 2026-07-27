@@ -72,16 +72,10 @@ public sealed class InstanceController : IDisposable
             host = LaunchHost(configPath, instanceDir);
             job.Assign(host.Handle);
 
-            // Wait for a nicer browser-open timing, but tolerate a slow start: a big
-            // solution's index rebuild can keep the host busy well past a naive timeout.
-            // Only a host that actually EXITED is a failure — a live-but-slow host is fine
-            // (the browser will connect once it catches up), and must not be killed.
-            bool healthy = await WaitForHealthAsync(TimeSpan.FromSeconds(120));
-            if (!healthy && host.HasExited)
-            {
-                throw new InvalidOperationException("The host process exited during startup.");
-            }
-
+            // Open the browser IMMEDIATELY — pointed at a static loading page (spinner + self-redirect
+            // to the host once it answers), not the app URL. The host can take many seconds to come up
+            // on a busy machine, and nothing it serves can paint until it does; opening early means the
+            // whole cold-boot window shows a visible "Starting…" instead of an absent/blank window.
             if (launchBrowser)
             {
                 browser = LaunchBrowser(instanceDir);
@@ -89,6 +83,15 @@ public sealed class InstanceController : IDisposable
                 {
                     job.Assign(browser.Handle);
                 }
+            }
+
+            // Track health for the Launcher's own status; the browser does its own waiting via the
+            // loading page. Only a host that actually EXITED is a failure — a live-but-slow host is
+            // fine (the loading page redirects once it catches up) and must not be killed.
+            bool healthy = await WaitForHealthAsync(TimeSpan.FromSeconds(120));
+            if (!healthy && host.HasExited)
+            {
+                throw new InvalidOperationException("The host process exited during startup.");
             }
 
             Status = InstanceStatus.Running;
@@ -238,6 +241,15 @@ public sealed class InstanceController : IDisposable
         // The tab owns the instance: closing the last tab shuts the host (and its sidecar) down.
         startInfo.Environment["CWB_EXIT_WITH_BROWSER"] = "1";
 
+        // Tell the host which browser the operator chose (the same one the workbench window opens in),
+        // so a Source-tab "Run" launches the watched app in that browser — a normal window, not --app —
+        // instead of guessing the OS default (which drags in the user's other session tabs).
+        BrowserResolver.Resolved runBrowser = BrowserResolver.Resolve(state);
+        if (runBrowser.ExePath is not null && runBrowser.IsChromium)
+        {
+            startInfo.Environment["CWB_BROWSER_EXE"] = runBrowser.ExePath;
+        }
+
         // Capture host output so a startup crash is diagnosable (the launcher has no console).
         HostLogPath = Path.Combine(instanceDir, "host.log");
         hostLog = new StreamWriter(HostLogPath, append: false) { AutoFlush = true };
@@ -254,12 +266,13 @@ public sealed class InstanceController : IDisposable
     private Process? LaunchBrowser(string instanceDir)
     {
         BrowserResolver.Resolved resolved = BrowserResolver.Resolve(state);
+        string openUrl = BuildStartupUrl();
 
         if (resolved.ExePath is null || !resolved.IsChromium)
         {
             // Default browser (or unresolved): open the URL via the shell. This window can't
             // be job-controlled, but closing the tab still stops the backend via the host.
-            Process.Start(new ProcessStartInfo(Url) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(openUrl) { UseShellExecute = true });
             return null;
         }
 
@@ -271,7 +284,7 @@ public sealed class InstanceController : IDisposable
             FileName = resolved.ExePath,
             UseShellExecute = false,
         };
-        startInfo.ArgumentList.Add($"--app={Url}");
+        startInfo.ArgumentList.Add($"--app={openUrl}");
         startInfo.ArgumentList.Add($"--user-data-dir={profileDir}");
         startInfo.ArgumentList.Add("--no-first-run");
         startInfo.ArgumentList.Add("--no-default-browser-check");
@@ -283,6 +296,17 @@ public sealed class InstanceController : IDisposable
         Process process = new() { StartInfo = startInfo };
         process.Start();
         return process;
+    }
+
+    // The URL the browser first opens: a static loading page that shows a spinner and self-redirects
+    // to the app the instant the host answers, so the cold-boot wait is a visible "Starting…" rather
+    // than a delayed blank window. Falls back to the app URL directly if the page didn't ship.
+    private string BuildStartupUrl()
+    {
+        string loadingHtml = Path.Combine(AppContext.BaseDirectory, "loading.html");
+        return File.Exists(loadingHtml)
+            ? new Uri(loadingHtml).AbsoluteUri + "?target=" + Uri.EscapeDataString(Url)
+            : Url;
     }
 
     private async Task<bool> WaitForHealthAsync(TimeSpan timeout)

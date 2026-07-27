@@ -16,4 +16,10 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Static startup splash the Launcher opens the browser at (spinner + self-redirect to the
+         host once it answers). Ships next to the launcher exe so InstanceController can find it. -->
+    <None Update="loading.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
