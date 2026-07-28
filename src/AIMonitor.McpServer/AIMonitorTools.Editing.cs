@@ -189,7 +189,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Write a full-file candidate into the monitor-owned Working mirror. Does not create a staged record. Prefer the narrower symbol/span tools (submit_symbol, add_method, add_property, replace_span_in_file, replace_text_in_file) for a localized change — reserve submit_file for a NEW file or a genuine wholesale rewrite, since a full-file overwrite makes a larger, less reviewable diff and can clobber unrelated content.")]
+    [Description("Write a full-file candidate into the monitor-owned Working mirror. Does not create a staged record. Prefer the semantic symbol/span tools (submit_symbol, add_method, add_property, replace_span_in_file) for a localized change — reserve submit_file for a NEW file or a genuine wholesale rewrite, since a full-file overwrite makes a larger, less reviewable diff and can clobber unrelated content. Use replace_text_in_file only as a LAST RESORT, or for non-semantic files (Razor/markup, Markdown, config) where the symbol tools do not apply.")]
     public EditSessionStatus SubmitFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
         [Description("Complete replacement file content.")] string content,
@@ -209,7 +209,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Replace exact oldText in the monitor-owned Working mirror candidate.")]
+    [Description("Replace exact oldText in the monitor-owned Working mirror candidate. LAST RESORT for C#: prefer the semantic symbol/span tools (submit_symbol, add_method, add_property, replace_span_in_file), which understand structure and produce smaller, safer diffs. Use this when no semantic edit fits, or for non-semantic files where the symbol tools cannot reach — Razor/markup, Markdown, config, plain text.")]
     public ReplaceTextResult ReplaceTextInFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
         [Description("Exact old text to replace using ordinal matching.")] string oldText,
