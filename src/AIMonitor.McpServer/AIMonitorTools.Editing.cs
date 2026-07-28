@@ -115,7 +115,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return a Roslyn-derived source map for a C# file, folder, namespace, or watched project. Use selector mode before C# symbol edits.")]
+    [Description("Return a Roslyn-derived source map for a C# file, folder, namespace, or watched project — drill to the level the change needs. The selector it returns is the coordinate for a targeted edit: get selector mode before a C# symbol edit, then feed that selector to submit_symbol / add_method / add_property / replace_span_in_file.")]
     public object GetSourceMap(
         [Description("Optional source file/folder path, or namespace text when scope is namespace.")] string? path = null,
         [Description("Source map scope: auto, file, folder, namespace, or project.")] string scope = "auto",
