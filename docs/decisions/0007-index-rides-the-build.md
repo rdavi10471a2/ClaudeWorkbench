@@ -176,3 +176,37 @@ declared TFM and log it, rather than silently indexing an arbitrary framework's 
 - `CompileIndexTrace` is best-effort-safe (never breaks a build/index); the `Echo` sink wiring.
 - `find_project_dependencies` reads the persisted `project_references` graph (both directions).
 - Test coverage: build-output parity, find-references-after-rebuild, accept ordering, multi-project.
+
+## Checklist progress (2026-07-29, continued)
+
+Worked the review findings against a **side-by-side parity run on the real 17-project workbench solution**
+(`ClaudeWorkbench - Copy`, incl. the Blazor Host and the WPF Launcher). Parity verdict, both before and after
+the convergence below: **GREENLIGHT — 0 symbol regressions, 0 dropped projects; every customer/src project at
+EXACT parity (symbols, references, documents), WPF Launcher included.** The only divergence is
+`ClaudeWorkbench.Host` (new over-collects) — traced entirely to a test artifact: the copy has the workbench's
+own `runtime/` per-workspace state nested under the Host project (CalculatorSample copies, validation
+snapshots). That won't exist in a customer solution; the exact parity on all other projects confirms the glob
+isn't biting real code. Test projects were excluded from the gate (not customer-facing).
+
+Done:
+- [x] **#1** `RunDotnet` deadlock/leak — concurrent drain + kill-tree (`2cd1399`).
+- [x] **#2** failed build no longer overwrites the index — `RebuildAsync` uses the build-output snapshot only
+  when `BuildSucceeded`, else falls back to the in-proc loader (`d0dc1b2`).
+- [x] **C** one build-output path for 1..N — `RebuildAsync` routes through `OpenSolutionFromBuildAsync`
+  (`ResolveAllProjects` yields `[the-one]` for a single project); deleted the single-project
+  `OpenProjectFromBuildAsync`/`BuildProjectSnapshotAsync` and their `BeforeTargets=CoreCompile` dump. The
+  per-project refs dump is `AfterTargets=ResolveReferences` (survives up-to-date builds), shared from
+  `IndexRidesBuild.WritePerProjectRefsTargetsFile` (`d0dc1b2`, `c4ab7c7`).
+- [x] **A** accept-time ride is now 1..N, not single-project — `EngineReviewWorkflow.ridesBuild` gates on
+  `ResolveAllProjects().Count>=1`; the build-after-accept emits every project's output; the reindex reads the
+  whole solution via `ReadSolutionSnapshotAsync`. No single-project and no single-file special case in the ride
+  path (`c4ab7c7`).
+
+Remaining (parity shows no measured customer-code impact; hardening, not blockers):
+- [ ] **B** the per-file `RefreshProjectFilesAsync` → `OpenProjectFilesAsync` BuildHost path is now
+  fallback-only (flag-off / failed-build); delete it when the flag flips / the old loader is removed.
+- [ ] **#3** `CollectSourceFiles` globbing — the dramatic trigger (`runtime/`) is a test artifact; still worth
+  the principled fix (evaluated `Compile` items) for `<Compile Remove>` / nested cones.
+- [ ] **#4** regex-scraped `RootNamespace` / `ProjectReference` — exact ref parity on all src projects shows
+  the literal scrape works for real projects; still worth reading from the evaluated project.
+- [ ] **single-TFM assumption** — make explicit: plural `<TargetFrameworks>` → pick first + log.
