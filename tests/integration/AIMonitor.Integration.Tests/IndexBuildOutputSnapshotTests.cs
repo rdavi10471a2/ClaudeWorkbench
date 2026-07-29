@@ -65,6 +65,29 @@ public sealed class IndexBuildOutputSnapshotTests
             && symbol.FilePath.EndsWith("CustomerList.razor", StringComparison.OrdinalIgnoreCase));
     }
 
+    // Increment 3: the self-contained entry point — give it a project path, it runs the ONE build (emit
+    // generated + harvest refs) and produces the snapshot. "index rides the build," start to finish, one call.
+    [Fact]
+    public async Task Self_contained_loader_builds_then_snapshots_from_just_a_project_path()
+    {
+        string repoRoot = FindRepositoryRoot();
+        string sampleSrc = Path.Combine(repoRoot, "samples", "watched-solutions", "BlazorSample");
+        string work = Path.Combine(Path.GetTempPath(), "AIMonitorBuildSnapshotSC", Guid.NewGuid().ToString("N"));
+        string projDir = Path.Combine(work, "BlazorSample");
+        CopyTree(sampleSrc, projDir);
+        string projectPath = Path.Combine(projDir, "BlazorSample.csproj");
+
+        BuildOutputSnapshotResult result = await new BuildOutputSnapshotLoader()
+            .OpenProjectFromBuildAsync(projectPath);
+
+        Assert.True(result.BuildSucceeded, $"build failed (exit {result.BuildExitCode}):\n{result.BuildOutput}");
+        MSBuildProjectSnapshot project = Assert.Single(result.Snapshot.Projects);
+        Assert.Contains(project.Symbols, symbol => symbol.Name == "Customer");
+        Assert.Contains(project.Symbols, symbol =>
+            symbol.Name == "LoadAsync"
+            && symbol.FilePath.EndsWith("CustomerList.razor", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static (int ExitCode, string Output) Run(string fileName, IReadOnlyList<string> args, string workingDirectory)
     {
         using Process process = new();
