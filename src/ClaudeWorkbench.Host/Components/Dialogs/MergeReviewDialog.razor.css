@@ -381,11 +381,6 @@
     padding: 8px 12px 0;
 }
 
-.staged-review-build-config {
-    font-size: 0.85rem;
-    padding: 2px 4px;
-}
-
 /* Individual toggle — alignment/padding come from the .staged-review-toggles wrapper.
    Muted + non-interactive on non-terminal files (see :has(input:disabled)). */
 .staged-review-reindex-toggle {

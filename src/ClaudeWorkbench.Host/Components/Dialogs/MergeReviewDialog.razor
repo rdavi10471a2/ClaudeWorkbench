@@ -120,28 +120,12 @@
                 <div class="staged-review-toggles">
                     <label class="staged-review-reindex-toggle"
                            title="@(IsTerminalAccept()
-                               ? "Build the accepted source in place after this accept — produces real output in each project's bin/<config> so you can run it. Uncheck for no output (and no build time). Honored on the final file."
+                               ? "Build the accepted source in place (Debug) after this accept — leaves real output in each project's bin, ready to run. Uncheck for no output (and no build time). Use the Source tab to run, or to build Release. Honored on the final file."
                                : "The build runs on the FINAL file — this toggle is only active there.")">
                         <input type="checkbox"
                                @bind="buildAfterAccept"
                                disabled="@(!IsTerminalAccept() || actionBusy)" />
                         <span>Build after accept@(IsTerminalAccept() ? string.Empty : " (set on the final file)")</span>
-                    </label>
-                    <select class="staged-review-build-config"
-                            @bind="buildConfiguration"
-                            title="Build configuration for the output"
-                            disabled="@(!IsTerminalAccept() || actionBusy || !buildAfterAccept)">
-                        <option value="Debug">Debug</option>
-                        <option value="Release">Release</option>
-                    </select>
-                    <label class="staged-review-reindex-toggle"
-                           title="@(IsTerminalAccept()
-                               ? "Launch the built executable after the build. Off by default. Requires Build after accept (you can't run what isn't built). Single-executable solutions only for now — pick from the Source tab for multi-exe."
-                               : "Run happens on the FINAL file — this toggle is only active there.")">
-                        <input type="checkbox"
-                               @bind="runAfterAccept"
-                               disabled="@(!IsTerminalAccept() || actionBusy || !buildAfterAccept)" />
-                        <span>Run</span>
                     </label>
                     <label class="staged-review-reindex-toggle"
                            title="@(IsTerminalAccept()
