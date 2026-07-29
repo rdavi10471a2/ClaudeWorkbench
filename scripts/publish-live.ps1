@@ -164,7 +164,9 @@ if (-not (Test-Path (Join-Path $sidecarOut 'dist\index.js'))) {
 #   CalculatorSample - single-project smoke fixture.
 #   MixedTfmSample   - multi-project / multi-TFM overlay test bed (net8 console + net9
 #                      WinForms + net10 Blazor + shared net8 lib).
-foreach ($sampleName in @('CalculatorSample', 'MixedTfmSample')) {
+#   BlazorSample     - Blazor app (Customer model + components + repositories) for the
+#                      Razor-generator / cross-file feature demos (LiveBlazorFeatureTests).
+foreach ($sampleName in @('CalculatorSample', 'MixedTfmSample', 'BlazorSample')) {
     $sampleSource = Join-Path $repoRoot "samples\watched-solutions\$sampleName"
     $sampleOut = Join-Path $Destination "samples\$sampleName"
     if (-not (Test-Path $sampleSource)) { continue }
