@@ -55,6 +55,11 @@ public sealed class IndexRefreshService
         }
 
         string refreshMode = useFileRefresh ? "project" : "solution";
+        CompileIndexTrace.Record(
+            settings,
+            "index-refresh.start",
+            settings.WatchedSolutionPath,
+            $"index refresh (trigger={source}, mode={refreshMode}) — in the accept flow this runs AFTER the terminal gate-build above; the index-compile.* events that follow are its OWN in-proc compile");
         logger.Write(
             MonitorLogLevel.Information,
             source,

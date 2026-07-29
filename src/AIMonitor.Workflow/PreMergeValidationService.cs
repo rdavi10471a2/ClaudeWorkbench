@@ -122,6 +122,11 @@ public sealed class PreMergeValidationService
                     File.SetLastWriteTimeUtc(validationCandidatePath, DateTime.UtcNow);
                 }
 
+                CompileIndexTrace.Record(
+                    settings,
+                    "gate-build.start",
+                    validationWorkspaceRoot,
+                    $"out-of-proc `dotnet build` on the persistent validation workspace (a mirror, NOT the real tree); candidateOverlays={candidates.Count}");
                 ProcessResult build = RunProcess(
                     "dotnet",
                     // -nodeReuse:false + UseSharedCompilation=false: don't leave MSBuild worker nodes or
@@ -134,6 +139,11 @@ public sealed class PreMergeValidationService
                 string output = string.Join(Environment.NewLine, [build.StandardOutput, build.StandardError]);
                 string[] errorDiagnostics = ExtractBuildErrors(output);
                 bool failed = build.TimedOut || build.ExitCode != 0;
+                CompileIndexTrace.Record(
+                    settings,
+                    "gate-build.done",
+                    validationWorkspaceRoot,
+                    $"exit={build.ExitCode} timedOut={build.TimedOut} errorCount={errorDiagnostics.Length}");
                 if (failed && errorDiagnostics.Length == 0)
                 {
                     errorDiagnostics = [$"dotnet build exited with code {build.ExitCode} but did not emit parseable error diagnostics."];

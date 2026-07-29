@@ -24,12 +24,23 @@ public sealed class SolutionIndexBuilder
         CancellationToken cancellationToken = default,
         Action<string, long, IReadOnlyDictionary<string, string>>? timingSink = null)
     {
+        string indexInputPath = Path.GetFullPath(settings.WatchedSolutionPath);
+        CompileIndexTrace.Record(
+            settings,
+            "index-compile.start",
+            indexInputPath,
+            "in-proc MSBuildWorkspace open — the index runs its OWN compile of the watched source tree (this is NOT the gate's out-of-proc dotnet build)");
         System.Diagnostics.Stopwatch snapshotStopwatch = System.Diagnostics.Stopwatch.StartNew();
         string extension = Path.GetExtension(settings.WatchedSolutionPath);
         MSBuildSolutionSnapshot snapshot = extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)
             ? await workspaceLoader.OpenProjectAsync(settings.WatchedSolutionPath, cancellationToken, timingSink)
             : await workspaceLoader.OpenSolutionAsync(settings.WatchedSolutionPath, cancellationToken, timingSink);
         snapshotStopwatch.Stop();
+        CompileIndexTrace.Record(
+            settings,
+            "index-compile.done",
+            indexInputPath,
+            $"in-proc compile ms={snapshotStopwatch.ElapsedMilliseconds}");
         timingSink?.Invoke(
             "index.full.snapshot",
             snapshotStopwatch.ElapsedMilliseconds,
@@ -85,6 +96,11 @@ public sealed class SolutionIndexBuilder
                 ["retainedSymbolIdentityCount"] = existingSymbolsByIdentity.Count.ToString()
             });
 
+        CompileIndexTrace.Record(
+            settings,
+            "index-file-refresh.start",
+            normalizedProjectPath,
+            $"in-proc project-scoped reload of {normalizedFilePaths.Length} file(s): {string.Join(", ", normalizedFilePaths.Select(Path.GetFileName))}");
         System.Diagnostics.Stopwatch msbuildSnapshotStopwatch = System.Diagnostics.Stopwatch.StartNew();
         MSBuildProjectFileSnapshot fileSnapshot = await workspaceLoader.OpenProjectFilesAsync(
             normalizedProjectPath,
@@ -93,6 +109,11 @@ public sealed class SolutionIndexBuilder
             cancellationToken,
             timingSink);
         msbuildSnapshotStopwatch.Stop();
+        CompileIndexTrace.Record(
+            settings,
+            "index-file-refresh.done",
+            normalizedProjectPath,
+            $"in-proc reload ms={msbuildSnapshotStopwatch.ElapsedMilliseconds} documents={fileSnapshot.Documents.Count} symbols={fileSnapshot.Symbols.Count}");
         timingSink?.Invoke(
             "index.project.msbuild-snapshot",
             msbuildSnapshotStopwatch.ElapsedMilliseconds,

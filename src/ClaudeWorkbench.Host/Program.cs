@@ -128,6 +128,19 @@ internal static class Program
         SidecarEventStream sessionStream = app.Services.GetRequiredService<SidecarEventStream>();
         Conversations.ConversationService threadService = app.Services.GetRequiredService<Conversations.ConversationService>();
         IMonitorLogger threadLogger = app.Services.GetRequiredService<IMonitorLogger>();
+
+        // Echo the compile→index provenance steps into the operator monitor log (Activity), in addition to
+        // their durable per-solution compile-index-trace.log. Wired before app.Run, so it is attached for
+        // every runtime build/index. A build/index that fires before this — or before any Blazor UI exists —
+        // still lands in the on-disk trace file; the file is the always-on record, this echo is the bonus.
+        AIMonitor.Core.CompileIndexTrace.Echo = line =>
+            threadLogger.Write(
+                MonitorLogLevel.Information,
+                "ClaudeWorkbench.Host",
+                "compile-index.step",
+                line,
+                new Dictionary<string, string>());
+
         sessionStream.SessionStarted += sessionId =>
         {
             try
