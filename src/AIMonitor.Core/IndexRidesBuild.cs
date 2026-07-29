@@ -1,23 +1,18 @@
 namespace AIMonitor.Core;
 
 /// <summary>
-/// ADR-0007 rollout switch. When <see cref="Enabled"/>, the index is a Roslyn pass over a real build's
-/// OUTPUTS (source + the build's generated <c>.g.cs</c> + its resolved reference set) rather than its own
-/// in-proc compile. Opt-in via the environment variable <c>CWB_INDEX_RIDES_BUILD</c> while the convergence
-/// rolls out side-by-side with the existing loader.
+/// ADR-0007 helper for the "index rides the build" ordering. There is no flag: the index is always a Roslyn
+/// pass over a real build's OUTPUTS (source + the build's generated <c>.g.cs</c> + its resolved reference set).
+/// The build is the single compile; the index reads it. The in-proc self-compiling loader survives only as a
+/// last resort for a watched entry that resolves to no buildable project — never as a build-failure fallback
+/// (a failed build preserves the last-good index, it does not trigger a second compile).
 ///
-/// One place to read the flag so every layer that has to agree on the ordering — the build-after-accept
+/// One place for the shared facts every layer must agree on — the build-after-accept
 /// (<c>SolutionBuildService</c>), the reindex (<c>SolutionIndexBuilder</c>), and the accept flow
-/// (<c>EngineReviewWorkflow</c>) — reads the same truth, not three drifting env checks.
+/// (<c>EngineReviewWorkflow</c>).
 /// </summary>
 public static class IndexRidesBuild
 {
-    public const string EnvironmentVariable = "CWB_INDEX_RIDES_BUILD";
-
-    /// <summary>True when the ADR-0007 build-output index path is switched on.</summary>
-    public static bool Enabled =>
-        Environment.GetEnvironmentVariable(EnvironmentVariable) is "1" or "true" or "TRUE";
-
     /// <summary>
     /// The build configuration the index (and the accept-flow build-after-accept that feeds it) always uses.
     /// The index is a single, consistent Debug-configuration view of the code; Debug/Release is a Source-tab

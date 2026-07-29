@@ -46,23 +46,37 @@ public partial class SourcePanel : IDisposable
         }
     }
 
-    // Operator Build — real output into bin/<config>; toast the outcome.
+    // Operator Build — real output into bin/<config>. On a compile error, show the errors dialog (a toast
+    // truncates a diagnostics list); on success, toast.
     private async Task OnBuildAsync(string configuration)
     {
         SolutionBuildService.BuildResult result = await Workspace.BuildAsync(configuration);
+        if (result.IsError)
+        {
+            await ShowBuildErrorsAsync($"Build ({result.Configuration}) failed.", result.Diagnostics);
+            return;
+        }
+
         Notifications.Notify(new NotificationMessage
         {
-            Severity = result.IsError ? NotificationSeverity.Error : NotificationSeverity.Success,
-            Summary = result.IsError ? "Build failed" : "Build succeeded",
-            Detail = result.IsError && result.Diagnostics.Count > 0 ? result.Diagnostics[0] : result.Message,
-            Duration = result.IsError ? 8000 : 4000,
+            Severity = NotificationSeverity.Success,
+            Summary = "Build succeeded",
+            Detail = result.Message,
+            Duration = 4000,
         });
     }
 
-    // Operator Run — build then launch the picked executable project; toast the outcome.
+    // Operator Run — build then launch the picked executable project. A build failure opens the errors dialog
+    // (nothing is launched); a successful launch toasts.
     private async Task OnRunAsync(SourceRunRequest request)
     {
         SolutionRunService.RunResult result = await Workspace.RunAsync(request.Configuration, request.ProjectPath);
+        if (result.IsError && result.BuildDiagnostics is { Count: > 0 })
+        {
+            await ShowBuildErrorsAsync(result.Message, result.BuildDiagnostics);
+            return;
+        }
+
         Notifications.Notify(new NotificationMessage
         {
             Severity = result.IsError ? NotificationSeverity.Warning : NotificationSeverity.Success,
@@ -70,6 +84,41 @@ public partial class SourcePanel : IDisposable
             Detail = result.Message,
             Duration = 5000,
         });
+    }
+
+    // Operator Rebuild Index — rides the build. On a RED build the reindex is BLOCKED and the last-good index
+    // is preserved, so show the compile errors and leave the index where it was; on green, toast.
+    private async Task OnRebuildIndexAsync()
+    {
+        AIMonitor.Data.SolutionIndexSummary? summary = await Workspace.RebuildAsync();
+        if (summary is { Built: false })
+        {
+            string[] lines = (summary.BuildError ?? string.Empty)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.TrimEnd('\r'))
+                .ToArray();
+            await ShowBuildErrorsAsync(
+                "Rebuild Index blocked — the build failed, so the index is unchanged (still the last good build).",
+                lines);
+            return;
+        }
+
+        Notifications.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Success,
+            Summary = "Index rebuilt",
+            Detail = "The solution index was refreshed from the build.",
+            Duration = 4000,
+        });
+    }
+
+    // Open the compile-errors dialog with a summary line and the diagnostics list.
+    private Task ShowBuildErrorsAsync(string summary, IReadOnlyList<string> diagnostics)
+    {
+        return Dialogs.OpenAsync<BuildErrorsDialog>(
+            "Compile errors",
+            new Dictionary<string, object> { ["Summary"] = summary, ["Diagnostics"] = diagnostics },
+            new DialogOptions { Width = "780px", Resizable = true, Draggable = true });
     }
 
     // Operator Stop — stop the app launched from here (releases its exe lock so the next Build/Run works).

@@ -28,16 +28,12 @@ public sealed class SolutionIndexBuilder
         System.Diagnostics.Stopwatch snapshotStopwatch = System.Diagnostics.Stopwatch.StartNew();
         MSBuildSolutionSnapshot? snapshot = null;
 
-        // ADR-0007, opt-in (CWB_INDEX_RIDES_BUILD=1): the index rides the build. One real build emits every
-        // project's generated files + per-project resolved refs; the index is a Roslyn pass over that output —
-        // accurate razor (from the build's .g.cs), real paths, no MSBuildWorkspace/BuildHost. ONE path for 1..N
-        // projects (review finding C): ResolveAllProjects yields [the-one] for a single project and
-        // OpenSolutionFromBuildAsync handles N>=1, so there is no single-project special case (and no divergent
-        // CoreCompile-dump path that goes empty on an up-to-date build). Flag off, 0 projects, or a FAILED build
-        // fall back to the existing in-proc loader (unchanged default).
-        IReadOnlyList<string> rideProjects = IndexRidesBuild.Enabled
-            ? WatchedSolutionInfo.ResolveAllProjects(settings.WatchedSolutionPath)
-            : [];
+        // ADR-0007: the index rides the build — ALWAYS, no flag. ResolveAllProjects yields [the-one] for a
+        // single project and OpenSolutionFromBuildAsync handles N>=1, so ONE build emits every project's
+        // generated .g.cs + per-project refs and the index READS them. The in-proc MSBuildWorkspace open
+        // survives ONLY for a watched entry that resolves to no buildable project — never as a build-failure
+        // fallback.
+        IReadOnlyList<string> rideProjects = WatchedSolutionInfo.ResolveAllProjects(settings.WatchedSolutionPath);
         if (rideProjects.Count >= 1)
         {
             CompileIndexTrace.Record(
@@ -47,35 +43,39 @@ public sealed class SolutionIndexBuilder
                 $"index rides the build (ADR-0007): whole-solution read of {rideProjects.Count} project(s) — one build emits generated + per-project refs, the index reads them");
             BuildOutputSnapshotResult buildResult = await new BuildOutputSnapshotLoader()
                 .OpenSolutionFromBuildAsync(indexInputPath, rideProjects, cancellationToken: cancellationToken);
-            if (buildResult.BuildSucceeded)
+            if (!buildResult.BuildSucceeded)
             {
-                snapshot = buildResult.Snapshot;
+                // RED BUILD → the index is GATED. Preserve the last-good snapshot untouched: no overwrite, no
+                // in-proc recompile. A failed build must never replace the index (it is the best map of what
+                // last compiled), and recompiling failed source in-proc is exactly the double-compile this
+                // ordering exists to kill. Return Built=false + the errors so the caller blocks and reports.
+                snapshotStopwatch.Stop();
                 CompileIndexTrace.Record(
                     settings,
-                    "index-from-build.done",
+                    "index-from-build.blocked",
                     indexInputPath,
-                    $"buildSucceeded=True projects={snapshot.Projects.Count} ms={snapshotStopwatch.ElapsedMilliseconds}");
+                    $"build FAILED (exit {buildResult.BuildExitCode}) — index PRESERVED (last good), NOT reindexed");
+                return new SolutionIndexSummary(
+                    indexInputPath, DateTimeOffset.MinValue, 0, 0, 0,
+                    Built: false, BuildError: ExtractBuildErrors(buildResult.BuildOutput));
             }
-            else
-            {
-                // Review #2: a failed build emits missing generated files + empty refs → a degraded snapshot.
-                // Do NOT overwrite a good index with it. Fall through to the in-proc loader, which compiles from
-                // source and tolerates errors — exactly as the accept path guards on IsError.
-                CompileIndexTrace.Record(
-                    settings,
-                    "index-from-build.failed",
-                    indexInputPath,
-                    $"build FAILED (exit {buildResult.BuildExitCode}) — falling back to in-proc compile so a transient failure does not replace the index with a degraded one");
-            }
-        }
 
-        if (snapshot is null)
+            snapshot = buildResult.Snapshot;
+            CompileIndexTrace.Record(
+                settings,
+                "index-from-build.done",
+                indexInputPath,
+                $"buildSucceeded=True projects={snapshot.Projects.Count} ms={snapshotStopwatch.ElapsedMilliseconds}");
+        }
+        else
         {
+            // No buildable project resolved (a degenerate/unreadable watched entry) — last-resort in-proc open
+            // so the index isn't simply empty. NOT a build-failure fallback.
             CompileIndexTrace.Record(
                 settings,
                 "index-compile.start",
                 indexInputPath,
-                "in-proc MSBuildWorkspace open — the index runs its OWN compile of the watched source tree (this is NOT the gate's out-of-proc dotnet build)");
+                "no buildable project resolved — last-resort in-proc MSBuildWorkspace open");
             string extension = Path.GetExtension(settings.WatchedSolutionPath);
             snapshot = extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)
                 ? await workspaceLoader.OpenProjectAsync(settings.WatchedSolutionPath, cancellationToken, timingSink)
@@ -107,6 +107,33 @@ public sealed class SolutionIndexBuilder
                 ["inputPath"] = Path.GetFullPath(settings.WatchedSolutionPath)
             });
         return summary;
+    }
+
+    // Pull the compiler/MSBuild error lines out of a failed build's output for the operator-facing message —
+    // lines in the MSBuild diagnostic format (": error "); falls back to the last several non-empty lines when
+    // none match. Deduped and capped so a wall of output stays readable in the dialog.
+    private static string ExtractBuildErrors(string buildOutput)
+    {
+        if (string.IsNullOrWhiteSpace(buildOutput))
+        {
+            return "The build failed but produced no output.";
+        }
+
+        string[] lines = buildOutput.Split('\n');
+        string[] errors = lines
+            .Select(line => line.TrimEnd('\r', ' '))
+            .Where(line => line.Contains(": error ", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .Take(40)
+            .ToArray();
+        if (errors.Length > 0)
+        {
+            return string.Join(Environment.NewLine, errors);
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            lines.Select(line => line.TrimEnd('\r')).Where(line => !string.IsNullOrWhiteSpace(line)).TakeLast(15));
     }
 
     // ADR-0007 accept path: the index reads the build-after-accept's ALREADY-produced output for the WHOLE

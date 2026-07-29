@@ -110,12 +110,15 @@ public sealed class WorkspaceManager
         Changed?.Invoke();
     }
 
-    // Initialize the current workspace's runtime state (build the solution index).
-    public async Task ProvisionAsync()
+    // Initialize the current workspace's runtime state (build the solution index). Returns the reindex
+    // summary: on a RED build the index rebuild is blocked and preserved (Built=false + BuildError), so the
+    // Source page can surface it. Background callers (startup/attach) simply ignore the returned value.
+    public async Task<AIMonitor.Data.SolutionIndexSummary> ProvisionAsync()
     {
         WorkspaceServices services = Require();
-        await new SolutionIndexRebuildService().RebuildAsync(services.Settings);
+        AIMonitor.Data.SolutionIndexSummary summary = await new SolutionIndexRebuildService().RebuildAsync(services.Settings);
         Changed?.Invoke();
+        return summary;
     }
 
     private WorkspaceServices Require()

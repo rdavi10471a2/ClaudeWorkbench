@@ -38,22 +38,13 @@ public sealed class EngineReviewRidesBuildOrderTests
 
         EngineReviewWorkflow review = new(workspace, new NullMonitorLogger());
 
-        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
-        ReviewActionResult accept;
-        try
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
-            // Terminal accept with a build-after-accept requested and the index rebuilt.
-            accept = review.Accept(
-                record.StagedRecordId,
-                forceApproveValidation: false,
-                rebuildIndex: true,
-                buildAfterAccept: true);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
-        }
+        // Terminal accept with a build-after-accept requested and the index rebuilt. The index rides the
+        // build unconditionally now (no flag), so it reads the build-after-accept's output.
+        ReviewActionResult accept = review.Accept(
+            record.StagedRecordId,
+            forceApproveValidation: false,
+            rebuildIndex: true,
+            buildAfterAccept: true);
 
         Assert.StartsWith("Accepted", accept.Message, StringComparison.Ordinal);
         Assert.Contains("rides-build", File.ReadAllText(fixture.ProgramFilePath), StringComparison.Ordinal);

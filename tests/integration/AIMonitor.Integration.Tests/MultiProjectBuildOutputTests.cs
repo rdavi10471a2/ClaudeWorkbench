@@ -66,16 +66,7 @@ public sealed class MultiProjectBuildOutputTests
             repoRoot, Path.Combine(dst, "MixedTfmSample.slnx"), Path.Combine(work, "runtime"));
 
         // Rebuild through the multi-project read so the project_references graph is persisted in the index.
-        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
-        try
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
-            new SolutionIndexRebuildService().RebuildAsync(settings).GetAwaiter().GetResult();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
-        }
+        new SolutionIndexRebuildService().RebuildAsync(settings).GetAwaiter().GetResult();
 
         SolutionIndexQueryService query = SolutionIndexQueryService.Create(settings);
 

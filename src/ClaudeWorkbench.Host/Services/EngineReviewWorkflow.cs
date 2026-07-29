@@ -300,7 +300,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // index rebuilt, a build is actually going to run (buildAfterAccept), and the watched solution
             // resolves to at least one project. One path for 1..N projects — no single-project special case.
             // Otherwise the ordering is exactly as before (the terminal Record does the index, then the build).
-            IReadOnlyList<string> rideProjects = IndexRidesBuild.Enabled && rebuildIndex && buildAfterAccept
+            IReadOnlyList<string> rideProjects = rebuildIndex && buildAfterAccept
                 ? WatchedSolutionInfo.ResolveAllProjects(workspace.Settings.WatchedSolutionPath)
                 : [];
             bool ridesBuild = rideProjects.Count >= 1;
@@ -416,12 +416,17 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                         Path.GetFullPath(workspace.Settings.WatchedSolutionPath),
                         rideProjects,
                         refreshPlan)
-                    : new IndexRefreshService().RebuildAfterAcceptedDecision(
-                        workspace.Settings,
-                        logger,
-                        record,
-                        "ClaudeWorkbench",
-                        refreshPlan);
+                    // RED build → GATE the index: do NOT reindex and never in-proc recompile. Preserve the
+                    // last-good index (best map of what last compiled) and report. The terminal gate already
+                    // validated the source, so a build-after-accept failure here is almost always environmental
+                    // (e.g. the running app locking its exe — stop it and Rebuild Index).
+                    : new PostAcceptIndexRefreshResult
+                    {
+                        Status = "blocked",
+                        RefreshMode = "build-output-read",
+                        IsError = true,
+                        Message = "Index not refreshed — the build after accept failed, so the index still reflects the last successful build. Fix the build (e.g. stop the running app if it locked its output), then Rebuild Index.",
+                    };
             }
 
             string message = writtenPaths.Count == 1

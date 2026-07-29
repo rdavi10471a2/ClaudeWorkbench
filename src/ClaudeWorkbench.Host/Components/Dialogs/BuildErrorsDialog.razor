@@ -1,0 +1,32 @@
+@namespace ClaudeWorkbench.Host.Components.Dialogs
+@inject Radzen.DialogService Dialog
+
+@* Shows compiler diagnostics from a failed Build / Run / (blocked) Rebuild Index on the Source tab.
+   A dialog, not a toast, because a compile-error list needs room and needs to be readable/selectable. *@
+<div style="display:flex;flex-direction:column;gap:12px;min-width:520px;">
+    <div style="color:#60656e;">@Summary</div>
+    <div style="max-height:52vh;overflow:auto;border:1px solid #dfe2e7;border-radius:6px;padding:10px 12px;background:#fbfcfd;">
+        @if (Diagnostics is null || Diagnostics.Count == 0)
+        {
+            <div style="font-family:Consolas,'Cascadia Mono',monospace;font-size:12.5px;color:#60656e;">
+                (no parsed diagnostics — check the build output)
+            </div>
+        }
+        else
+        {
+            @foreach (string line in Diagnostics)
+            {
+                <div style="font-family:Consolas,'Cascadia Mono',monospace;font-size:12.5px;white-space:pre-wrap;color:#c53030;padding:2px 0;">@line</div>
+            }
+        }
+    </div>
+    <div style="display:flex;justify-content:flex-end;">
+        <RadzenButton Text="Close" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small" Click="@(() => Dialog.Close())" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Summary { get; set; } = string.Empty;
+
+    [Parameter] public IReadOnlyList<string>? Diagnostics { get; set; }
+}

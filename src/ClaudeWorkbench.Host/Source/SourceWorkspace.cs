@@ -302,18 +302,21 @@ public sealed class SourceWorkspace
         }
     }
 
-    public async Task RebuildAsync()
+    // Returns the reindex summary: on a RED build the rebuild is BLOCKED (Built=false + BuildError) and the
+    // last-good index is preserved, so the Source page can show the compile errors instead of moving the index.
+    public async Task<AIMonitor.Data.SolutionIndexSummary?> RebuildAsync()
     {
         rebuilding = true;
         Changed?.Invoke();
         // Also drive the shared status so the global toolbar spinner reflects a manual
         // Source-tab rebuild, consistent with the background startup rebuild.
         using IDisposable scope = rebuildStatus.Begin();
+        AIMonitor.Data.SolutionIndexSummary? summary = null;
         try
         {
             if (workspace.HasWorkspace)
             {
-                await workspace.ProvisionAsync();
+                summary = await workspace.ProvisionAsync();
             }
         }
         finally
@@ -326,6 +329,8 @@ public sealed class SourceWorkspace
             Refresh();
             _ = ReloadTrackedFilesAsync();
         }
+
+        return summary;
     }
 
     // Operator Build: real `dotnet build` into the watched tree's own bin/<config> — the same
@@ -369,8 +374,9 @@ public sealed class SourceWorkspace
             SolutionBuildService.BuildResult build = await Task.Run(() => new SolutionBuildService().Build(workspace.Settings, configuration));
             if (build.IsError)
             {
-                string detail = build.Diagnostics.Count > 0 ? build.Diagnostics[0] : build.Message;
-                return new SolutionRunService.RunResult(true, "Build failed — " + detail, null);
+                // Carry the full diagnostics so the Source page can show them in the compile-errors dialog,
+                // not just the first line in a toast.
+                return new SolutionRunService.RunResult(true, $"Build failed ({build.Configuration}).", null, build.Diagnostics);
             }
 
             return await Task.Run(() => string.IsNullOrWhiteSpace(projectPath)

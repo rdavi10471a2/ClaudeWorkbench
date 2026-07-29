@@ -19,7 +19,7 @@ public sealed class SolutionRunService
     private static readonly object gate = new();
     private static readonly object logGate = new();
 
-    public sealed record RunResult(bool IsError, string Message, string? ExecutablePath);
+    public sealed record RunResult(bool IsError, string Message, string? ExecutablePath, IReadOnlyList<string>? BuildDiagnostics = null);
 
     public RunResult Run(MonitorSettings settings, string configuration)
     {

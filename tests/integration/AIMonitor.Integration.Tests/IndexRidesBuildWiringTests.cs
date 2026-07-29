@@ -24,20 +24,11 @@ public sealed class IndexRidesBuildWiringTests
             Path.Combine(projDir, "BlazorSample.slnx"),
             Path.Combine(work, "runtime"));
 
-        string? previous = Environment.GetEnvironmentVariable("CWB_INDEX_RIDES_BUILD");
-        try
-        {
-            Environment.SetEnvironmentVariable("CWB_INDEX_RIDES_BUILD", "1");
-            SolutionIndexSummary summary = new SolutionIndexRebuildService()
-                .RebuildAsync(settings)
-                .GetAwaiter()
-                .GetResult();
-            Assert.True(summary.ProjectCount > 0, "the build-output index built no projects");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("CWB_INDEX_RIDES_BUILD", previous);
-        }
+        SolutionIndexSummary summary = new SolutionIndexRebuildService()
+            .RebuildAsync(settings)
+            .GetAwaiter()
+            .GetResult();
+        Assert.True(summary.ProjectCount > 0, "the build-output index built no projects");
 
         // Through the real SQLite index: a .razor @code member is stored at the .razor, mapped via the build's
         // #line directives — i.e. the live index rode the build.

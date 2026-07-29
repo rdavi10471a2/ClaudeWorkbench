@@ -42,21 +42,20 @@ public sealed class SolutionBuildService
         // exactly as a normal `dotnet build` would.
         string solutionRoot = Path.GetDirectoryName(solutionPath) ?? settings.WatchedProjectFolder;
 
-        // ADR-0007: when the index rides the build, this ONE build of the whole solution ALSO emits every
-        // project's generated .g.cs and dumps each project's resolved refs into its own obj (the shared Core
-        // per-project target, AfterTargets=ResolveReferences), so the reindex READS this build's whole-solution
-        // output instead of running its own compile. No single-project special case — the emit applies to all N
-        // projects in the one build. Flag off => the build args are exactly as before.
-        string? rideTargetsFile = IndexRidesBuild.Enabled ? IndexRidesBuild.WritePerProjectRefsTargetsFile() : null;
+        // ADR-0007: the index rides the build — so EVERY build emits every project's generated .g.cs and dumps
+        // each project's resolved refs into its own obj (the shared Core per-project target,
+        // AfterTargets=ResolveReferences), so a reindex can READ this build's whole-solution output instead of
+        // running its own compile. No flag: the ordering is the behaviour. Cheap on an up-to-date build (the
+        // dump runs at ResolveReferences even when CoreCompile is skipped).
+        string rideTargetsFile = IndexRidesBuild.WritePerProjectRefsTargetsFile();
         List<string> buildArguments =
             // -nodeReuse:false: don't leave MSBuild worker nodes pinning files after the build (matches
             // the restore/validation services; see the file-locking diagnosis).
-            ["build", solutionPath, "-c", safeConfiguration, "--nologo", "-nodeReuse:false"];
-        if (rideTargetsFile is not null)
-        {
-            buildArguments.Add("-p:EmitCompilerGeneratedFiles=true");
-            buildArguments.Add($"-p:CustomAfterMicrosoftCommonTargets={rideTargetsFile}");
-        }
+            [
+                "build", solutionPath, "-c", safeConfiguration, "--nologo", "-nodeReuse:false",
+                "-p:EmitCompilerGeneratedFiles=true",
+                $"-p:CustomAfterMicrosoftCommonTargets={rideTargetsFile}"
+            ];
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         ProcessResult result = RunProcess(
@@ -66,10 +65,7 @@ public sealed class SolutionBuildService
             timeout ?? TimeSpan.FromMinutes(10));
         stopwatch.Stop();
 
-        if (rideTargetsFile is not null)
-        {
-            try { Directory.Delete(Path.GetDirectoryName(rideTargetsFile)!, recursive: true); } catch { /* best-effort */ }
-        }
+        try { Directory.Delete(Path.GetDirectoryName(rideTargetsFile)!, recursive: true); } catch { /* best-effort */ }
 
         if (result.LaunchFailed)
         {

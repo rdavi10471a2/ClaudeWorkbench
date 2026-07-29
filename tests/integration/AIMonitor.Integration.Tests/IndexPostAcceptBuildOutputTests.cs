@@ -12,21 +12,12 @@ namespace AIMonitor.Integration.Tests;
 public sealed class IndexPostAcceptBuildOutputTests
 {
     [Fact]
-    public void Build_riding_the_flag_emits_generated_and_per_project_refs_for_the_read()
+    public void Build_emits_generated_and_per_project_refs_for_the_read()
     {
         (MonitorSettings settings, string projectDir) = CopySampleAsWatchedSolution();
 
-        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
-        SolutionBuildService.BuildResult result;
-        try
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
-            result = new SolutionBuildService().Build(settings);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
-        }
+        // Every build now emits the index inputs (no flag) — the reindex reads them.
+        SolutionBuildService.BuildResult result = new SolutionBuildService().Build(settings);
 
         Assert.False(result.IsError, $"post-accept build failed: {result.Message} {string.Join(" | ", result.Diagnostics)}");
 
@@ -38,44 +29,12 @@ public sealed class IndexPostAcceptBuildOutputTests
     }
 
     [Fact]
-    public void Ordinary_build_off_flag_dumps_no_index_refs()
-    {
-        (MonitorSettings settings, string projectDir) = CopySampleAsWatchedSolution();
-
-        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
-        SolutionBuildService.BuildResult result;
-        try
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, null);
-            result = new SolutionBuildService().Build(settings);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
-        }
-
-        Assert.False(result.IsError, $"ordinary build failed: {result.Message}");
-        string objDir = Path.Combine(projectDir, "obj");
-        Assert.True(Directory.Exists(objDir), "obj should exist after a build");
-        Assert.Empty(Directory.GetFiles(objDir, IndexRidesBuild.PerProjectRefsFileName, SearchOption.AllDirectories));
-    }
-
-    [Fact]
     public async Task Read_from_the_build_output_maps_a_razor_member_to_the_razor()
     {
         (MonitorSettings settings, _) = CopySampleAsWatchedSolution();
 
-        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
-        try
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
-            SolutionBuildService.BuildResult build = new SolutionBuildService().Build(settings);
-            Assert.False(build.IsError, $"build failed: {build.Message}");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
-        }
+        SolutionBuildService.BuildResult build = new SolutionBuildService().Build(settings);
+        Assert.False(build.IsError, $"build failed: {build.Message}");
 
         // The reindex READS that output for the whole solution (here a single project) — no compile.
         IReadOnlyList<string> projects = WatchedSolutionInfo.ResolveAllProjects(settings.WatchedSolutionPath);

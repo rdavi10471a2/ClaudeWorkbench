@@ -16,7 +16,12 @@ public sealed class SolutionIndexRebuildService
         SolutionIndexStore store = new(new SolutionIndexDatabase(databasePath));
         SolutionIndexBuilder builder = new(store);
         SolutionIndexSummary summary = await builder.RebuildAsync(settings, cancellationToken, timingSink);
-        new WorkflowEditService(settings).MarkAllIndexesFresh();
+        // Red build → the index was preserved, not rewritten; do NOT mark the (now-stale) index fresh.
+        if (summary.Built)
+        {
+            new WorkflowEditService(settings).MarkAllIndexesFresh();
+        }
+
         return summary;
     }
 
@@ -35,7 +40,11 @@ public sealed class SolutionIndexRebuildService
         SolutionIndexBuilder builder = new(store);
         SolutionIndexSummary summary = await builder.RebuildFromBuildOutputAsync(
             settings, solutionPath, projectPaths, cancellationToken, timingSink);
-        new WorkflowEditService(settings).MarkAllIndexesFresh();
+        if (summary.Built)
+        {
+            new WorkflowEditService(settings).MarkAllIndexesFresh();
+        }
+
         return summary;
     }
 
