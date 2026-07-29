@@ -236,6 +236,43 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
+    [Description("Return the DECLARED project-to-project dependency edges for one project from the watched solution index, BOTH directions: the projects it references (its <ProjectReference>s), and the projects that reference IT (its dependents — the set affected by a change to it). Reads the persisted ProjectReference graph, not inferred from symbol usage, so it answers 'which projects reference X' even when no symbol crosses the boundary. Accepts a full .csproj path, a file name (Shared.csproj), or a bare project name (Shared).")]
+    public object FindProjectDependencies(
+        [Description("Project to look up: a full .csproj path, a file name like 'Shared.csproj', or a bare name like 'Shared'.")] string project)
+    {
+        runtimeState.Touch();
+        IReadOnlyList<IndexedProjectRow> projects = queryService.ListProjects();
+        IndexedProjectRow? match = ResolveProjectRow(projects, project);
+        if (match is null)
+        {
+            return new AIMonitorProjectNotFound(
+                $"No indexed project matches '{project}'.",
+                projects.Select(row => row.ProjectPath).Order(StringComparer.OrdinalIgnoreCase).ToArray());
+        }
+
+        return queryService.GetProjectDependencies(match.ProjectPath);
+    }
+
+    // Resolve a caller-supplied project identifier to an indexed project row: exact path first, then by file
+    // name (with or without the .csproj extension), then by project name. Null when nothing matches.
+    private static IndexedProjectRow? ResolveProjectRow(IReadOnlyList<IndexedProjectRow> projects, string input)
+    {
+        IndexedProjectRow? exact = projects.FirstOrDefault(row =>
+            row.ProjectPath.Equals(input, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        string fileName = Path.GetFileName(input);
+        string bareName = Path.GetFileNameWithoutExtension(input);
+        return projects.FirstOrDefault(row =>
+            Path.GetFileName(row.ProjectPath).Equals(fileName, StringComparison.OrdinalIgnoreCase)
+            || Path.GetFileNameWithoutExtension(row.ProjectPath).Equals(bareName, StringComparison.OrdinalIgnoreCase)
+            || row.Name.Equals(input, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [McpServerTool]
     [Description("Return persisted indexed invocation/object-creation call sites for one stable C# method or constructor symbol key, including caller identity.")]
     public object FindIndexedCallers(
         [Description("Stable method or constructor symbol key returned by query_solution_index, find_indexed_symbols, or get_indexed_symbol.")] string stableSymbolKey,
@@ -276,6 +313,12 @@ public sealed partial class AIMonitorTools
 // Returned by get_solution_index_tree / query_solution_index when the full payload would exceed the
 // inline token budget: the counts to orient on, the highest-symbol namespaces to drill into, and
 // exact narrower calls to run — the same "narrow, don't dump" contract get_source_map uses.
+// Returned by find_project_dependencies when the requested project is not in the index: the message plus the
+// known project paths, so the caller can pick a valid one without another round-trip.
+public sealed record AIMonitorProjectNotFound(
+    string Error,
+    IReadOnlyList<string> KnownProjects);
+
 public sealed record AIMonitorIndexOverflowEnvelope(
     bool WasTruncated,
     string Reason,

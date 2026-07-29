@@ -347,6 +347,18 @@ public sealed class SolutionIndexQueryService
         return store.ListPackageReferences();
     }
 
+    // The declared project-to-project dependency edges for one project, both directions: what it references, and
+    // which projects reference it (its dependents / the affected set for a change to it). Read from the persisted
+    // <ProjectReference> graph, not inferred from symbol usage.
+    public ProjectDependencyResult GetProjectDependencies(string projectPath)
+    {
+        SolutionIndexProbe probe = new(new SolutionIndexDatabase(DatabasePath));
+        return new ProjectDependencyResult(
+            projectPath,
+            probe.GetDeclaredProjectReferences(projectPath),
+            probe.GetDeclaredReferencingProjects(projectPath));
+    }
+
     private static bool IsStale(IndexedDocumentRow document)
     {
         if (string.IsNullOrWhiteSpace(document.ContentHash))

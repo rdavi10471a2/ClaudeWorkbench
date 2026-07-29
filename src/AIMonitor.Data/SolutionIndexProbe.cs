@@ -131,6 +131,69 @@ public sealed class SolutionIndexProbe
         return projects;
     }
 
+    // The projects the given project DECLARES a <ProjectReference> to (outbound edges), read from the persisted
+    // project_references table — the authoritative dependency graph, NOT inferred from whether a symbol happens
+    // to be used across the boundary. Returns the referenced projects' full paths.
+    public IReadOnlyList<string> GetDeclaredProjectReferences(string projectPath)
+    {
+        List<string> references = new();
+        using (SqliteConnection connection = database.OpenConnection())
+        {
+            using (SqliteCommand command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    select distinct pr.full_path
+                    from project_references pr
+                    join projects p on p.id = pr.project_id
+                    where p.project_path = $p collate nocase
+                    order by pr.full_path;
+                    """;
+                command.Parameters.AddWithValue("$p", projectPath);
+                using (SqliteDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        references.Add(reader.GetString(0));
+                    }
+                }
+            }
+        }
+
+        return references;
+    }
+
+    // The projects that DECLARE a <ProjectReference> to the given project (inbound edges) — its dependents. This
+    // is the authoritative "who depends on this" from the declared graph, and thus the set of projects affected
+    // by a change to projectPath (the scoping primitive for affected-project reindex). collate nocase because a
+    // Windows path differing only by case is the same file.
+    public IReadOnlyList<string> GetDeclaredReferencingProjects(string projectPath)
+    {
+        List<string> projects = new();
+        using (SqliteConnection connection = database.OpenConnection())
+        {
+            using (SqliteCommand command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    select distinct rp.project_path
+                    from project_references pr
+                    join projects rp on rp.id = pr.project_id
+                    where pr.full_path = $p collate nocase
+                    order by rp.project_path;
+                    """;
+                command.Parameters.AddWithValue("$p", projectPath);
+                using (SqliteDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        projects.Add(reader.GetString(0));
+                    }
+                }
+            }
+        }
+
+        return projects;
+    }
+
     // Row counts per table, for sanity assertions in the suite (symbols/references/call_sites/relationships/documents/projects).
     public SolutionIndexCounts GetCounts()
     {
@@ -157,6 +220,12 @@ public sealed class SolutionIndexProbe
 }
 
 public sealed record ReferenceKindCount(string Kind, int Count);
+
+// The declared project-to-project dependency edges for one project, both directions.
+public sealed record ProjectDependencyResult(
+    string ProjectPath,
+    IReadOnlyList<string> References,
+    IReadOnlyList<string> ReferencedBy);
 
 public sealed record SolutionIndexCounts(
     int Projects,

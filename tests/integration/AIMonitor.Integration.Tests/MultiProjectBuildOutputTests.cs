@@ -1,4 +1,6 @@
 using AIMonitor.Core;
+using AIMonitor.Data;
+using AIMonitor.Indexing;
 using AIMonitor.MSBuild;
 
 namespace AIMonitor.Integration.Tests;
@@ -50,6 +52,45 @@ public sealed class MultiProjectBuildOutputTests
             .FirstOrDefault(reference => reference.TargetStableKey == greet.StableKey
                 && !reference.FilePath.Replace('/', '\\').Contains("\\Shared\\", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(crossProjectReference);
+    }
+
+    [Fact]
+    public void Declared_project_dependencies_answer_who_references_shared_from_the_index()
+    {
+        string repoRoot = FindRepositoryRoot();
+        string sampleSrc = Path.Combine(repoRoot, "samples", "watched-solutions", "MixedTfmSample");
+        string work = Path.Combine(Path.GetTempPath(), "AIMonitorProjDeps", Guid.NewGuid().ToString("N"));
+        string dst = Path.Combine(work, "MixedTfmSample");
+        CopyTree(sampleSrc, dst);
+        MonitorSettings settings = MonitorSettings.Create(
+            repoRoot, Path.Combine(dst, "MixedTfmSample.slnx"), Path.Combine(work, "runtime"));
+
+        // Rebuild through the multi-project read so the project_references graph is persisted in the index.
+        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
+            new SolutionIndexRebuildService().RebuildAsync(settings).GetAwaiter().GetResult();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
+        }
+
+        SolutionIndexQueryService query = SolutionIndexQueryService.Create(settings);
+
+        // Inbound: the three consumers all DECLARE a ProjectReference to Shared — the affected set for a Shared change.
+        ProjectDependencyResult sharedDeps = query.GetProjectDependencies(
+            Path.GetFullPath(Path.Combine(dst, "Shared", "Shared.csproj")));
+        Assert.Contains(sharedDeps.ReferencedBy, p => p.EndsWith("ConsoleApp.csproj", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(sharedDeps.ReferencedBy, p => p.EndsWith("WinFormsApp.csproj", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(sharedDeps.ReferencedBy, p => p.EndsWith("BlazorApp.csproj", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(sharedDeps.References); // Shared references nobody
+
+        // Outbound: ConsoleApp references Shared.
+        ProjectDependencyResult consoleDeps = query.GetProjectDependencies(
+            Path.GetFullPath(Path.Combine(dst, "ConsoleApp", "ConsoleApp.csproj")));
+        Assert.Contains(consoleDeps.References, p => p.EndsWith("Shared.csproj", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void CopyTree(string source, string destination)
