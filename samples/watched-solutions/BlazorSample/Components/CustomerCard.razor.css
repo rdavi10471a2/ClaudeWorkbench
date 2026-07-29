@@ -1,0 +1,9 @@
+.customer-card {
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+.customer-card .id {
+    color: #656d76;
+}

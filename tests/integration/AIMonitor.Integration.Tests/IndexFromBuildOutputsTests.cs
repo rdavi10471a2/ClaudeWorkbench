@@ -93,6 +93,17 @@ public sealed class IndexFromBuildOutputsTests
         INamedTypeSymbol? razorComponent = compilation.GetTypeByMetadataName("BlazorSample.Components.CustomerList");
         Assert.NotNull(customerModel);
         Assert.NotNull(razorComponent);
+
+        // Proper Razor discipline: a component split across markup (.razor) + code-behind (.razor.cs) +
+        // scoped styles (.razor.css). The index must merge the generated markup partial with the
+        // code-behind partial into ONE type (with the code-behind's [Parameter]), and the build must have
+        // processed the scoped CSS into its isolation artifact.
+        INamedTypeSymbol? disciplinedComponent = compilation.GetTypeByMetadataName("BlazorSample.Components.CustomerCard");
+        Assert.NotNull(disciplinedComponent);
+        Assert.Contains(disciplinedComponent!.GetMembers(), member => member.Name == "Customer"); // code-behind [Parameter]
+
+        string[] scopedCssArtifacts = Directory.GetFiles(projDir, "*.rz.scp.css", SearchOption.AllDirectories);
+        Assert.NotEmpty(scopedCssArtifacts); // CustomerCard.razor.css was isolated by the build
     }
 
     private static (int ExitCode, string Output) Run(string fileName, IReadOnlyList<string> args, string workingDirectory)
