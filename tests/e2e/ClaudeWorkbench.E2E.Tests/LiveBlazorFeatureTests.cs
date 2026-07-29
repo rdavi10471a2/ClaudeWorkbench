@@ -34,11 +34,22 @@ public sealed class LiveBlazorFeatureTests : IClassFixture<PlaywrightFixture>
     // A real, multi-file feature request — deliberately phrased as a user would, letting the agent design
     // the files. It forces a model change + a NEW Razor component + service wiring, so the plan-complete
     // build must resolve new members through the generated Razor code across the project graph.
-    private const string FeaturePrompt =
-        "Add a customer directory feature to this Blazor app. Give the Customer model an Email property, " +
-        "add a way to list all customers from the customer repository/service, and create a NEW Razor " +
-        "component that renders the customer list as a simple table of Name and Email. Wire the component " +
-        "so it renders on a page. Make sure the whole solution still builds.";
+    // The feature to build. Defaults to the customer-directory feature; override with
+    // AIMW_E2E_BLAZOR_PROMPT to drive a different feature (e.g. to re-run against a workspace that already
+    // has the directory, so there is real work to stage).
+    private static string FeaturePrompt =>
+        Environment.GetEnvironmentVariable("AIMW_E2E_BLAZOR_PROMPT") is { Length: > 0 } custom
+            ? custom
+            : "Add a customer directory feature to this Blazor app. Give the Customer model an Email property, "
+              + "add a way to list all customers from the customer repository/service, and create a NEW Razor "
+              + "component that renders the customer list as a simple table of Name and Email. Wire the component "
+              + "so it renders on a page. Make sure the whole solution still builds.";
+
+    // Second turn, run AFTER the accept has rebuilt the index: make the agent query the FRESH index. If the
+    // post-accept rebuild produced a usable index, find-references resolves against the just-accepted code.
+    private const string FindReferencesPrompt =
+        "Now, using the solution index, find all references to the CustomerService class across the solution "
+        + "and list each call site (file and line). This is read-only — do not edit anything.";
 
     private readonly PlaywrightFixture fixture;
     private readonly Xunit.Abstractions.ITestOutputHelper output;
@@ -100,6 +111,19 @@ public sealed class LiveBlazorFeatureTests : IClassFixture<PlaywrightFixture>
         {
             output.WriteLine("AIMW_E2E_ACCEPT=1 — resolving Merge Review (accepting each staged file)...");
             await ResolveReviewAsync(page);
+
+            // The accept rebuilt the index. Second turn: make the agent query that FRESH index — find
+            // references via the index the accept just produced. You watch it resolve against the code it
+            // only just wrote. (find_indexed_references is read-only, so no approval gate.)
+            output.WriteLine("Accept + index rebuild done — second turn: find references via the fresh index...");
+            await Assertions.Expect(composer).ToBeEditableAsync(new LocatorAssertionsToBeEditableOptions { Timeout = 30_000 });
+            await composer.FillAsync(FindReferencesPrompt);
+            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Submit Turn" }).ClickAsync();
+
+            await Assertions.Expect(activity).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
+            await Assertions.Expect(activity).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 300_000 });
+            await Assertions.Expect(composer).ToBeEditableAsync(new LocatorAssertionsToBeEditableOptions { Timeout = 15_000 });
+            output.WriteLine("Find-references turn complete (queried the post-accept index).");
         }
         else
         {

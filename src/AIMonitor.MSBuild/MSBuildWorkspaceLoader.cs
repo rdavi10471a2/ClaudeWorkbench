@@ -1854,6 +1854,9 @@ internal sealed class RazorDocumentIndex
                 sourceText,
                 generatedTree,
                 csharpDocument.SourceMappings);
+            // Echo the generated-Razor source the index just parsed, so the operator can see (in Activity /
+            // the compile-index trace) that the index is a Roslyn compilation over source + generated Razor.
+            AIMonitor.Core.CompileIndexTrace.Echo?.Invoke($"index: parsed generated Razor from {filePath}");
             return true;
         }
         catch
