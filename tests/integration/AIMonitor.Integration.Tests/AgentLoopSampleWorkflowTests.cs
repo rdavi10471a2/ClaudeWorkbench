@@ -1,4 +1,5 @@
 using AIMonitor.Core;
+using AIMonitor.Indexing;
 using AIMonitor.Workflow;
 
 namespace AIMonitor.Integration.Tests;
@@ -377,6 +378,81 @@ public sealed class AgentLoopSampleWorkflowTests
         Assert.False(repairedCross.IsError);
     }
 
+    [Fact]
+    [Trait("Suite", "AgentLoop")]
+    public void Cross_project_complex_edit_trace_proves_compile_and_index_paths_and_order()
+    {
+        // The agent asks for a COMPLEX cross-project edit (spans Shared.dll + ConsoleApp.dll), then we REVIEW
+        // the compile→index provenance trace to prove, from one file, (a) which path each compile actually read
+        // and (b) that the index compile runs after the gate build — the two facts that were previously argued
+        // from memory. This drives the REAL trace-emitting code: the gate build (PreMergeValidationService) and
+        // the index build (SolutionIndexBuilder via SolutionIndexRebuildService).
+        AgentLoop loop = AgentLoop.ForSample("MixedTfmSample", "MixedTfmSample.slnx", "trace-cross-project");
+        string sharedPath = loop.WatchedFile(Path.Combine("Shared", "SharedGreeter.cs"));
+        string consumerPath = loop.WatchedFile(Path.Combine("ConsoleApp", "Program.cs"));
+        loop.Refresh(sharedPath);
+        loop.Refresh(consumerPath);
+
+        // A cross-assembly change in ONE plan: add Farewell to Shared.dll AND call it from ConsoleApp.dll.
+        loop.Submit(sharedPath, """
+            namespace Shared;
+
+            public static class SharedGreeter
+            {
+                public static string Greet(string name) => $"Hello, {name}, from Shared (net8.0).";
+
+                public static string Farewell(string name) => $"Goodbye, {name}, from Shared (net8.0).";
+            }
+            """);
+        loop.Submit(consumerPath, """
+            using Shared;
+
+            namespace ConsoleApp;
+
+            internal static class Program
+            {
+                private static void Main()
+                {
+                    System.Console.WriteLine(SharedGreeter.Greet("console (net8.0)"));
+                    System.Console.WriteLine(SharedGreeter.Farewell("console (net8.0)"));
+                }
+            }
+            """);
+
+        // 1) Plan-complete GATE build — the real out-of-proc dotnet build on the persistent validation
+        //    workspace (a mirror). Emits gate-build.start / gate-build.done.
+        PreMergeValidationResult build = loop.PlanCompleteBuild(sharedPath, consumerPath);
+        Assert.Equal("passed", build.Status);
+        Assert.False(build.IsError);
+
+        // 2) INDEX build — the in-proc MSBuildWorkspace compile of the REAL watched tree, exactly as the
+        //    post-accept reindex runs it (after, and independent of, the gate build). Emits index-compile.*.
+        loop.BuildIndex();
+
+        // 3) REVIEW THE TRACE — the whole point. Also dumped to TRACE.md next to the scenario output.
+        loop.WriteTraceReview();
+        string[] lines = loop.ReadTraceLines();
+        Assert.NotEmpty(lines);
+
+        string realSolution = Path.GetFullPath(loop.WatchedFile("MixedTfmSample.slnx"));
+
+        // Fact A — the paths: the gate built the MIRROR (validation-workspace), the index compiled the REAL tree.
+        Assert.Contains(lines, line => line.Contains("gate-build.start") && line.Contains("validation-workspace"));
+        Assert.Contains(lines, line => line.Contains("gate-build.done"));
+        Assert.Contains(lines, line => line.Contains("index-compile.start") && line.Contains(realSolution, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(lines, line => line.Contains("index-compile.done"));
+
+        // They are DIFFERENT trees — the index never compiles the mirror, the gate never compiles the real tree.
+        Assert.DoesNotContain(lines, line => line.Contains("index-compile.start") && line.Contains("validation-workspace"));
+
+        // Fact B — the order: the gate build completes before the index compile starts (the two-compile reality).
+        int gateDone = Array.FindIndex(lines, line => line.Contains("gate-build.done"));
+        int indexStart = Array.FindIndex(lines, line => line.Contains("index-compile.start"));
+        Assert.True(gateDone >= 0, "trace must contain gate-build.done");
+        Assert.True(indexStart >= 0, "trace must contain index-compile.start");
+        Assert.True(gateDone < indexStart, "gate-build.done must appear before index-compile.start");
+    }
+
     // Drives the real edit loop against a copied sample and preserves code + workflow files for review.
     private sealed class AgentLoop
     {
@@ -444,6 +520,41 @@ public sealed class AgentLoopSampleWorkflowTests
         public PreMergeValidationResult PlanCompleteBuild(params string[] watchedFilePaths)
         {
             return service.ValidatePlannedOverlayBuild(watchedFilePaths.Select(Path.GetFullPath).ToList());
+        }
+
+        // The in-proc index compile of the real watched tree — the same path the post-accept reindex runs.
+        public void BuildIndex()
+        {
+            new SolutionIndexRebuildService().RebuildAsync(settings).GetAwaiter().GetResult();
+        }
+
+        public string TraceFilePath => CompileIndexTrace.GetTraceFilePath(settings);
+
+        public string[] ReadTraceLines()
+        {
+            return File.Exists(TraceFilePath)
+                ? File.ReadAllLines(TraceFilePath)
+                : [];
+        }
+
+        // Preserve the trace next to the scenario output so a human can read the same evidence the test asserts on.
+        public void WriteTraceReview()
+        {
+            System.Text.StringBuilder sb = new();
+            sb.AppendLine("# Compile→index provenance trace (agent-loop e2e review)");
+            sb.AppendLine();
+            sb.AppendLine($"- Trace file: `{TraceFilePath}`");
+            sb.AppendLine("- gate-build.* = out-of-proc dotnet build on the persistent validation workspace (mirror).");
+            sb.AppendLine("- index-compile.* = in-proc MSBuildWorkspace compile of the real watched tree.");
+            sb.AppendLine();
+            sb.AppendLine("```");
+            foreach (string line in ReadTraceLines())
+            {
+                sb.AppendLine(line);
+            }
+
+            sb.AppendLine("```");
+            File.WriteAllText(Path.Combine(OutputRoot, "TRACE.md"), sb.ToString());
         }
 
         private void Track(string watchedFilePath)
