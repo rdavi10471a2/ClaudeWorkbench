@@ -6,6 +6,13 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Modern DPI + typography. PerMonitorV2 matches app.manifest (so the process isn't
+         bitmap-stretched/blurred on high-DPI monitors and rescales when moved between them);
+         ApplicationConfiguration.Initialize() reads these and applies them at startup. The
+         default WinForms font is still Microsoft Sans Serif 8.25pt for back-compat — opt into
+         Segoe UI 9pt so every form matches the OS and scales cleanly under AutoScaleMode.Font. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
     <RootNamespace>ClaudeWorkbench.Launcher</RootNamespace>
     <AssemblyName>ClaudeWorkbench.Launcher</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>

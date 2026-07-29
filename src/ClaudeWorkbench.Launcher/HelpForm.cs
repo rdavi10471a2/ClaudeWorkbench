@@ -56,13 +56,15 @@ public sealed class HelpForm : Form
 
     public HelpForm()
     {
+        UiTheme.ApplyForm(this);
+
         Text = "ClaudeWorkbench Launcher — Help";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = false;
         MaximizeBox = false;
-        ClientSize = new Size(680, 460);
-        MinimumSize = new Size(520, 360);
+        ClientSize = new Size(700, 480);
+        MinimumSize = new Size(540, 380);
 
         TextBox body = new()
         {
@@ -73,19 +75,24 @@ public sealed class HelpForm : Form
             Dock = DockStyle.Fill,
             Text = HelpText,
             Font = new Font("Segoe UI", 9.5f),
-            BackColor = SystemColors.Window,
+            BackColor = UiTheme.Surface,
+            ForeColor = UiTheme.TextPrimary,
             Margin = new Padding(0),
         };
         body.Select(0, 0);
 
-        Panel host = new() { Dock = DockStyle.Fill, Padding = new Padding(14), BackColor = SystemColors.Window };
+        Panel host = new() { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = UiTheme.Surface };
         host.Controls.Add(body);
 
-        FlowLayoutPanel buttons = new() { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = 44, Padding = new Padding(8) };
-        Button close = new() { Text = "Close", DialogResult = DialogResult.OK, Width = 88 };
+        Panel separator = new() { Dock = DockStyle.Bottom, Height = 1, BackColor = UiTheme.Border };
+
+        FlowLayoutPanel buttons = new() { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(10) };
+        Button close = UiTheme.MakeButton("Close", primary: true);
+        close.DialogResult = DialogResult.OK;
         buttons.Controls.Add(close);
 
         Controls.Add(host);
+        Controls.Add(separator);
         Controls.Add(buttons);
         AcceptButton = close;
         CancelButton = close;
