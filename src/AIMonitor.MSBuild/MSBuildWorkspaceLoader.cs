@@ -1696,12 +1696,14 @@ internal sealed class RazorDocumentIndex
         string filePath,
         SourceText sourceText,
         SyntaxTree generatedTree,
-        IReadOnlyList<SourceMapping> mappings)
+        IReadOnlyList<SourceMapping> mappings,
+        bool mapViaLineDirectives = false)
     {
         FilePath = filePath;
         SourceText = sourceText;
         GeneratedTree = generatedTree;
         Mappings = mappings;
+        MapViaLineDirectives = mapViaLineDirectives;
     }
 
     public string FilePath { get; }
@@ -1711,6 +1713,11 @@ internal sealed class RazorDocumentIndex
     public SyntaxTree GeneratedTree { get; }
 
     private IReadOnlyList<SourceMapping> Mappings { get; }
+
+    // When the generated C# came from the SDK build (BuildFromGeneratedFiles), it carries `#line (l,c)-(l,c)
+    // "<source>.razor"` span directives, so mapping goes through Roslyn's GetMappedLineSpan instead of the
+    // engine's SourceMapping list. See ADR-0007.
+    private bool MapViaLineDirectives { get; }
 
     public static IReadOnlyList<RazorDocumentIndex> BuildForProject(
         Microsoft.CodeAnalysis.Project project,
@@ -1749,6 +1756,60 @@ internal sealed class RazorDocumentIndex
             .ToArray();
     }
 
+    // ADR-0007: build razor documents from the SDK's ALREADY-EMITTED generated C# instead of the standalone
+    // default engine above. A real `dotnet build -p:EmitCompilerGeneratedFiles=true` writes these under
+    // obj/.../generated/...RazorSourceGenerator. They are ACCURATE (generated in-compile with the full
+    // reference set + tag-helper discovery, so component composition resolves) and column-precise (each file
+    // carries `#line (l,c)-(l,c) "<source>.razor"` span directives), unlike the context-free default engine.
+    // Mapping back to the .razor is free via GetMappedLineSpan (see TryMapGeneratedSpan's MapViaLineDirectives
+    // path). The .razor source path is recovered from the file's `#pragma checksum "...razor"` header.
+    public static IReadOnlyList<RazorDocumentIndex> BuildFromGeneratedFiles(
+        string generatedRoot,
+        CSharpParseOptions parseOptions)
+    {
+        if (string.IsNullOrWhiteSpace(generatedRoot) || !Directory.Exists(generatedRoot))
+        {
+            return [];
+        }
+
+        List<RazorDocumentIndex> documents = [];
+        foreach (string generatedFile in Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.AllDirectories))
+        {
+            try
+            {
+                string generatedCode = File.ReadAllText(generatedFile);
+                string? sourceRazorPath = ExtractRazorSourcePath(generatedCode);
+                if (sourceRazorPath is null || !File.Exists(sourceRazorPath))
+                {
+                    continue; // not a razor-generated file (e.g. the SDK's PublicTopLevelProgram)
+                }
+
+                SourceText sourceText = SourceText.From(File.ReadAllText(sourceRazorPath));
+                SyntaxTree generatedTree = CSharpSyntaxTree.ParseText(generatedCode, parseOptions, path: generatedFile);
+                documents.Add(new RazorDocumentIndex(sourceRazorPath, sourceText, generatedTree, [], mapViaLineDirectives: true));
+            }
+            catch
+            {
+                // Best-effort per file: a malformed generated file must not sink the whole project's index.
+            }
+        }
+
+        return documents
+            .OrderBy(document => document.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    // The source .razor path the SDK stamps into the generated file's checksum header:
+    //   #pragma checksum "C:\...\Foo.razor" "{guid}" "hash"
+    private static string? ExtractRazorSourcePath(string generatedCode)
+    {
+        System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(
+            generatedCode,
+            "#pragma checksum \"([^\"]+\\.(?:razor|cshtml))\"",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
     public static bool IsHybridRazorFile(string filePath)
     {
         if (!filePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase) || !File.Exists(filePath))
@@ -1761,6 +1822,24 @@ internal sealed class RazorDocumentIndex
 
     public bool TryMapGeneratedSpan(TextSpan generatedSpan, out FileLinePositionSpan originalSpan)
     {
+        if (MapViaLineDirectives)
+        {
+            // The generated C# from the build carries #line span directives back to the .razor. Roslyn
+            // resolves them: a span inside a mapped region reports the .razor path + line/col; a span outside
+            // any #line region reports no mapped path (generated-only, e.g. framework scaffolding) and is skipped.
+            FileLinePositionSpan mapped = GeneratedTree.GetMappedLineSpan(generatedSpan);
+            if (mapped.HasMappedPath
+                && (mapped.Path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase)
+                    || mapped.Path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase)))
+            {
+                originalSpan = mapped;
+                return true;
+            }
+
+            originalSpan = default;
+            return false;
+        }
+
         foreach (SourceMapping mapping in Mappings)
         {
             int generatedStart = mapping.GeneratedSpan.AbsoluteIndex;

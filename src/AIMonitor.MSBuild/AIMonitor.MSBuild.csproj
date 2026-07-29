@@ -19,4 +19,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- ADR-0007 convergence pieces (RazorDocumentIndex.BuildFromGeneratedFiles, etc.) are internal;
+         let the integration suite verify them directly. -->
+    <InternalsVisibleTo Include="AIMonitor.Integration.Tests" />
+  </ItemGroup>
+
 </Project>
