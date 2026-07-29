@@ -384,6 +384,14 @@ public sealed class SourceWorkspace
         }
     }
 
+    // Operator Stop: stop the app the Source-tab Run launched — no build, no relaunch. Releases the running
+    // process (and the exe lock it holds) so the next Build/Run isn't blocked. Covers the "I ran it, now stop
+    // it" flow via the run service's tracked handle.
+    public Task<SolutionRunService.RunResult> StopRunAsync()
+    {
+        return Task.Run(() => new SolutionRunService().Stop());
+    }
+
     private void Refresh()
     {
         current = BuildSnapshot(selectedPath, selectedLine, filter);

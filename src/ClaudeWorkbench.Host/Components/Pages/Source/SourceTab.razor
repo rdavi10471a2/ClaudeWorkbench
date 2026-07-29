@@ -75,6 +75,12 @@
                           Title="Build and launch the selected executable project"
                           Click="@RunSelected"
                           Disabled="@(IsBuilding || Snapshot.RunnableProjects.Count == 0)" />
+            <RadzenButton Icon="stop"
+                          Text="Stop"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Title="Stop the app launched from here (releases its exe lock so the next Build/Run works)"
+                          Click="@Stop" />
         </div>
         <div class="source-top-right">
             <RadzenButton Icon="add"
@@ -228,6 +234,9 @@
 
     [Parameter]
     public EventCallback<SourceRunRequest> Run { get; set; }
+
+    [Parameter]
+    public EventCallback Stop { get; set; }
 
     [Parameter]
     public bool IsBuilding { get; set; }

@@ -72,6 +72,19 @@ public partial class SourcePanel : IDisposable
         });
     }
 
+    // Operator Stop — stop the app launched from here (releases its exe lock so the next Build/Run works).
+    private async Task OnStopAsync()
+    {
+        SolutionRunService.RunResult result = await Workspace.StopRunAsync();
+        Notifications.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Info,
+            Summary = "Stop",
+            Detail = result.Message,
+            Duration = 4000,
+        });
+    }
+
     private void OnChanged()
     {
         InvokeAsync(StateHasChanged);

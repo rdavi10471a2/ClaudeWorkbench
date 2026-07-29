@@ -65,6 +65,21 @@ public sealed class SolutionRunService
         return LaunchProject(Path.GetFullPath(projectPath), config, solutionRoot, settings);
     }
 
+    // Stop the app THIS host session launched (if any), without relaunching — the Source tab's Stop button.
+    // Dev-tooling: it kills the tracked child process tree, so it works for ANY app type (console/WinForms/
+    // Kestrel web) with no cooperation from the app — nothing ships into the watched code. Reaches only an
+    // instance launched in this process (the handle is in-memory static state); an orphan from a prior host
+    // session is not tracked here and must be ended by the OS.
+    public RunResult Stop()
+    {
+        lock (gate)
+        {
+            bool wasRunning = lastLaunched is { HasExited: false };
+            StopLastLaunched();
+            return new RunResult(false, wasRunning ? "Stopped the running app." : "Nothing was running.", null);
+        }
+    }
+
     // Start `project` detached, stopping any previously launched instance first. Shared by Run()
     // (single auto-detected project) and RunProject() (operator-picked). Web apps go through
     // `dotnet run` (see LaunchWebProject); console/WinForms apps run their built exe directly.
