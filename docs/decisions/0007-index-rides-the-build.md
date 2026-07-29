@@ -210,6 +210,15 @@ More done:
 - [x] **#4** `RootNamespace` + `<ProjectReference>` graph read from the evaluated project, not regex; deleted
   `ReadRootNamespace`/`ParseProjectReferences` (`8879418`).
 
+Even more done:
+- [x] **index configuration is Debug by design.** The index (and the accept-flow build-after-accept that
+  feeds it) always builds `IndexRidesBuild.IndexBuildConfiguration` (`"Debug"`) — one consistent view of the
+  code. This closes a latent build/read asymmetry from the A fix (the build took a caller config while the
+  read defaulted to Debug — a `Release` accept would have read `obj/Debug`). `IReviewWorkflow.Accept` now takes
+  `bool buildAfterAccept` instead of `string? buildConfiguration`; the merge dialog passes a yes/no and no
+  longer knows configurations exist. Debug/Release is a **Source-tab-only** concern (build/run the app to
+  test), which never feeds the index. Caveat (accepted): `#if RELEASE`-only code is not indexed.
+
 Remaining (hardening, not blockers):
 - [ ] **B** the per-file `RefreshProjectFilesAsync` → `OpenProjectFilesAsync` BuildHost path is now
   fallback-only (flag-off / failed-build); delete it when the flag flips / the old loader is removed.

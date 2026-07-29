@@ -43,12 +43,12 @@ public sealed class EngineReviewRidesBuildOrderTests
         try
         {
             Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
-            // Terminal accept with a build-after-accept requested (buildConfiguration set) and the index rebuilt.
+            // Terminal accept with a build-after-accept requested and the index rebuilt.
             accept = review.Accept(
                 record.StagedRecordId,
                 forceApproveValidation: false,
                 rebuildIndex: true,
-                buildConfiguration: "Debug");
+                buildAfterAccept: true);
         }
         finally
         {

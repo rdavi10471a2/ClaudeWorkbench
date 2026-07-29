@@ -19,6 +19,14 @@ public static class IndexRidesBuild
         Environment.GetEnvironmentVariable(EnvironmentVariable) is "1" or "true" or "TRUE";
 
     /// <summary>
+    /// The build configuration the index (and the accept-flow build-after-accept that feeds it) always uses.
+    /// The index is a single, consistent Debug-configuration view of the code; Debug/Release is a Source-tab
+    /// concern (build/run the app to test it), which never feeds the index. Kept here so the build-for-index
+    /// and the read of its output can never diverge on configuration.
+    /// </summary>
+    public const string IndexBuildConfiguration = "Debug";
+
+    /// <summary>
     /// Per-project reference dump file, written into each project's own obj so nothing clobbers. The build
     /// writes it; the index reads it. One name shared by the build-after-accept and the index loader.
     /// </summary>

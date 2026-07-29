@@ -19,18 +19,19 @@ public interface IReviewWorkflow
     // the files still write, but the index goes stale until the next reindex — for tight
     // single-file/markup loops where the cross-file graph isn't needed yet.
     //
-    // buildConfiguration, when non-null (e.g. "Debug"/"Release"), runs a real in-place
-    // `dotnet build` after the terminal accept so the watched tree's own bin/<config> holds a
-    // runnable artifact. Null = no build (the default; the programmatic/agent accept path never
-    // builds). Best-effort: the source is already written, so a build failure is reported, not
-    // rolled back. Sequenced after the reindex (they run serially — no MSBuild handle contention).
-    // runAfterAccept launches the built executable after a successful build (requires buildConfiguration
-    // non-null — you can't run what wasn't built). Off by default. Operator-only.
+    // buildAfterAccept, when true, runs a real in-place `dotnet build` after the terminal accept so the
+    // watched tree's own bin holds a runnable artifact. The configuration is not the caller's to choose —
+    // it is always Debug (IndexRidesBuild.IndexBuildConfiguration); Debug/Release lives on the Source tab,
+    // which owns build/run of the app and never feeds the index. False = no build (the default; the
+    // programmatic/agent accept path never builds). Best-effort: the source is already written, so a build
+    // failure is reported, not rolled back. Sequenced after the reindex (they run serially — no MSBuild
+    // handle contention). runAfterAccept launches the built executable after a successful build (requires
+    // buildAfterAccept — you can't run what wasn't built). Off by default. Operator-only.
     ReviewActionResult Accept(
         string stagedRecordId,
         bool forceApproveValidation,
         bool rebuildIndex = true,
-        string? buildConfiguration = null,
+        bool buildAfterAccept = false,
         bool runAfterAccept = false);
 
     ReviewActionResult Reject(string stagedRecordId);

@@ -75,7 +75,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         return Load(next.StagedRecordId);
     }
 
-    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, string? buildConfiguration = null, bool runAfterAccept = false)
+    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, bool buildAfterAccept = false, bool runAfterAccept = false)
     {
         StagedEditRecord record = workspace.EditService.GetStagedRecord(stagedRecordId);
         EnsureValidatedAndLaunched(record);
@@ -297,10 +297,10 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // ADR-0007: when the index rides the build, the reindex must run AFTER the build-after-accept so it
             // can READ that build's whole-solution output (every project's generated .g.cs + per-project refs)
             // instead of compiling its own — the no-3-builds order. Gated to: flag on, the operator wants the
-            // index rebuilt, a build is actually going to run (buildConfiguration set), and the watched solution
+            // index rebuilt, a build is actually going to run (buildAfterAccept), and the watched solution
             // resolves to at least one project. One path for 1..N projects — no single-project special case.
             // Otherwise the ordering is exactly as before (the terminal Record does the index, then the build).
-            IReadOnlyList<string> rideProjects = IndexRidesBuild.Enabled && rebuildIndex && buildConfiguration is not null
+            IReadOnlyList<string> rideProjects = IndexRidesBuild.Enabled && rebuildIndex && buildAfterAccept
                 ? WatchedSolutionInfo.ResolveAllProjects(workspace.Settings.WatchedSolutionPath)
                 : [];
             bool ridesBuild = rideProjects.Count >= 1;
@@ -339,11 +339,12 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // was just accepted. A capability call (SolutionBuildService) invoked here as a step in the
             // accept flow — best-effort: the source is already written and indexed, so a build failure is
             // reported as a note, never a rollback. Runs AFTER the reindex (they're sequential, so no
-            // concurrent MSBuild handles contend on the watched tree). Skipped when buildConfiguration is
-            // null (operator unchecked "Build after accept", or a programmatic/agent accept).
+            // concurrent MSBuild handles contend on the watched tree). Skipped when buildAfterAccept is
+            // false (operator unchecked "Build after accept", or a programmatic/agent accept). The
+            // configuration is always Debug — the index's single consistent view; Release lives on the Source tab.
             string buildNote = string.Empty;
             SolutionBuildService.BuildResult? postAcceptBuild = null;
-            if (buildConfiguration is not null)
+            if (buildAfterAccept)
             {
                 bool buildSucceeded = false;
                 try
@@ -355,7 +356,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                         ridesBuild
                             ? "build-after-accept (ADR-0007): the ONE real build — emits generated + refs; the index reads its output next"
                             : "build-after-accept: real dotnet build of the watched solution for runnable output");
-                    postAcceptBuild = new SolutionBuildService().Build(workspace.Settings, buildConfiguration);
+                    postAcceptBuild = new SolutionBuildService().Build(workspace.Settings, IndexRidesBuild.IndexBuildConfiguration);
                     SolutionBuildService.BuildResult build = postAcceptBuild;
                     CompileIndexTrace.Record(
                         workspace.Settings,
@@ -384,7 +385,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 {
                     try
                     {
-                        SolutionRunService.RunResult run = new SolutionRunService().Run(workspace.Settings, buildConfiguration);
+                        SolutionRunService.RunResult run = new SolutionRunService().Run(workspace.Settings, IndexRidesBuild.IndexBuildConfiguration);
                         logger.Write(
                             run.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
                             "Host",

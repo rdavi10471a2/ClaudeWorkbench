@@ -50,10 +50,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // "Build after accept" — on the terminal accept, run a real in-place `dotnet build` so the watched
     // tree's own bin holds a runnable artifact (the governed loop otherwise only writes source, never
     // binaries). On by default so an accept normally leaves a runnable tree; uncheck for no output (and no
-    // build cost). Fixed to Debug: running the app and choosing Release live on the Source tab, which owns
-    // build/run of the real source. The merge dialog only confirms the accepted source still builds.
+    // build cost). The dialog does NOT choose a configuration — the accept build is always Debug (the index's
+    // single view); Debug/Release and running the app live on the Source tab, which owns build/run of the
+    // real source. The merge dialog only confirms the accepted source still builds.
     private bool buildAfterAccept = true;
-    private const string BuildConfiguration = "Debug";
 
     // Busy-overlay text for the terminal accept — names only the phases that will actually run, each
     // gated on its own checkbox, so "building …" only shows when Build after accept is checked and
@@ -65,7 +65,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
             List<string> steps = new() { "submitting the accepted files" };
             if (buildAfterAccept)
             {
-                steps.Add("building Debug output");
+                steps.Add("building output");
             }
 
             if (rebuildIndexOnAccept)
@@ -175,11 +175,11 @@ public partial class MergeReviewDialog : IAsyncDisposable
             // on non-terminal files (they never reindex). Pass the terminal-guarded value.
             bool rebuildIndex = !terminal || rebuildIndexOnAccept;
             // Build only on the terminal accept (once the whole session is on disk), and only when the
-            // operator wants output. Null = no build. Fixed to Debug; Release and running the app live on
-            // the Source tab (which can pick the startup project — the merge dialog never could).
-            string? buildConfig = terminal && buildAfterAccept ? BuildConfiguration : null;
+            // operator wants output. The dialog passes a yes/no; the engine builds Debug. Release and running
+            // the app live on the Source tab (which can pick the startup project — the merge dialog never could).
+            bool doBuildAfterAccept = terminal && buildAfterAccept;
             // Never auto-run from the merge dialog — running the app lives on the Source tab.
-            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, buildConfig, false));
+            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, doBuildAfterAccept, false));
             errorMessage = result.Message;
             if (result.OverrideAvailable)
             {
