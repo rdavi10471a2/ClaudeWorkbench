@@ -153,7 +153,9 @@ public sealed class MSBuildWorkspaceLoader
         return solution;
     }
 
-    private static void EnsureMSBuildRegistered()
+    // Internal so the build-output loader can register MSBuildLocator before it reads project metadata via
+    // MSBuildEvaluatedProject.Load (an in-proc MSBuild evaluation — NOT the out-of-proc workspace BuildHost).
+    internal static void EnsureMSBuildRegistered()
     {
         lock (RegistrationGate)
         {
@@ -192,12 +194,17 @@ public sealed class MSBuildWorkspaceLoader
         }
     }
 
-    private static async Task<MSBuildSolutionSnapshot> CreateSnapshotAsync(
+    // razorDocumentsProvider (ADR-0007): when supplied, it overrides how razor documents are obtained for a
+    // project — the convergence passes RazorDocumentIndex.BuildFromGeneratedFiles (the build's accurate .g.cs)
+    // instead of the default standalone engine. Null keeps the existing behaviour. Internal so the
+    // build-output loader can reuse this whole extraction pipeline against an AdhocWorkspace solution.
+    internal static async Task<MSBuildSolutionSnapshot> CreateSnapshotAsync(
         string inputPath,
         Solution solution,
         IEnumerable<WorkspaceDiagnostic> diagnostics,
         CancellationToken cancellationToken,
-        Action<string, long, IReadOnlyDictionary<string, string>>? timingSink = null)
+        Action<string, long, IReadOnlyDictionary<string, string>>? timingSink = null,
+        Func<Microsoft.CodeAnalysis.Project, IReadOnlyList<RazorDocumentIndex>>? razorDocumentsProvider = null)
     {
         Microsoft.CodeAnalysis.Project[] orderedRoslynProjects = solution.Projects
             .OrderBy(project => project.FilePath, StringComparer.OrdinalIgnoreCase)
@@ -237,9 +244,9 @@ public sealed class MSBuildWorkspaceLoader
                     timingSink,
                     projectTimingProperties,
                     () => ProjectSymbolIndex.BuildDeclarationsAsync(project, compilation, cancellationToken));
-            IReadOnlyList<RazorDocumentIndex> razorDocuments = RazorDocumentIndex.BuildForProject(
-                project,
-                evaluatedProject.RazorLikeFiles);
+            IReadOnlyList<RazorDocumentIndex> razorDocuments = razorDocumentsProvider is not null
+                ? razorDocumentsProvider(project)
+                : RazorDocumentIndex.BuildForProject(project, evaluatedProject.RazorLikeFiles);
             razorDocumentsByProject[project.Id] = razorDocuments;
             if (compilation is not null && razorDocuments.Count > 0)
             {
