@@ -33,6 +33,9 @@ public sealed class SolutionIndexBuilder
         // the build's .g.cs), real paths, no MSBuildWorkspace/BuildHost. Single-project only for now; anything
         // else falls back to the existing in-proc loader (unchanged default).
         string? buildProject = IndexRidesBuild.Enabled ? WatchedSolutionInfo.ResolveSingleProject(settings.WatchedSolutionPath) : null;
+        IReadOnlyList<string> buildSolutionProjects = IndexRidesBuild.Enabled && buildProject is null
+            ? WatchedSolutionInfo.ResolveAllProjects(settings.WatchedSolutionPath)
+            : [];
         if (buildProject is not null)
         {
             CompileIndexTrace.Record(
@@ -48,6 +51,26 @@ public sealed class SolutionIndexBuilder
                 settings,
                 "index-from-build.done",
                 buildProject,
+                $"buildSucceeded={buildResult.BuildSucceeded} projects={snapshot.Projects.Count} ms={snapshotStopwatch.ElapsedMilliseconds}");
+        }
+        else if (buildSolutionProjects.Count > 1)
+        {
+            // ADR-0007 whole-solution read: enumerate every project, one incremental build of the solution emits
+            // all their generated files + per-project refs, then the index reads them into one multi-project
+            // Roslyn solution (cross-project references resolved). Same read engine as single-project — no fallback.
+            CompileIndexTrace.Record(
+                settings,
+                "index-from-build.start",
+                indexInputPath,
+                $"index rides the build (ADR-0007): whole-solution read of {buildSolutionProjects.Count} projects — one build emits generated + per-project refs, the index reads them");
+            BuildOutputSnapshotResult buildResult = await new BuildOutputSnapshotLoader()
+                .OpenSolutionFromBuildAsync(Path.GetFullPath(settings.WatchedSolutionPath), buildSolutionProjects, cancellationToken: cancellationToken);
+            snapshot = buildResult.Snapshot;
+            snapshotStopwatch.Stop();
+            CompileIndexTrace.Record(
+                settings,
+                "index-from-build.done",
+                indexInputPath,
                 $"buildSucceeded={buildResult.BuildSucceeded} projects={snapshot.Projects.Count} ms={snapshotStopwatch.ElapsedMilliseconds}");
         }
         else

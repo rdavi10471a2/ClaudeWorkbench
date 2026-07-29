@@ -35,27 +35,54 @@ public sealed record WatchedSolutionInfo(
             return null;
         }
 
+        string[] projects = EnumerateProjects(solutionOrProjectPath);
+        return projects.Length == 1 ? projects[0] : null;
+    }
+
+    /// <summary>
+    /// Every C# project the watched entry contains: a bare <c>.csproj</c> is itself; a <c>.slnx</c> or legacy
+    /// <c>.sln</c> yields all of its <c>.csproj</c> projects (solution folders, which carry no <c>.csproj</c>,
+    /// are ignored). Empty if none resolve. This is the multi-project counterpart to
+    /// <see cref="ResolveSingleProject"/> — the whole-solution build-output read enumerates these.
+    /// </summary>
+    public static IReadOnlyList<string> ResolveAllProjects(string solutionOrProjectPath)
+    {
+        string extension = Path.GetExtension(solutionOrProjectPath);
+        if (extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            return [Path.GetFullPath(solutionOrProjectPath)];
+        }
+
+        return EnumerateProjects(solutionOrProjectPath);
+    }
+
+    // The .csproj set referenced by a .slnx or .sln. Both formats reference each C# project as a quoted path
+    // ending in .csproj:
+    //   .slnx  <Project Path="..\Foo\Foo.csproj" />
+    //   .sln   Project("{FAE04EC0-...}") = "Foo", "Foo\Foo.csproj", "{...}"
+    // A quoted-.csproj match captures the project path in either; solution folders carry no .csproj so they are
+    // ignored. Returns empty on any error (missing file, unreadable) so callers fall back cleanly.
+    private static string[] EnumerateProjects(string solutionPath)
+    {
+        string extension = Path.GetExtension(solutionPath);
+        if (!extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+            && !extension.Equals(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
         try
         {
-            string directory = Path.GetDirectoryName(Path.GetFullPath(solutionOrProjectPath)) ?? string.Empty;
-            // Both formats reference each C# project as a quoted path ending in .csproj:
-            //   .slnx  <Project Path="..\Foo\Foo.csproj" />
-            //   .sln   Project("{FAE04EC0-...}") = "Foo", "Foo\Foo.csproj", "{...}"
-            // A quoted-.csproj match captures the project path in either; solution folders carry no .csproj so
-            // they are ignored. Exactly one distinct project => it can ride the build.
-            string[] projects = Regex
-                .Matches(
-                    File.ReadAllText(solutionOrProjectPath),
-                    "\"([^\"]+\\.csproj)\"",
-                    RegexOptions.IgnoreCase)
+            string directory = Path.GetDirectoryName(Path.GetFullPath(solutionPath)) ?? string.Empty;
+            return Regex
+                .Matches(File.ReadAllText(solutionPath), "\"([^\"]+\\.csproj)\"", RegexOptions.IgnoreCase)
                 .Select(match => Path.GetFullPath(Path.Combine(directory, match.Groups[1].Value)))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            return projects.Length == 1 ? projects[0] : null;
         }
         catch
         {
-            return null;
+            return [];
         }
     }
 }
