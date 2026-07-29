@@ -20,14 +20,13 @@ public sealed class SolutionIndexRebuildService
         return summary;
     }
 
-    // ADR-0007 accept path: reindex by READING the build-after-accept's output (generated .g.cs + harvested
-    // refs), no compile. Marks every index fresh exactly like a full RebuildAsync, because it reindexed the
-    // whole (single) project the build produced.
+    // ADR-0007 accept path: reindex by READING the build-after-accept's WHOLE-solution output (every project's
+    // generated .g.cs + per-project refs), no compile. Marks every index fresh exactly like a full RebuildAsync,
+    // because it reindexed the whole solution the build produced. One path for 1..N projects.
     public async Task<SolutionIndexSummary> RebuildFromBuildOutputAsync(
         MonitorSettings settings,
-        string projectPath,
-        string generatedRoot,
-        IReadOnlyList<string> references,
+        string solutionPath,
+        IReadOnlyList<string> projectPaths,
         CancellationToken cancellationToken = default,
         Action<string, long, IReadOnlyDictionary<string, string>>? timingSink = null)
     {
@@ -35,7 +34,7 @@ public sealed class SolutionIndexRebuildService
         SolutionIndexStore store = new(new SolutionIndexDatabase(databasePath));
         SolutionIndexBuilder builder = new(store);
         SolutionIndexSummary summary = await builder.RebuildFromBuildOutputAsync(
-            settings, projectPath, generatedRoot, references, cancellationToken, timingSink);
+            settings, solutionPath, projectPaths, cancellationToken, timingSink);
         new WorkflowEditService(settings).MarkAllIndexesFresh();
         return summary;
     }

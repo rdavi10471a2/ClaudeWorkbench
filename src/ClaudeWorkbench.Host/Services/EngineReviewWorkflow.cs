@@ -295,14 +295,15 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             }
 
             // ADR-0007: when the index rides the build, the reindex must run AFTER the build-after-accept so it
-            // can READ that build's generated files + refs instead of compiling its own — the no-3-builds order.
-            // Gated to the case the read path supports: flag on, the operator wants the index rebuilt, a build
-            // is actually going to run (buildConfiguration set), and the watched solution is a single project.
+            // can READ that build's whole-solution output (every project's generated .g.cs + per-project refs)
+            // instead of compiling its own — the no-3-builds order. Gated to: flag on, the operator wants the
+            // index rebuilt, a build is actually going to run (buildConfiguration set), and the watched solution
+            // resolves to at least one project. One path for 1..N projects — no single-project special case.
             // Otherwise the ordering is exactly as before (the terminal Record does the index, then the build).
-            bool ridesBuild = IndexRidesBuild.Enabled
-                && rebuildIndex
-                && buildConfiguration is not null
-                && WatchedSolutionInfo.ResolveSingleProject(workspace.Settings.WatchedSolutionPath) is not null;
+            IReadOnlyList<string> rideProjects = IndexRidesBuild.Enabled && rebuildIndex && buildConfiguration is not null
+                ? WatchedSolutionInfo.ResolveAllProjects(workspace.Settings.WatchedSolutionPath)
+                : [];
+            bool ridesBuild = rideProjects.Count >= 1;
 
             // The terminal accept is the ONLY place the session's index refresh happens. When the
             // operator unchecks "rebuild index" (honored only here, on the terminal file), defer it:
@@ -360,7 +361,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                         workspace.Settings,
                         "post-accept-build.done",
                         workspace.Settings.WatchedSolutionPath,
-                        $"succeeded={!build.IsError} generatedRoot={(string.IsNullOrEmpty(build.GeneratedRoot) ? "-" : build.GeneratedRoot)} refs={build.HarvestedReferences.Count}");
+                        $"succeeded={!build.IsError} — emitted generated + per-project refs for {rideProjects.Count} project(s); the index reads them next");
                     logger.Write(
                         build.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
                         "Host",
@@ -405,15 +406,14 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // indexed, so fall back to the normal reindex (which self-builds under the flag / uses the loader).
             if (ridesBuild)
             {
-                effectiveIndexRefresh = postAcceptBuild is { IsError: false, RidesBuildProject: not null, GeneratedRoot: { Length: > 0 } }
+                effectiveIndexRefresh = postAcceptBuild is { IsError: false }
                     ? new IndexRefreshService().RebuildAfterAcceptedDecisionFromBuildOutput(
                         workspace.Settings,
                         logger,
                         record,
                         "ClaudeWorkbench",
-                        postAcceptBuild.RidesBuildProject,
-                        postAcceptBuild.GeneratedRoot,
-                        postAcceptBuild.HarvestedReferences,
+                        Path.GetFullPath(workspace.Settings.WatchedSolutionPath),
+                        rideProjects,
                         refreshPlan)
                     : new IndexRefreshService().RebuildAfterAcceptedDecision(
                         workspace.Settings,

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AIMonitor.Core;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
@@ -17,114 +18,6 @@ namespace AIMonitor.MSBuild;
 // testable.
 public sealed class BuildOutputSnapshotLoader
 {
-    public async Task<MSBuildSolutionSnapshot> BuildProjectSnapshotAsync(
-        string projectPath,
-        string generatedRoot,
-        IReadOnlyList<string> references,
-        CancellationToken cancellationToken = default)
-    {
-        // Project metadata (TargetFramework, package refs, …) is still read via MSBuildEvaluatedProject.Load,
-        // an in-proc MSBuild evaluation that needs MSBuildLocator registered. This is NOT the out-of-proc
-        // workspace BuildHost the convergence drops — just the lightweight csproj metadata read.
-        MSBuildWorkspaceLoader.EnsureMSBuildRegistered();
-
-        string fullProjectPath = Path.GetFullPath(projectPath);
-        string projectDirectory = Path.GetDirectoryName(fullProjectPath) ?? string.Empty;
-        string assemblyName = Path.GetFileNameWithoutExtension(fullProjectPath);
-        string rootNamespace = ReadRootNamespace(fullProjectPath) ?? assemblyName;
-
-        // #line span directives in the build's generated razor are a recent C# feature.
-        CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
-        ProjectId projectId = ProjectId.CreateNewId();
-
-        IEnumerable<DocumentInfo> documents = CollectSourceFiles(projectDirectory)
-            .Select(file => DocumentInfo.Create(
-                DocumentId.CreateNewId(projectId),
-                Path.GetFileName(file),
-                filePath: file,
-                loader: TextLoader.From(TextAndVersion.Create(
-                    SourceText.From(File.ReadAllText(file)),
-                    VersionStamp.Default,
-                    file))));
-
-        ProjectInfo projectInfo = ProjectInfo.Create(
-                projectId,
-                VersionStamp.Default,
-                name: assemblyName,
-                assemblyName: assemblyName,
-                language: LanguageNames.CSharp,
-                filePath: fullProjectPath)
-            .WithDefaultNamespace(rootNamespace)
-            .WithParseOptions(parseOptions)
-            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.ConsoleApplication, allowUnsafe: true))
-            .WithDocuments(documents)
-            .WithMetadataReferences(references
-                .Where(reference => !string.IsNullOrWhiteSpace(reference) && File.Exists(reference))
-                .Select(reference => (MetadataReference)MetadataReference.CreateFromFile(reference)));
-
-        using AdhocWorkspace workspace = new();
-        Solution solution = workspace.AddProject(projectInfo).Solution;
-
-        // Reuse the whole existing pipeline; only the razor source changes — the build's accurate .g.cs.
-        return await MSBuildWorkspaceLoader.CreateSnapshotAsync(
-            fullProjectPath,
-            solution,
-            [],
-            cancellationToken,
-            timingSink: null,
-            razorDocumentsProvider: _ => RazorDocumentIndex.BuildFromGeneratedFiles(generatedRoot, parseOptions));
-    }
-
-    // Self-contained: run the ONE real build that emits the generated .g.cs AND dumps the resolved reference
-    // set, then produce the snapshot from those outputs. This is the "index rides the build" entry point —
-    // the build is the only compile; the index is a Roslyn pass over its output.
-    public async Task<BuildOutputSnapshotResult> OpenProjectFromBuildAsync(
-        string projectPath,
-        string configuration = "Debug",
-        CancellationToken cancellationToken = default)
-    {
-        string fullProjectPath = Path.GetFullPath(projectPath);
-        string projectDirectory = Path.GetDirectoryName(fullProjectPath) ?? string.Empty;
-
-        string scratch = Path.Combine(Path.GetTempPath(), "AIMonitorBuildOutput", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scratch);
-        string targetsFile = Path.Combine(scratch, "dumprefs.targets");
-        string refsFile = Path.Combine(scratch, "refs.txt");
-        File.WriteAllText(targetsFile, """
-            <Project>
-              <Target Name="DumpRefsForIndex" BeforeTargets="CoreCompile">
-                <WriteLinesToFile File="$(RefsDumpPath)" Lines="@(ReferencePathWithRefAssemblies)" Overwrite="true" />
-              </Target>
-            </Project>
-            """);
-
-        try
-        {
-            (int exitCode, string output) = RunDotnet(
-                [
-                    "build", fullProjectPath, "-c", configuration, "--nologo", "-v:quiet", "-nodeReuse:false",
-                    "-p:EmitCompilerGeneratedFiles=true",
-                    $"-p:CustomAfterMicrosoftCommonTargets={targetsFile}",
-                    $"-p:RefsDumpPath={refsFile}"
-                ],
-                projectDirectory);
-
-            string generatedRoot = FindGeneratedRoot(projectDirectory, configuration);
-            IReadOnlyList<string> references = File.Exists(refsFile) ? File.ReadAllLines(refsFile) : [];
-
-            MSBuildSolutionSnapshot snapshot = await BuildProjectSnapshotAsync(
-                fullProjectPath,
-                generatedRoot,
-                references,
-                cancellationToken);
-
-            return new BuildOutputSnapshotResult(snapshot, exitCode == 0, exitCode, output);
-        }
-        finally
-        {
-            try { Directory.Delete(scratch, recursive: true); } catch { /* scratch cleanup is best-effort */ }
-        }
-    }
 
     // ADR-0007 whole-solution read: one incremental `dotnet build` of the solution emits every project's
     // generated .g.cs and dumps each project's resolved references into its OWN obj (no clobber), then assembles
@@ -140,20 +33,11 @@ public sealed class BuildOutputSnapshotLoader
         string fullSolutionPath = Path.GetFullPath(solutionPath);
         string solutionDirectory = Path.GetDirectoryName(fullSolutionPath) ?? string.Empty;
 
-        string scratch = Path.Combine(Path.GetTempPath(), "AIMonitorBuildOutput", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scratch);
-        string targetsFile = Path.Combine(scratch, "dumprefs-per-project.targets");
-        // Per-project refs into each project's own obj (IntermediateOutputPath) — no shared path to clobber.
-        // AfterTargets=ResolveReferences so @(ReferencePath) is populated and the dump runs even when a project
-        // is up-to-date and CoreCompile is skipped (incremental builds still resolve references).
-        File.WriteAllText(targetsFile, """
-            <Project>
-              <Target Name="DumpRefsForIndexPerProject" AfterTargets="ResolveReferences">
-                <WriteLinesToFile File="$(IntermediateOutputPath)aimonitor-index-refs.txt" Lines="@(ReferencePath)" Overwrite="true" />
-              </Target>
-            </Project>
-            """);
-
+        // One build for all N projects: emit every project's generated .g.cs and dump each project's refs into
+        // its own obj (the shared Core target — AfterTargets=ResolveReferences so it runs even when a project is
+        // up-to-date). Then READ that output. The accept path runs the equivalent build itself (build-after-accept)
+        // and calls ReadSolutionSnapshotAsync directly, so there is one read path for 1..N projects.
+        string targetsFile = IndexRidesBuild.WritePerProjectRefsTargetsFile();
         try
         {
             (int exitCode, string output) = RunDotnet(
@@ -164,25 +48,40 @@ public sealed class BuildOutputSnapshotLoader
                 ],
                 solutionDirectory);
 
-            List<ProjectBuildInputs> inputs = [];
-            foreach (string projectPath in projectPaths)
-            {
-                string fullProjectPath = Path.GetFullPath(projectPath);
-                string projectDirectory = Path.GetDirectoryName(fullProjectPath) ?? solutionDirectory;
-                inputs.Add(new ProjectBuildInputs(
-                    fullProjectPath,
-                    FindGeneratedRoot(projectDirectory, configuration),
-                    ReadPerProjectReferences(projectDirectory, configuration),
-                    ParseProjectReferences(fullProjectPath)));
-            }
-
-            MSBuildSolutionSnapshot snapshot = await BuildSolutionSnapshotAsync(inputs, cancellationToken);
+            MSBuildSolutionSnapshot snapshot = await ReadSolutionSnapshotAsync(
+                fullSolutionPath, projectPaths, configuration, cancellationToken);
             return new BuildOutputSnapshotResult(snapshot, exitCode == 0, exitCode, output);
         }
         finally
         {
-            try { Directory.Delete(scratch, recursive: true); } catch { /* scratch cleanup is best-effort */ }
+            try { Directory.Delete(Path.GetDirectoryName(targetsFile)!, recursive: true); } catch { /* best-effort */ }
         }
+    }
+
+    // Read an ALREADY-built solution's output into a snapshot — NO build. The build-after-accept (or a prior
+    // OpenSolutionFromBuildAsync) already emitted every project's generated .g.cs + per-project refs; this
+    // gathers those from disk for all N projects and assembles the one multi-project snapshot. One read path
+    // for 1..N projects — no single-project and no single-file special case.
+    public async Task<MSBuildSolutionSnapshot> ReadSolutionSnapshotAsync(
+        string solutionPath,
+        IReadOnlyList<string> projectPaths,
+        string configuration = "Debug",
+        CancellationToken cancellationToken = default)
+    {
+        string solutionDirectory = Path.GetDirectoryName(Path.GetFullPath(solutionPath)) ?? string.Empty;
+        List<ProjectBuildInputs> inputs = [];
+        foreach (string projectPath in projectPaths)
+        {
+            string fullProjectPath = Path.GetFullPath(projectPath);
+            string projectDirectory = Path.GetDirectoryName(fullProjectPath) ?? solutionDirectory;
+            inputs.Add(new ProjectBuildInputs(
+                fullProjectPath,
+                FindGeneratedRoot(projectDirectory, configuration),
+                ReadPerProjectReferences(projectDirectory, configuration),
+                ParseProjectReferences(fullProjectPath)));
+        }
+
+        return await BuildSolutionSnapshotAsync(inputs, cancellationToken);
     }
 
     // Assemble ALL projects into one AdhocWorkspace Solution from their build outputs, then snapshot together.
@@ -279,7 +178,7 @@ public sealed class BuildOutputSnapshotLoader
         }
 
         string? refsFile = Directory
-            .GetFiles(objConfig, "aimonitor-index-refs.txt", SearchOption.AllDirectories)
+            .GetFiles(objConfig, IndexRidesBuild.PerProjectRefsFileName, SearchOption.AllDirectories)
             .FirstOrDefault();
         return refsFile is not null && File.Exists(refsFile) ? File.ReadAllLines(refsFile) : [];
     }

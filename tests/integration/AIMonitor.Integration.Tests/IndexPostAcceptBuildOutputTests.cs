@@ -1,20 +1,20 @@
 using AIMonitor.Core;
-using AIMonitor.Data;
-using AIMonitor.Indexing;
+using AIMonitor.MSBuild;
 using AIMonitor.Workflow;
 
 namespace AIMonitor.Integration.Tests;
 
-// ADR-0007, increment 4b-2: the build-after-accept (SolutionBuildService.Build) is the ONE real build. When
-// the index rides the flag, that build ALSO emits the generated .g.cs and dumps the resolved reference set,
-// and reports where — so the reindex can READ this build's output instead of running its own compile. With
-// the flag off the build args are unchanged (no emit, no dump, no handoff).
+// ADR-0007: the build-after-accept (SolutionBuildService.Build) is the ONE real build. When the index rides the
+// flag, that build ALSO emits every project's generated .g.cs and dumps each project's refs into its own obj (the
+// shared per-project target) — so the reindex READS that whole-solution output instead of compiling its own. One
+// path for 1..N projects: no single-project harvest, no single-file special case. With the flag off the build is
+// byte-for-byte the ordinary build (no emit, no dump).
 public sealed class IndexPostAcceptBuildOutputTests
 {
     [Fact]
-    public void Post_accept_build_emits_generated_and_harvests_refs_when_riding_the_flag()
+    public void Build_riding_the_flag_emits_generated_and_per_project_refs_for_the_read()
     {
-        (MonitorSettings settings, string projDir) = CopySampleAsWatchedSolution();
+        (MonitorSettings settings, string projectDir) = CopySampleAsWatchedSolution();
 
         string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
         SolutionBuildService.BuildResult result;
@@ -30,24 +30,17 @@ public sealed class IndexPostAcceptBuildOutputTests
 
         Assert.False(result.IsError, $"post-accept build failed: {result.Message} {string.Join(" | ", result.Diagnostics)}");
 
-        // The build knows which single project its outputs belong to.
-        Assert.NotNull(result.RidesBuildProject);
-        Assert.EndsWith("BlazorSample.csproj", result.RidesBuildProject, StringComparison.OrdinalIgnoreCase);
-
-        // It emitted the razor source generator's .g.cs (the accurate, in-compile razor the reindex reads).
-        Assert.False(string.IsNullOrEmpty(result.GeneratedRoot), "no generated root was reported");
-        Assert.True(Directory.Exists(result.GeneratedRoot), $"generated root does not exist: {result.GeneratedRoot}");
-        Assert.NotEmpty(Directory.GetFiles(result.GeneratedRoot!, "*.g.cs", SearchOption.AllDirectories));
-
-        // It harvested the resolved reference set the compile used.
-        Assert.NotEmpty(result.HarvestedReferences);
-        Assert.Contains(result.HarvestedReferences, reference => reference.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        string objDir = Path.Combine(projectDir, "obj");
+        // Per-project refs dumped into the project's own obj (what ReadSolutionSnapshotAsync reads).
+        Assert.NotEmpty(Directory.GetFiles(objDir, IndexRidesBuild.PerProjectRefsFileName, SearchOption.AllDirectories));
+        // Razor source generator's .g.cs emitted (EmitCompilerGeneratedFiles).
+        Assert.NotEmpty(Directory.GetDirectories(objDir, "generated", SearchOption.AllDirectories));
     }
 
     [Fact]
-    public void Ordinary_build_carries_no_build_output_handoff_when_the_flag_is_off()
+    public void Ordinary_build_off_flag_dumps_no_index_refs()
     {
-        (MonitorSettings settings, _) = CopySampleAsWatchedSolution();
+        (MonitorSettings settings, string projectDir) = CopySampleAsWatchedSolution();
 
         string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
         SolutionBuildService.BuildResult result;
@@ -61,49 +54,38 @@ public sealed class IndexPostAcceptBuildOutputTests
             Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
         }
 
-        Assert.False(result.IsError, $"ordinary build failed: {result.Message} {string.Join(" | ", result.Diagnostics)}");
-        Assert.Null(result.RidesBuildProject);
-        Assert.Null(result.GeneratedRoot);
-        Assert.Empty(result.HarvestedReferences);
+        Assert.False(result.IsError, $"ordinary build failed: {result.Message}");
+        string objDir = Path.Combine(projectDir, "obj");
+        Assert.True(Directory.Exists(objDir), "obj should exist after a build");
+        Assert.Empty(Directory.GetFiles(objDir, IndexRidesBuild.PerProjectRefsFileName, SearchOption.AllDirectories));
     }
 
     [Fact]
-    public async Task Read_only_reindex_from_build_output_lands_razor_in_the_index_without_its_own_compile()
+    public async Task Read_from_the_build_output_maps_a_razor_member_to_the_razor()
     {
         (MonitorSettings settings, _) = CopySampleAsWatchedSolution();
 
-        // The ONE real build (the build-after-accept) emits the generated files + harvests refs.
         string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
-        SolutionBuildService.BuildResult build;
         try
         {
             Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
-            build = new SolutionBuildService().Build(settings);
+            SolutionBuildService.BuildResult build = new SolutionBuildService().Build(settings);
+            Assert.False(build.IsError, $"build failed: {build.Message}");
         }
         finally
         {
             Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
         }
 
-        Assert.False(build.IsError, $"post-accept build failed: {build.Message}");
-        Assert.NotNull(build.RidesBuildProject);
-        Assert.False(string.IsNullOrEmpty(build.GeneratedRoot));
+        // The reindex READS that output for the whole solution (here a single project) — no compile.
+        IReadOnlyList<string> projects = WatchedSolutionInfo.ResolveAllProjects(settings.WatchedSolutionPath);
+        MSBuildSolutionSnapshot snapshot = await new BuildOutputSnapshotLoader()
+            .ReadSolutionSnapshotAsync(settings.WatchedSolutionPath, projects);
 
-        // The reindex READS that output — no compile of its own (flag deliberately left off here to prove the
-        // read path is compile-free and flag-independent).
-        SolutionIndexSummary summary = await new SolutionIndexRebuildService().RebuildFromBuildOutputAsync(
-            settings,
-            build.RidesBuildProject!,
-            build.GeneratedRoot!,
-            build.HarvestedReferences);
-        Assert.True(summary.ProjectCount > 0, "the build-output read produced no projects");
-
-        // Through the real SQLite index: a .razor @code member is stored at the .razor, mapped via the build's
-        // #line directives — the index rode the build's output.
-        SolutionIndexQueryService query = SolutionIndexQueryService.Create(settings);
         Assert.Contains(
-            query.ListSymbols(name: "LoadAsync"),
-            symbol => symbol.FilePath.EndsWith("CustomerList.razor", StringComparison.OrdinalIgnoreCase));
+            snapshot.Projects.SelectMany(project => project.Symbols),
+            symbol => symbol.Name == "LoadAsync"
+                && symbol.FilePath.EndsWith("CustomerList.razor", StringComparison.OrdinalIgnoreCase));
     }
 
     private static (MonitorSettings Settings, string ProjectDir) CopySampleAsWatchedSolution()

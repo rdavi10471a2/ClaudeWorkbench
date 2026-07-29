@@ -223,18 +223,17 @@ public sealed class IndexRefreshService
         }
     }
 
-    // ADR-0007 accept path: refresh the index by READING the build-after-accept's output (its generated .g.cs
-    // + harvested refs) rather than running a compile. This is the no-3-builds path — the terminal gate build
-    // validated, the build-after-accept produced the real output, and this reads it. Always a whole-project
-    // (single-project) refresh, so it mirrors the solution-refresh branch of RebuildAfterAcceptedDecision.
+    // ADR-0007 accept path: refresh the index by READING the build-after-accept's WHOLE-solution output (every
+    // project's generated .g.cs + per-project refs) rather than running a compile. This is the no-3-builds path
+    // — the terminal gate build validated, the build-after-accept produced the real output for all N projects,
+    // and this reads it. One path for 1..N projects — no single-project and no single-file special case.
     public PostAcceptIndexRefreshResult RebuildAfterAcceptedDecisionFromBuildOutput(
         MonitorSettings settings,
         IMonitorLogger logger,
         StagedEditRecord record,
         string source,
-        string projectPath,
-        string generatedRoot,
-        IReadOnlyList<string> references,
+        string solutionPath,
+        IReadOnlyList<string> projectPaths,
         PostAcceptIndexRefreshPlan? refreshPlan = null)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -245,7 +244,7 @@ public sealed class IndexRefreshService
             settings,
             "index-refresh.start",
             settings.WatchedSolutionPath,
-            $"index refresh (trigger={source}, mode=build-output-read) — reads the build-after-accept's generated + refs, NO compile of its own");
+            $"index refresh (trigger={source}, mode=build-output-read) — reads the build-after-accept's whole-solution generated + refs, NO compile of its own");
         logger.Write(
             MonitorLogLevel.Information,
             source,
@@ -258,17 +257,16 @@ public sealed class IndexRefreshService
                 ["watchedSolutionPath"] = settings.WatchedSolutionPath,
                 ["databasePath"] = databasePath,
                 ["refreshMode"] = "build-output-read",
-                ["projectPath"] = projectPath,
-                ["generatedRoot"] = generatedRoot,
-                ["referenceCount"] = references.Count.ToString()
+                ["solutionPath"] = solutionPath,
+                ["projectCount"] = projectPaths.Count.ToString()
             });
 
         try
         {
             Action<string, long, IReadOnlyDictionary<string, string>> timingSink = CreateTimingSink(
-                logger, source, record, "build-output-read", [projectPath], filePaths);
+                logger, source, record, "build-output-read", projectPaths, filePaths);
             SolutionIndexSummary summary = new SolutionIndexRebuildService()
-                .RebuildFromBuildOutputAsync(settings, projectPath, generatedRoot, references, timingSink: timingSink)
+                .RebuildFromBuildOutputAsync(settings, solutionPath, projectPaths, timingSink: timingSink)
                 .GetAwaiter()
                 .GetResult();
             stopwatch.Stop();
