@@ -407,26 +407,37 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // indexed, so fall back to the normal reindex (which self-builds under the flag / uses the loader).
             if (ridesBuild)
             {
-                effectiveIndexRefresh = postAcceptBuild is { IsError: false }
-                    ? new IndexRefreshService().RebuildAfterAcceptedDecisionFromBuildOutput(
+                if (postAcceptBuild is { IsError: false })
+                {
+                    effectiveIndexRefresh = new IndexRefreshService().RebuildAfterAcceptedDecisionFromBuildOutput(
                         workspace.Settings,
                         logger,
                         record,
                         "ClaudeWorkbench",
                         Path.GetFullPath(workspace.Settings.WatchedSolutionPath),
                         rideProjects,
-                        refreshPlan)
+                        refreshPlan);
+                }
+                else
+                {
                     // RED build → GATE the index: do NOT reindex and never in-proc recompile. Preserve the
-                    // last-good index (best map of what last compiled) and report. The terminal gate already
-                    // validated the source, so a build-after-accept failure here is almost always environmental
-                    // (e.g. the running app locking its exe — stop it and Rebuild Index).
-                    : new PostAcceptIndexRefreshResult
+                    // last-good index (best map of what last compiled). Persist the blocked flag so
+                    // get_monitor_status / the UI show "index frozen on a bad build", not just staleness. The
+                    // terminal gate already validated the source, so a build-after-accept failure here is almost
+                    // always environmental (e.g. the running app locking its exe — stop it and Rebuild Index).
+                    AIMonitor.Data.IndexHealthMarker.SetBlocked(
+                        workspace.Settings,
+                        postAcceptBuild is { Diagnostics.Count: > 0 }
+                            ? string.Join(Environment.NewLine, postAcceptBuild.Diagnostics)
+                            : postAcceptBuild?.Message);
+                    effectiveIndexRefresh = new PostAcceptIndexRefreshResult
                     {
                         Status = "blocked",
                         RefreshMode = "build-output-read",
                         IsError = true,
                         Message = "Index not refreshed — the build after accept failed, so the index still reflects the last successful build. Fix the build (e.g. stop the running app if it locked its output), then Rebuild Index.",
                     };
+                }
             }
 
             string message = writtenPaths.Count == 1

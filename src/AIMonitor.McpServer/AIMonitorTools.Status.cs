@@ -36,7 +36,10 @@ public sealed partial class AIMonitorTools
             indexStatus.CallSiteCount,
             indexStatus.RelationshipCount,
             indexStatus.StaleFileCount,
-            indexStatus.DiagnosticCount);
+            indexStatus.DiagnosticCount,
+            indexStatus.IndexUpdateBlocked,
+            indexStatus.LastBuildError,
+            indexStatus.BlockedAtUtc);
     }
 
     [McpServerTool]

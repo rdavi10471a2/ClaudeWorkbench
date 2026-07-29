@@ -18,7 +18,13 @@ public sealed record AIMonitorMcpStatus(
     int CallSiteCount,
     int RelationshipCount,
     int StaleFileCount,
-    int DiagnosticCount);
+    int DiagnosticCount,
+    // ADR-0007: true when the last reindex was BLOCKED because the build was red — the index still reflects the
+    // last successful build and will NOT advance until the build compiles (reindexing again re-hits the errors).
+    // Distinct from StaleFileCount>0 (ordinary staleness clears on a reindex). LastBuildError has the diagnostics.
+    bool IndexUpdateBlocked = false,
+    string? LastBuildError = null,
+    DateTimeOffset? BlockedAtUtc = null);
 
 public sealed record AIMonitorWorkflowStatus(
     string WatchedSolutionPath,

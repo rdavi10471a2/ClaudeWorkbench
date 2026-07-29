@@ -34,4 +34,15 @@ public sealed class MonitorStatusResult
     // (SolutionIndexDatabase.NeedsFullRebuildKey is set). While set, the index is stale: solution-index rows must not
     // be trusted, scoped refreshes are refused/upgraded to full, and a full RebuildAsync is required to clear it.
     public bool RebuildRequired { get; set; }
+
+    // True when the LAST reindex was BLOCKED because the build was red (ADR-0007: the index rides the build, so a
+    // failed build leaves the last-good index in place rather than overwriting it). This is distinct from ordinary
+    // staleness (StaleFileCount > 0): ordinary staleness clears on a reindex, but a blocked index will NOT advance
+    // until the build compiles — reindexing again just re-hits the same errors. LastBuildError carries the compiler
+    // diagnostics and BlockedAtUtc when it happened. Cleared on the next successful (green) reindex.
+    public bool IndexUpdateBlocked { get; set; }
+
+    public string? LastBuildError { get; set; }
+
+    public DateTimeOffset? BlockedAtUtc { get; set; }
 }

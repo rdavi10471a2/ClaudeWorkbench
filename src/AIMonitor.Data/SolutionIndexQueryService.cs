@@ -50,6 +50,7 @@ public sealed class SolutionIndexQueryService
         int callSiteCount = databaseExists ? store.CountCallSites() : 0;
         int relationshipCount = databaseExists ? store.CountRelationships() : 0;
         bool rebuildRequired = databaseExists && new SolutionIndexDatabase(DatabasePath).IsFullRebuildRequired();
+        IndexHealthMarker.BlockedState? blocked = IndexHealthMarker.Read(settings);
 
         return new MonitorStatusResult
         {
@@ -67,7 +68,10 @@ public sealed class SolutionIndexQueryService
             RelationshipCount = relationshipCount,
             StaleFileCount = documents.Count(IsStale),
             DiagnosticCount = summary.DiagnosticCount,
-            RebuildRequired = rebuildRequired
+            RebuildRequired = rebuildRequired,
+            IndexUpdateBlocked = blocked is not null,
+            LastBuildError = blocked?.BuildError,
+            BlockedAtUtc = blocked?.BlockedAtUtc
         };
     }
 

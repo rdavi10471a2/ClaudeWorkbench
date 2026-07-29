@@ -16,10 +16,16 @@ public sealed class SolutionIndexRebuildService
         SolutionIndexStore store = new(new SolutionIndexDatabase(databasePath));
         SolutionIndexBuilder builder = new(store);
         SolutionIndexSummary summary = await builder.RebuildAsync(settings, cancellationToken, timingSink);
-        // Red build → the index was preserved, not rewritten; do NOT mark the (now-stale) index fresh.
         if (summary.Built)
         {
             new WorkflowEditService(settings).MarkAllIndexesFresh();
+            IndexHealthMarker.ClearBlocked(settings);
+        }
+        else
+        {
+            // Red build → the index was preserved, not rewritten; do NOT mark the (now-stale) index fresh, and
+            // record WHY it's stuck so get_monitor_status/UI show "blocked on a bad build", not just staleness.
+            IndexHealthMarker.SetBlocked(settings, summary.BuildError);
         }
 
         return summary;
@@ -43,6 +49,7 @@ public sealed class SolutionIndexRebuildService
         if (summary.Built)
         {
             new WorkflowEditService(settings).MarkAllIndexesFresh();
+            IndexHealthMarker.ClearBlocked(settings);
         }
 
         return summary;

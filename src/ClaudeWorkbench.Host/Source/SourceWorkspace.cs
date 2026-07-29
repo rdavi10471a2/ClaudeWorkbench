@@ -443,7 +443,9 @@ public sealed class SourceWorkspace
             BuildRunnableProjects(projects),
             BuildPlainFileTree(fileEntries),
             fileEntries.Count,
-            filesFilter);
+            filesFilter,
+            status.IndexUpdateBlocked,
+            status.LastBuildError);
     }
 
     // The Files tree's file set: the cached git-tracked entries, filtered + ranked like the index list.
@@ -554,7 +556,9 @@ public sealed class SourceWorkspace
             [],
             BuildPlainFileTree(fileEntries),
             fileEntries.Count,
-            filesFilter);
+            filesFilter,
+            status.IndexUpdateBlocked,
+            status.LastBuildError);
     }
 
     private static IReadOnlyList<SourceFileEntry> BuildFiles(

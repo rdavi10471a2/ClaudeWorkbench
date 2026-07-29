@@ -15,7 +15,11 @@ public sealed record SourceWorkspaceSnapshot(
     IReadOnlyList<RunnableProjectEntry> RunnableProjects,
     IReadOnlyList<SourceTreeNode> FilesTree,
     int FilesCount,
-    string FilesFilter)
+    string FilesFilter,
+    // ADR-0007: the last reindex was blocked by a red build — the index is frozen on the last good build.
+    // Drives the Source-tab "Index blocked" chip. BlockedBuildError is the diagnostics for its tooltip.
+    bool IndexUpdateBlocked = false,
+    string? BlockedBuildError = null)
 {
     public static SourceWorkspaceSnapshot Empty(string message)
     {
