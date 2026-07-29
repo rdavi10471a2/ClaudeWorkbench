@@ -676,7 +676,8 @@ internal sealed record MSBuildEvaluatedProject(
     IReadOnlyList<MSBuildProjectReferenceSnapshot> ProjectReferences,
     IReadOnlyList<MSBuildPackageReferenceSnapshot> PackageReferences,
     IReadOnlyList<MSBuildFrameworkReferenceSnapshot> FrameworkReferences,
-    IReadOnlyList<MSBuildGlobalUsingSnapshot> GlobalUsings)
+    IReadOnlyList<MSBuildGlobalUsingSnapshot> GlobalUsings,
+    IReadOnlyList<string> CompileFiles)
 {
     public static MSBuildEvaluatedProject Empty { get; } = new(
         string.Empty,
@@ -688,6 +689,7 @@ internal sealed record MSBuildEvaluatedProject(
         string.Empty,
         string.Empty,
         string.Empty,
+        [],
         [],
         [],
         [],
@@ -714,7 +716,8 @@ internal sealed record MSBuildEvaluatedProject(
                 GetProjectReferences(project),
                 GetPackageReferences(project),
                 GetFrameworkReferences(project),
-                GetGlobalUsings(project));
+                GetGlobalUsings(project),
+                GetCompileFiles(project));
         }
         finally
         {
@@ -738,6 +741,22 @@ internal sealed record MSBuildEvaluatedProject(
                 item.EvaluatedInclude,
                 item.GetMetadataValue("FullPath")))
             .OrderBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    // The project's evaluated @(Compile) item set — the EXACT .cs the compiler is given, respecting the SDK
+    // default globs, <Compile Remove>, and <DefaultItemExcludes>. Using this instead of a directory glob is
+    // review finding #3: a glob sweeps in files the real compile excludes (nested/stray folders, removed items)
+    // as phantom symbols. Evaluated @(Compile) does NOT include the build-generated obj helpers
+    // (GlobalUsings.g.cs / AssemblyInfo.cs) — those are added by build targets, not evaluation — so the caller
+    // adds them separately.
+    private static IReadOnlyList<string> GetCompileFiles(MSBuildProject project)
+    {
+        return project.GetItems("Compile")
+            .Select(item => item.GetMetadataValue("FullPath"))
+            .Where(path => !string.IsNullOrWhiteSpace(path) && path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 

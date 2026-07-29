@@ -77,8 +77,7 @@ public sealed class BuildOutputSnapshotLoader
             inputs.Add(new ProjectBuildInputs(
                 fullProjectPath,
                 FindGeneratedRoot(projectDirectory, configuration),
-                ReadPerProjectReferences(projectDirectory, configuration),
-                ParseProjectReferences(fullProjectPath)));
+                ReadPerProjectReferences(projectDirectory, configuration)));
         }
 
         return await BuildSolutionSnapshotAsync(inputs, cancellationToken);
@@ -109,10 +108,19 @@ public sealed class BuildOutputSnapshotLoader
             ProjectId projectId = projectIdByPath[input.ProjectPath];
             string projectDirectory = Path.GetDirectoryName(input.ProjectPath) ?? string.Empty;
             string assemblyName = Path.GetFileNameWithoutExtension(input.ProjectPath);
-            string rootNamespace = ReadRootNamespace(input.ProjectPath) ?? assemblyName;
             generatedRootByProjectPath[input.ProjectPath] = input.GeneratedRoot;
 
-            IEnumerable<DocumentInfo> documents = CollectSourceFiles(projectDirectory)
+            // Review #3/#4: take the document set and metadata from the EVALUATED project, not a directory glob
+            // or a csproj text scrape. @(Compile) is the EXACT set the compiler is given (respects SDK globs,
+            // <Compile Remove>, <DefaultItemExcludes>) so no phantom/excluded files; RootNamespace and the
+            // <ProjectReference> graph are evaluated (picks up Directory.Build.props / globbed refs, ignores
+            // commented-out entries). The build-time obj helpers (GlobalUsings.g.cs) are added alongside.
+            MSBuildEvaluatedProject evaluated = MSBuildEvaluatedProject.Load(input.ProjectPath);
+            string rootNamespace = string.IsNullOrWhiteSpace(evaluated.RootNamespace) ? assemblyName : evaluated.RootNamespace;
+
+            IEnumerable<DocumentInfo> documents = evaluated.CompileFiles
+                .Concat(CollectObjGeneratedHelpers(projectDirectory))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(file => DocumentInfo.Create(
                     DocumentId.CreateNewId(projectId),
                     Path.GetFileName(file),
@@ -122,8 +130,9 @@ public sealed class BuildOutputSnapshotLoader
                         VersionStamp.Default,
                         file))));
 
-            IEnumerable<ProjectReference> projectReferences = input.ProjectReferences
-                .Select(reference => projectIdByPath.TryGetValue(Path.GetFullPath(reference), out ProjectId? referencedId)
+            IEnumerable<ProjectReference> projectReferences = evaluated.ProjectReferences
+                .Select(reference => !string.IsNullOrWhiteSpace(reference.FullPath)
+                        && projectIdByPath.TryGetValue(Path.GetFullPath(reference.FullPath), out ProjectId? referencedId)
                     ? new ProjectReference(referencedId)
                     : null)
                 .Where(reference => reference is not null)
@@ -183,28 +192,6 @@ public sealed class BuildOutputSnapshotLoader
         return refsFile is not null && File.Exists(refsFile) ? File.ReadAllLines(refsFile) : [];
     }
 
-    // The other projects this .csproj references (<ProjectReference Include="..\Other\Other.csproj" />),
-    // resolved to absolute paths so they can be matched to sibling ProjectIds.
-    private static IReadOnlyList<string> ParseProjectReferences(string projectPath)
-    {
-        try
-        {
-            string projectDirectory = Path.GetDirectoryName(projectPath) ?? string.Empty;
-            return System.Text.RegularExpressions.Regex
-                .Matches(
-                    File.ReadAllText(projectPath),
-                    "<ProjectReference\\s+Include=\"([^\"]+\\.csproj)\"",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-                .Select(match => Path.GetFullPath(Path.Combine(projectDirectory, match.Groups[1].Value)))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
     // obj/<config>/<tfm>/generated. First match (multi-TFM is a later refinement).
     private static string FindGeneratedRoot(string projectDirectory, string configuration)
     {
@@ -257,47 +244,24 @@ public sealed class BuildOutputSnapshotLoader
         return (exited ? process.ExitCode : -1, output);
     }
 
-    // Hand-written source, PLUS the MSBuild-generated helpers under obj (GlobalUsings / AssemblyInfo — needed
-    // for the compilation to bind). NOT the source-generator output (razor .g.cs under generated\): those are
-    // added to the compilation by BuildRazorDeclarationsAsync, so adding them here too would double-declare.
-    private static IEnumerable<string> CollectSourceFiles(string projectDirectory)
+    // The MSBuild-generated helpers under obj (GlobalUsings.g.cs etc.) — needed for the compilation to bind, and
+    // present ONLY in the build-time @(Compile), not the evaluated item set, so they are added alongside the
+    // evaluated Compile files. NOT the source-generator razor .g.cs under generated\ (added to the compilation by
+    // BuildRazorDeclarationsAsync — adding them here too would double-declare).
+    private static IEnumerable<string> CollectObjGeneratedHelpers(string projectDirectory)
     {
-        foreach (string file in Directory.EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories))
+        string objDirectory = Path.Combine(projectDirectory, "obj");
+        if (!Directory.Exists(objDirectory))
         {
-            string normalized = file.Replace('/', '\\');
-            if (normalized.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (normalized.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase))
-            {
-                if (normalized.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
-                    && !normalized.Contains("\\generated\\", StringComparison.OrdinalIgnoreCase))
-                {
-                    yield return file;
-                }
-
-                continue;
-            }
-
-            yield return file;
+            yield break;
         }
-    }
 
-    private static string? ReadRootNamespace(string projectPath)
-    {
-        try
+        foreach (string file in Directory.EnumerateFiles(objDirectory, "*.g.cs", SearchOption.AllDirectories))
         {
-            System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(
-                File.ReadAllText(projectPath),
-                "<RootNamespace>([^<]+)</RootNamespace>",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups[1].Value.Trim() : null;
-        }
-        catch
-        {
-            return null;
+            if (!file.Replace('/', '\\').Contains("\\generated\\", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return file;
+            }
         }
     }
 }
@@ -309,9 +273,9 @@ public sealed record BuildOutputSnapshotResult(
     string BuildOutput);
 
 // One project's build outputs, gathered for the whole-solution read: its .csproj, the obj/ generated-files
-// root, its resolved reference set, and the sibling projects it references (for cross-project ProjectReferences).
+// root, and its resolved reference set. The <ProjectReference> graph, RootNamespace, and Compile item set come
+// from the evaluated project (MSBuildEvaluatedProject.Load) in BuildSolutionSnapshotAsync, not from here.
 public sealed record ProjectBuildInputs(
     string ProjectPath,
     string GeneratedRoot,
-    IReadOnlyList<string> References,
-    IReadOnlyList<string> ProjectReferences);
+    IReadOnlyList<string> References);
