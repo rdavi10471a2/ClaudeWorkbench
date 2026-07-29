@@ -32,7 +32,7 @@ public sealed class SolutionIndexBuilder
         // generated files + resolved refs; the index is a Roslyn pass over that output — accurate razor (from
         // the build's .g.cs), real paths, no MSBuildWorkspace/BuildHost. Single-project only for now; anything
         // else falls back to the existing in-proc loader (unchanged default).
-        string? buildProject = IndexRidesBuild() ? ResolveSingleProject(settings.WatchedSolutionPath) : null;
+        string? buildProject = IndexRidesBuild.Enabled ? WatchedSolutionInfo.ResolveSingleProject(settings.WatchedSolutionPath) : null;
         if (buildProject is not null)
         {
             CompileIndexTrace.Record(
@@ -172,45 +172,6 @@ public sealed class SolutionIndexBuilder
                 ["fileCount"] = normalizedFilePaths.Length.ToString()
             });
         return summary;
-    }
-
-    private static bool IndexRidesBuild()
-    {
-        return Environment.GetEnvironmentVariable("CWB_INDEX_RIDES_BUILD") is "1" or "true" or "TRUE";
-    }
-
-    // ADR-0007 build-output path is single-project for now: a .csproj directly, or a .slnx containing exactly
-    // one project. Anything else returns null so the existing loader handles it.
-    private static string? ResolveSingleProject(string solutionOrProjectPath)
-    {
-        string extension = Path.GetExtension(solutionOrProjectPath);
-        if (extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetFullPath(solutionOrProjectPath);
-        }
-
-        if (!extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        try
-        {
-            string directory = Path.GetDirectoryName(Path.GetFullPath(solutionOrProjectPath)) ?? string.Empty;
-            string[] projects = System.Text.RegularExpressions.Regex
-                .Matches(
-                    File.ReadAllText(solutionOrProjectPath),
-                    "Path=\"([^\"]+\\.csproj)\"",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-                .Select(match => Path.GetFullPath(Path.Combine(directory, match.Groups[1].Value)))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            return projects.Length == 1 ? projects[0] : null;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private static string CreateSymbolIdentity(IndexedSymbolRow symbol)
