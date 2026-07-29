@@ -15,19 +15,27 @@ public sealed class SettingsForm : Form
 
     public SettingsForm(LauncherState state)
     {
+        UiTheme.ApplyForm(this);
+
         this.state = state;
         Text = "Launcher Settings";
         FormBorderStyle = FormBorderStyle.Sizable;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(620, 314);
-        MinimumSize = new Size(520, 334);
+        ClientSize = new Size(640, 320);
+        MinimumSize = new Size(540, 340);
+
+        // Flat single-line borders read more modern than the default sunken Fixed3D chrome.
+        foreach (TextBox box in new[] { hostExeBox, sidecarBox, instancesBox, customBrowserBox })
+        {
+            box.BorderStyle = BorderStyle.FixedSingle;
+        }
 
         TableLayoutPanel layout = new()
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(12),
+            Padding = new Padding(16),
             ColumnCount = 3,
             RowCount = 6,
         };
@@ -78,9 +86,13 @@ public sealed class SettingsForm : Form
             AutoSize = true,
             Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
         };
-        Button ok = new() { Text = "Save", DialogResult = DialogResult.OK, Width = 80 };
-        Button cancel = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80 };
+        Button ok = UiTheme.MakeButton("Save", primary: true);
+        ok.DialogResult = DialogResult.OK;
+        Button cancel = UiTheme.MakeButton("Cancel");
+        cancel.DialogResult = DialogResult.Cancel;
         ok.Click += (_, _) => Persist();
+        // RightToLeft flow: the first control added sits rightmost, so add Save first to keep it
+        // in the far-right primary position with Cancel to its left.
         buttons.Controls.Add(ok);
         buttons.Controls.Add(cancel);
         layout.Controls.Add(buttons, 1, 5);
@@ -93,7 +105,8 @@ public sealed class SettingsForm : Form
 
     private Button BrowseButton(TextBox target, bool pickFolder, string? filter)
     {
-        Button button = new() { Text = "Browse", Width = 80 };
+        Button button = UiTheme.MakeButton("Browse");
+        button.Anchor = AnchorStyles.Left;
         button.Click += (_, _) =>
         {
             if (pickFolder)

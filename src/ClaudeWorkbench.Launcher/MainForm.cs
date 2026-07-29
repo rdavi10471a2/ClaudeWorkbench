@@ -16,6 +16,10 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
+        // ApplyForm first: AutoScaleMode.Font + surface colours are the baseline every child
+        // control scales and themes against, so it must run before any control is created.
+        UiTheme.ApplyForm(this);
+
         Text = "ClaudeWorkbench Launcher";
 
         // ApplicationIcon puts the mark on the .exe (Explorer, taskbar, the desktop shortcut), but
@@ -31,8 +35,6 @@ public sealed class MainForm : Form
         }
 
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(1060, 480);
-        MinimumSize = new Size(760, 340);
 
         BuildUi();
         RebuildRows();
@@ -40,6 +42,32 @@ public sealed class MainForm : Form
         pollTimer.Tick += (_, _) => PollAndRefresh();
         pollTimer.Start();
         FormClosing += OnFormClosing;
+    }
+
+    // Sizing lives here, NOT the constructor: under AutoScaleMode.Font + PerMonitorV2 the handle's
+    // DPI and the auto-scale baseline are only settled once the form loads, so a size set in the
+    // ctor gets rescaled unpredictably (this is why the window opened far narrower than its
+    // MinimumSize). By OnLoad, DeviceDpi is real — scale the logical design sizes to this monitor
+    // and CLAMP to its working area so the window always opens fully on-screen, never larger than
+    // the display. (Same discipline as setting SplitContainer.SplitterDistance in Load.)
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+
+        float scale = DeviceDpi / 96f;
+        Rectangle work = Screen.FromControl(this).WorkingArea;
+
+        // Floor of 1024x768 (logical), scaled to this monitor. MinimumSize must never exceed the
+        // working area, or the window cannot fit and clips.
+        Size min = new(
+            Math.Min((int)(1024 * scale), work.Width),
+            Math.Min((int)(768 * scale), work.Height));
+        MinimumSize = min;
+
+        int width = Math.Clamp((int)(1200 * scale), min.Width, (int)(work.Width * 0.95));
+        int height = Math.Clamp((int)(820 * scale), min.Height, (int)(work.Height * 0.95));
+        Size = new Size(width, height);
+        Location = new Point(work.Left + (work.Width - width) / 2, work.Top + (work.Height - height) / 2);
     }
 
     private void BuildUi()
@@ -54,45 +82,60 @@ public sealed class MainForm : Form
         grid.RowHeadersVisible = false;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         grid.ShowCellToolTips = true; // full solution path on hover when truncated
+        UiTheme.StyleGrid(grid);
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Workspace", FillWeight = 20 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Solution", HeaderText = "Solution", FillWeight = 54 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Port", HeaderText = "Port", FillWeight = 10 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Status", HeaderText = "Status", FillWeight = 16 });
         grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) StartSelected(); };
 
-        FlowLayoutPanel toolbar = new()
+        // A top command bar. A single WRAPPING flow panel: buttons sit on one row when the window
+        // is wide and wrap onto further rows when it is narrow, so nothing is ever clipped at any
+        // width or DPI (the panel is AutoSize, so it grows taller as rows wrap). Order runs from
+        // primary workspace/lifecycle actions to machine-wide concerns (auth, reset, settings, help).
+        FlowLayoutPanel commandBar = new()
         {
-            Dock = DockStyle.Bottom,
+            Dock = DockStyle.Top,
             FlowDirection = FlowDirection.LeftToRight,
-            Height = 44,
-            Padding = new Padding(6),
+            WrapContents = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(8, 8, 8, 8),
         };
-        toolbar.Controls.Add(Button("Add workspace", (_, _) => OnAdd()));
-        toolbar.Controls.Add(Button("New blank solution", (_, _) => OnNewBlankSolution()));
-        toolbar.Controls.Add(Button("Start", (_, _) => StartSelected()));
-        toolbar.Controls.Add(Button("Stop", (_, _) => StopSelected()));
-        toolbar.Controls.Add(Button("Remove", (_, _) => OnRemove()));
-        toolbar.Controls.Add(Button("Settings", (_, _) => OnSettings()));
-        toolbar.Controls.Add(Button("Help", (_, _) => OnHelp()));
-
-        // Test convenience: restore the shared samples\ workspaces to the pristine copy publish
-        // lays down in samples-golden\, discarding whatever the fixture runs edited. Global (samples
-        // is an install-level folder), so it lives here rather than on any instance row.
-        toolbar.Controls.Add(Button("Reset samples", (_, _) => OnResetSamples()));
-
+        commandBar.Controls.Add(Button("Add workspace", (_, _) => OnAdd()));
+        commandBar.Controls.Add(Button("New blank solution", (_, _) => OnNewBlankSolution()));
+        commandBar.Controls.Add(Button("Start", (_, _) => StartSelected(), primary: true));
+        commandBar.Controls.Add(Button("Stop", (_, _) => StopSelected()));
+        commandBar.Controls.Add(Button("Remove", (_, _) => OnRemove()));
         // Auth is a machine-wide concern (the CLIs cache their login under the user profile), not a
-        // per-workspace one, so these sit on the launcher toolbar rather than in any instance. Each
-        // opens a terminal on the CLI's own interactive login — see AuthLauncher for why a terminal.
-        toolbar.Controls.Add(AuthButton("Claude sign-in", AuthLauncher.Claude));
-        toolbar.Controls.Add(AuthButton("GitHub sign-in", AuthLauncher.GitHub));
+        // per-workspace one, so these sit on the launcher bar rather than in any instance. Each opens
+        // a terminal on the CLI's own interactive login — see AuthLauncher for why a terminal.
+        commandBar.Controls.Add(AuthButton("Claude sign-in", AuthLauncher.Claude));
+        commandBar.Controls.Add(AuthButton("GitHub sign-in", AuthLauncher.GitHub));
+        // Test convenience: restore the shared samples\ workspaces to the pristine copy publish
+        // lays down in samples-golden\, discarding whatever the fixture runs edited.
+        commandBar.Controls.Add(Button("Reset samples", (_, _) => OnResetSamples()));
+        commandBar.Controls.Add(Button("Settings", (_, _) => OnSettings()));
+        commandBar.Controls.Add(Button("Help", (_, _) => OnHelp()));
 
-        Controls.Add(grid);
-        Controls.Add(toolbar);
+        // Hairline under the command bar to separate it from the list.
+        Panel separator = new() { Dock = DockStyle.Top, Height = 1, BackColor = UiTheme.Border };
+
+        // Inset the grid so it reads as a card on the app background rather than edge-to-edge chrome.
+        Panel gridHost = new() { Dock = DockStyle.Fill, Padding = new Padding(12), BackColor = UiTheme.AppBackground };
+        gridHost.Controls.Add(grid);
+
+        // Add the fill control first (lowest z-order => laid out last, takes the remaining space),
+        // then the top edges. Result, top to bottom: commandBar, separator, grid.
+        Controls.Add(gridHost);
+        Controls.Add(separator);
+        Controls.Add(commandBar);
     }
 
-    private static Button Button(string text, EventHandler onClick)
+    private static Button Button(string text, EventHandler onClick, bool primary = false)
     {
-        Button button = new() { Text = text, AutoSize = true, Height = 30, Margin = new Padding(4) };
+        Button button = UiTheme.MakeButton(text, primary);
         button.Click += onClick;
         return button;
     }
@@ -209,7 +252,7 @@ public sealed class MainForm : Form
     // "command not found" and vanishes.
     private Button AuthButton(string text, AuthLauncher.Provider provider)
     {
-        Button button = new() { Text = text, AutoSize = true, Height = 30, Margin = new Padding(4) };
+        Button button = UiTheme.MakeButton(text);
 
         ContextMenuStrip menu = new();
         menu.Items.Add($"Sign in to {provider.DisplayName}…", null, (_, _) => RunAuth(provider, AuthLauncher.LaunchLogin));
@@ -486,10 +529,10 @@ public sealed class MainForm : Form
                 row.Cells[3].Value = statusText;
                 row.Cells[3].Style.ForeColor = status switch
                 {
-                    InstanceStatus.Running => Color.ForestGreen,
-                    InstanceStatus.Starting => Color.DarkGoldenrod,
-                    InstanceStatus.Error => Color.Firebrick,
-                    _ => Color.Gray,
+                    InstanceStatus.Running => UiTheme.StatusRunning,
+                    InstanceStatus.Starting => UiTheme.StatusStarting,
+                    InstanceStatus.Error => UiTheme.StatusError,
+                    _ => UiTheme.StatusStopped,
                 };
             }
         }

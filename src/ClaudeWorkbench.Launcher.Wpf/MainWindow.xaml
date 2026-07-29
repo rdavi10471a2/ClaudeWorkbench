@@ -1,0 +1,68 @@
+<Window x:Class="ClaudeWorkbench.Launcher.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ClaudeWorkbench Launcher"
+        Icon="app.ico"
+        Width="1200" Height="820" MinWidth="1024" MinHeight="768"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI" FontSize="13"
+        Background="{StaticResource Bg}"
+        Foreground="{StaticResource TextPrimary}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <DockPanel>
+
+        <!-- Command bar. A WrapPanel wraps buttons onto more rows when narrow, so nothing ever
+             clips at any width or DPI. Primary workspace/lifecycle actions first, then machine-wide
+             concerns (auth, reset, settings, help) after a spacer. -->
+        <Border DockPanel.Dock="Top"
+                Background="{StaticResource Surface}"
+                BorderBrush="{StaticResource Border}"
+                BorderThickness="0,0,0,1"
+                Padding="8,8">
+            <WrapPanel Orientation="Horizontal">
+                <Button Content="Add workspace" Click="OnAdd" />
+                <Button Content="New blank solution" Click="OnNewBlankSolution" />
+                <Button Content="Start" Style="{StaticResource PrimaryBtn}" Click="OnStart" />
+                <Button Content="Stop" Click="OnStop" />
+                <Button Content="Remove" Click="OnRemove" />
+                <Border Width="16" />
+                <Button x:Name="claudeButton" Content="Claude sign-in  ▾" Click="OnClaudeAuth" />
+                <Button x:Name="gitHubButton" Content="GitHub sign-in  ▾" Click="OnGitHubAuth" />
+                <Button Content="Reset samples" Click="OnResetSamples" />
+                <Button Content="Settings" Click="OnSettings" />
+                <Button Content="Help" Click="OnHelp" />
+            </WrapPanel>
+        </Border>
+
+        <!-- Workspace list, inset so it reads as a card on the app background. -->
+        <Border Padding="12" Background="{StaticResource Bg}">
+            <DataGrid x:Name="grid" MouseDoubleClick="OnGridDoubleClick">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Workspace" Binding="{Binding Name}" Width="1.6*" />
+                    <DataGridTextColumn Header="Solution" Binding="{Binding SolutionPath}" Width="4*">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding SolutionPath}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="0.8*" />
+                    <DataGridTemplateColumn Header="Status" Width="1.2*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StatusText}"
+                                           Foreground="{Binding StatusBrush}"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+    </DockPanel>
+</Window>

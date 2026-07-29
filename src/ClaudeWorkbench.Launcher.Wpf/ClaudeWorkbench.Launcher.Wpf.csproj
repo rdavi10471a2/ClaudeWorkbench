@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ClaudeWorkbench.Launcher.Wpf</RootNamespace>
+    <AssemblyName>ClaudeWorkbench.Launcher.Wpf</AssemblyName>
+    <!-- Same manifest/icon as the WinForms launcher. WPF is resolution-independent (vector
+         rendering in device-independent units), so PerMonitorV2 here just tells Windows not to
+         bitmap-stretch us — the scaling itself is automatic, no AutoScaleMode/DPI math needed. -->
+    <ApplicationManifest>..\ClaudeWorkbench.Launcher\app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\ClaudeWorkbench.Launcher\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The WinForms desktop SDK folds these into its implicit usings but the WPF one does not, so
+         add them here to keep the engine files compiling (InstanceController uses HttpClient /
+         StreamWriter without explicit usings). -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <!-- This launcher owns its OWN copy of the engine (AuthLauncher/InstanceController/JobObject/
+       LaunchSupport/LauncherModel/SelfTest live in this folder, in the ClaudeWorkbench.Launcher.Wpf
+       namespace). Deliberately NOT shared with the WinForms launcher: two projects declaring the
+       same types from the same files can't coexist in one Roslyn solution, which broke the
+       workbench's own source index. Independent copies keep both launchers indexable and launchable. -->
+
+  <ItemGroup>
+    <!-- The startup splash the host opens the browser at; must sit next to the exe (InstanceController
+         resolves it from AppContext.BaseDirectory). The .ico is embedded for the window chrome. -->
+    <Content Include="..\ClaudeWorkbench.Launcher\loading.html" Link="loading.html" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="..\ClaudeWorkbench.Launcher\app.ico" Link="app.ico" />
+  </ItemGroup>
+
+</Project>

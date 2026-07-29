@@ -1,0 +1,56 @@
+<Window x:Class="ClaudeWorkbench.Launcher.Wpf.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Launcher Settings"
+        Width="640" Height="360" MinWidth="540" MinHeight="340"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI" FontSize="13"
+        Background="{StaticResource Bg}"
+        Foreground="{StaticResource TextPrimary}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="100" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Label Grid.Row="0" Grid.Column="0" Content="Host exe" />
+        <TextBox x:Name="hostExeBox" Grid.Row="0" Grid.Column="1" Margin="0,4" />
+        <Button Grid.Row="0" Grid.Column="2" Content="Browse" Margin="6,4,0,4" Click="OnBrowseHostExe" />
+
+        <Label Grid.Row="1" Grid.Column="0" Content="Sidecar dir" />
+        <TextBox x:Name="sidecarBox" Grid.Row="1" Grid.Column="1" Margin="0,4" />
+        <Button Grid.Row="1" Grid.Column="2" Content="Browse" Margin="6,4,0,4" Click="OnBrowseSidecar" />
+
+        <Label Grid.Row="2" Grid.Column="0" Content="Instances dir" />
+        <TextBox x:Name="instancesBox" Grid.Row="2" Grid.Column="1" Margin="0,4" />
+        <Button Grid.Row="2" Grid.Column="2" Content="Browse" Margin="6,4,0,4" Click="OnBrowseInstances" />
+
+        <Label Grid.Row="3" Grid.Column="0" Content="Browser" />
+        <ComboBox x:Name="browserBox" Grid.Row="3" Grid.Column="1" Margin="0,4" HorizontalAlignment="Left" Width="240"
+                  SelectionChanged="OnBrowserChanged" />
+
+        <Label Grid.Row="4" Grid.Column="0" Content="Custom path" />
+        <TextBox x:Name="customBrowserBox" Grid.Row="4" Grid.Column="1" Margin="0,4" />
+        <Button Grid.Row="4" Grid.Column="2" Content="Browse" Margin="6,4,0,4" Click="OnBrowseCustom" />
+
+        <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" MinWidth="88" IsCancel="True" Click="OnCancel" />
+            <Button Content="Save" MinWidth="88" Style="{StaticResource PrimaryBtn}" IsDefault="True" Click="OnSave" />
+        </StackPanel>
+    </Grid>
+</Window>

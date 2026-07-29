@@ -15,13 +15,13 @@
        the manual escape hatch: set CWB_SKIP_PUBLISH_LIVE=1 for a Release build with no
        publish.
 
-    Hooked to the Launcher project only, so it fires once per solution build rather than
-    once per project. The script publishes the host and sidecar itself, so it does not
-    matter whether the Launcher happens to build first.
+    Hooked to the WPF Launcher project only (the one publish-live ships), so it fires once
+    per solution build rather than once per project. The script publishes the host and
+    sidecar itself, so it does not matter whether the Launcher happens to build first.
   -->
   <Target Name="PublishLiveInstall"
           AfterTargets="Build"
-          Condition="'$(MSBuildProjectName)' == 'ClaudeWorkbench.Launcher'
+          Condition="'$(MSBuildProjectName)' == 'ClaudeWorkbench.Launcher.Wpf'
                      AND '$(Configuration)' == 'Release'
                      AND '$(CWB_SKIP_PUBLISH_LIVE)' != '1'
                      AND '$(OS)' == 'Windows_NT'">

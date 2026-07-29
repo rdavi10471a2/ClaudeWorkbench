@@ -55,10 +55,14 @@ $env:CWB_SKIP_PUBLISH_LIVE = '1'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $hostProject = Join-Path $repoRoot 'src\ClaudeWorkbench.Host\ClaudeWorkbench.Host.csproj'
-$launcherProject = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher\ClaudeWorkbench.Launcher.csproj'
+# Both launcher UIs are published side by side for now: the WPF rewrite (primary) and the
+# original WinForms one (fallback). They share launcher.json in the install root, so either can
+# drive the same workspaces; only the exe you launch differs.
+$launcherProjectWpf = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher.Wpf\ClaudeWorkbench.Launcher.Wpf.csproj'
+$launcherProjectWinForms = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher\ClaudeWorkbench.Launcher.csproj'
 $sidecarSource = Join-Path $repoRoot 'sidecar'
 
-foreach ($required in @($hostProject, $launcherProject, $sidecarSource)) {
+foreach ($required in @($hostProject, $launcherProjectWpf, $launcherProjectWinForms, $sidecarSource)) {
     if (-not (Test-Path $required)) {
         throw "Not a ClaudeWorkbench checkout - missing $required"
     }
@@ -70,7 +74,7 @@ $launcherOut = Join-Path $Destination 'launcher'
 
 # A running install holds its exes open and publish fails partway through with an unhelpful
 # MSBuild error. Say so up front instead.
-$inUse = Get-Process -Name 'ClaudeWorkbench.Launcher', 'ClaudeWorkbench.Host' -ErrorAction SilentlyContinue |
+$inUse = Get-Process -Name 'ClaudeWorkbench.Launcher.Wpf', 'ClaudeWorkbench.Launcher', 'ClaudeWorkbench.Host' -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and $_.Path.StartsWith($Destination, [StringComparison]::OrdinalIgnoreCase) }
 if ($inUse) {
     $names = ($inUse | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
@@ -105,11 +109,13 @@ if (Test-Path $strayConfig) {
     Write-Host '  removed build-machine config\appsettings.json (instances get their own)'
 }
 
-# --- 2. Launcher ----------------------------------------------------------------------
+# --- 2. Launcher (both UIs, into the same folder — their exe/deps names don't collide) ----
 Write-Host ''
-Write-Host '[2/4] Publishing launcher...' -ForegroundColor Cyan
-dotnet publish $launcherProject -c $Configuration -o $launcherOut --nologo
-if ($LASTEXITCODE -ne 0) { throw "Launcher publish failed ($LASTEXITCODE)." }
+Write-Host '[2/4] Publishing launcher (WPF + WinForms)...' -ForegroundColor Cyan
+dotnet publish $launcherProjectWpf -c $Configuration -o $launcherOut --nologo
+if ($LASTEXITCODE -ne 0) { throw "WPF launcher publish failed ($LASTEXITCODE)." }
+dotnet publish $launcherProjectWinForms -c $Configuration -o $launcherOut --nologo
+if ($LASTEXITCODE -ne 0) { throw "WinForms launcher publish failed ($LASTEXITCODE)." }
 
 # --- 3. Sidecar -----------------------------------------------------------------------
 Write-Host ''
@@ -191,12 +197,14 @@ foreach ($sampleName in @('CalculatorSample', 'MixedTfmSample')) {
 
 # --- 4. Shortcuts ---------------------------------------------------------------------
 Write-Host ''
-Write-Host '[4/4] Creating shortcut...' -ForegroundColor Cyan
-$launcherExe = Join-Path $launcherOut 'ClaudeWorkbench.Launcher.exe'
-if (-not (Test-Path $launcherExe)) { throw "Launcher exe not found at $launcherExe" }
+Write-Host '[4/4] Creating shortcuts...' -ForegroundColor Cyan
+$wpfExe = Join-Path $launcherOut 'ClaudeWorkbench.Launcher.Wpf.exe'
+$winFormsExe = Join-Path $launcherOut 'ClaudeWorkbench.Launcher.exe'
+if (-not (Test-Path $wpfExe)) { throw "WPF launcher exe not found at $wpfExe" }
+if (-not (Test-Path $winFormsExe)) { throw "WinForms launcher exe not found at $winFormsExe" }
 
 function New-LauncherShortcut {
-    param([string]$LinkPath, [string]$TargetExe, [string]$WorkingDir)
+    param([string]$LinkPath, [string]$TargetExe, [string]$WorkingDir, [string]$Description)
 
     $shell = New-Object -ComObject WScript.Shell
     try {
@@ -204,7 +212,7 @@ function New-LauncherShortcut {
         $shortcut.TargetPath = $TargetExe
         $shortcut.WorkingDirectory = $WorkingDir
         $shortcut.IconLocation = $TargetExe
-        $shortcut.Description = 'ClaudeWorkbench Launcher'
+        $shortcut.Description = $Description
         $shortcut.Save()
         Write-Host "  $LinkPath"
     }
@@ -213,10 +221,18 @@ function New-LauncherShortcut {
     }
 }
 
-New-LauncherShortcut -LinkPath (Join-Path $Destination 'ClaudeWorkbench Launcher.lnk') -TargetExe $launcherExe -WorkingDir $launcherOut
-if (-not $NoShortcut) {
-    $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'ClaudeWorkbench Launcher.lnk'
-    New-LauncherShortcut -LinkPath $desktopLink -TargetExe $launcherExe -WorkingDir $launcherOut
+# Both UIs get a shortcut. The WPF one is the primary; the WinForms one is the fallback, named
+# so the two are told apart at a glance while both are shipped.
+$shortcuts = @(
+    @{ Name = 'ClaudeWorkbench Launcher (WPF).lnk';      Exe = $wpfExe;      Desc = 'ClaudeWorkbench Launcher (WPF)' },
+    @{ Name = 'ClaudeWorkbench Launcher (WinForms).lnk'; Exe = $winFormsExe; Desc = 'ClaudeWorkbench Launcher (WinForms)' }
+)
+foreach ($s in $shortcuts) {
+    New-LauncherShortcut -LinkPath (Join-Path $Destination $s.Name) -TargetExe $s.Exe -WorkingDir $launcherOut -Description $s.Desc
+    if (-not $NoShortcut) {
+        $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) $s.Name
+        New-LauncherShortcut -LinkPath $desktopLink -TargetExe $s.Exe -WorkingDir $launcherOut -Description $s.Desc
+    }
 }
 
 Write-Host ''

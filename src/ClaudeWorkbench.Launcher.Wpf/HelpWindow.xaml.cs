@@ -1,7 +1,9 @@
-namespace ClaudeWorkbench.Launcher;
+using System.Windows;
 
-// What the launcher is and how its lifecycle works.
-public sealed class HelpForm : Form
+namespace ClaudeWorkbench.Launcher.Wpf;
+
+// What the launcher is and how its lifecycle works. Same copy as the WinForms HelpForm.
+public partial class HelpWindow : Window
 {
     private const string HelpText =
         "ClaudeWorkbench Launcher\r\n" +
@@ -54,47 +56,12 @@ public sealed class HelpForm : Form
         "    folder). It locates the workbench from the host exe in Settings, so instances always\r\n" +
         "    land next to the code they're watching rather than beside the Launcher.";
 
-    public HelpForm()
+    public HelpWindow()
     {
-        UiTheme.ApplyForm(this);
-
-        Text = "ClaudeWorkbench Launcher — Help";
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.Sizable;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        ClientSize = new Size(700, 480);
-        MinimumSize = new Size(540, 380);
-
-        TextBox body = new()
-        {
-            Multiline = true,
-            ReadOnly = true,
-            BorderStyle = BorderStyle.None,
-            ScrollBars = ScrollBars.Vertical,
-            Dock = DockStyle.Fill,
-            Text = HelpText,
-            Font = new Font("Segoe UI", 9.5f),
-            BackColor = UiTheme.Surface,
-            ForeColor = UiTheme.TextPrimary,
-            Margin = new Padding(0),
-        };
-        body.Select(0, 0);
-
-        Panel host = new() { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = UiTheme.Surface };
-        host.Controls.Add(body);
-
-        Panel separator = new() { Dock = DockStyle.Bottom, Height = 1, BackColor = UiTheme.Border };
-
-        FlowLayoutPanel buttons = new() { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(10) };
-        Button close = UiTheme.MakeButton("Close", primary: true);
-        close.DialogResult = DialogResult.OK;
-        buttons.Controls.Add(close);
-
-        Controls.Add(host);
-        Controls.Add(separator);
-        Controls.Add(buttons);
-        AcceptButton = close;
-        CancelButton = close;
+        InitializeComponent();
+        body.Text = HelpText;
+        body.CaretIndex = 0;
     }
+
+    private void OnClose(object sender, RoutedEventArgs e) => Close();
 }
