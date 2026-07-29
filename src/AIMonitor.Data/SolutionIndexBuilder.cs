@@ -25,22 +25,49 @@ public sealed class SolutionIndexBuilder
         Action<string, long, IReadOnlyDictionary<string, string>>? timingSink = null)
     {
         string indexInputPath = Path.GetFullPath(settings.WatchedSolutionPath);
-        CompileIndexTrace.Record(
-            settings,
-            "index-compile.start",
-            indexInputPath,
-            "in-proc MSBuildWorkspace open — the index runs its OWN compile of the watched source tree (this is NOT the gate's out-of-proc dotnet build)");
         System.Diagnostics.Stopwatch snapshotStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        string extension = Path.GetExtension(settings.WatchedSolutionPath);
-        MSBuildSolutionSnapshot snapshot = extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)
-            ? await workspaceLoader.OpenProjectAsync(settings.WatchedSolutionPath, cancellationToken, timingSink)
-            : await workspaceLoader.OpenSolutionAsync(settings.WatchedSolutionPath, cancellationToken, timingSink);
-        snapshotStopwatch.Stop();
-        CompileIndexTrace.Record(
-            settings,
-            "index-compile.done",
-            indexInputPath,
-            $"in-proc compile ms={snapshotStopwatch.ElapsedMilliseconds}");
+        MSBuildSolutionSnapshot snapshot;
+
+        // ADR-0007, opt-in (CWB_INDEX_RIDES_BUILD=1): the index rides the build. One real build emits the
+        // generated files + resolved refs; the index is a Roslyn pass over that output — accurate razor (from
+        // the build's .g.cs), real paths, no MSBuildWorkspace/BuildHost. Single-project only for now; anything
+        // else falls back to the existing in-proc loader (unchanged default).
+        string? buildProject = IndexRidesBuild() ? ResolveSingleProject(settings.WatchedSolutionPath) : null;
+        if (buildProject is not null)
+        {
+            CompileIndexTrace.Record(
+                settings,
+                "index-from-build.start",
+                buildProject,
+                "index rides the build (ADR-0007): one real build emits generated + refs, the index reads them — no MSBuildWorkspace/BuildHost");
+            BuildOutputSnapshotResult buildResult = await new BuildOutputSnapshotLoader()
+                .OpenProjectFromBuildAsync(buildProject, cancellationToken: cancellationToken);
+            snapshot = buildResult.Snapshot;
+            snapshotStopwatch.Stop();
+            CompileIndexTrace.Record(
+                settings,
+                "index-from-build.done",
+                buildProject,
+                $"buildSucceeded={buildResult.BuildSucceeded} projects={snapshot.Projects.Count} ms={snapshotStopwatch.ElapsedMilliseconds}");
+        }
+        else
+        {
+            CompileIndexTrace.Record(
+                settings,
+                "index-compile.start",
+                indexInputPath,
+                "in-proc MSBuildWorkspace open — the index runs its OWN compile of the watched source tree (this is NOT the gate's out-of-proc dotnet build)");
+            string extension = Path.GetExtension(settings.WatchedSolutionPath);
+            snapshot = extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)
+                ? await workspaceLoader.OpenProjectAsync(settings.WatchedSolutionPath, cancellationToken, timingSink)
+                : await workspaceLoader.OpenSolutionAsync(settings.WatchedSolutionPath, cancellationToken, timingSink);
+            snapshotStopwatch.Stop();
+            CompileIndexTrace.Record(
+                settings,
+                "index-compile.done",
+                indexInputPath,
+                $"in-proc compile ms={snapshotStopwatch.ElapsedMilliseconds}");
+        }
         timingSink?.Invoke(
             "index.full.snapshot",
             snapshotStopwatch.ElapsedMilliseconds,
@@ -145,6 +172,45 @@ public sealed class SolutionIndexBuilder
                 ["fileCount"] = normalizedFilePaths.Length.ToString()
             });
         return summary;
+    }
+
+    private static bool IndexRidesBuild()
+    {
+        return Environment.GetEnvironmentVariable("CWB_INDEX_RIDES_BUILD") is "1" or "true" or "TRUE";
+    }
+
+    // ADR-0007 build-output path is single-project for now: a .csproj directly, or a .slnx containing exactly
+    // one project. Anything else returns null so the existing loader handles it.
+    private static string? ResolveSingleProject(string solutionOrProjectPath)
+    {
+        string extension = Path.GetExtension(solutionOrProjectPath);
+        if (extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.GetFullPath(solutionOrProjectPath);
+        }
+
+        if (!extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            string directory = Path.GetDirectoryName(Path.GetFullPath(solutionOrProjectPath)) ?? string.Empty;
+            string[] projects = System.Text.RegularExpressions.Regex
+                .Matches(
+                    File.ReadAllText(solutionOrProjectPath),
+                    "Path=\"([^\"]+\\.csproj)\"",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                .Select(match => Path.GetFullPath(Path.Combine(directory, match.Groups[1].Value)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return projects.Length == 1 ? projects[0] : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string CreateSymbolIdentity(IndexedSymbolRow symbol)
