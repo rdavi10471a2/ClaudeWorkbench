@@ -335,10 +335,27 @@ public sealed class BuildOutputSnapshotLoader
         }
 
         process.Start();
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit((int)TimeSpan.FromMinutes(5).TotalMilliseconds);
-        return (process.HasExited ? process.ExitCode : -1, stdout + stderr);
+        // Drain both pipes CONCURRENTLY: a sequential ReadToEnd on stdout can deadlock if the child fills its
+        // stderr buffer (a big `dotnet build` easily does), because the child blocks on stderr while we wait on
+        // stdout and it never exits. And on timeout, kill the whole tree — otherwise a wedged build keeps pinning
+        // obj/bin (the file-locking hazard). Mirrors SolutionBuildService.RunProcess.
+        Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
+        Task<string> standardError = process.StandardError.ReadToEndAsync();
+        bool exited = process.WaitForExit((int)TimeSpan.FromMinutes(5).TotalMilliseconds);
+        if (!exited)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // The process finished between the timeout and the kill.
+            }
+        }
+
+        string output = standardOutput.GetAwaiter().GetResult() + standardError.GetAwaiter().GetResult();
+        return (exited ? process.ExitCode : -1, output);
     }
 
     // Hand-written source, PLUS the MSBuild-generated helpers under obj (GlobalUsings / AssemblyInfo — needed
