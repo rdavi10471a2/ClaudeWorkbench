@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AIMonitor.Core;
 using AIMonitor.Indexing;
 using AIMonitor.Logging;
 using AIMonitor.McpServer;
@@ -293,10 +294,21 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                         : postAcceptRestore.Message);
             }
 
+            // ADR-0007: when the index rides the build, the reindex must run AFTER the build-after-accept so it
+            // can READ that build's generated files + refs instead of compiling its own — the no-3-builds order.
+            // Gated to the case the read path supports: flag on, the operator wants the index rebuilt, a build
+            // is actually going to run (buildConfiguration set), and the watched solution is a single project.
+            // Otherwise the ordering is exactly as before (the terminal Record does the index, then the build).
+            bool ridesBuild = IndexRidesBuild.Enabled
+                && rebuildIndex
+                && buildConfiguration is not null
+                && WatchedSolutionInfo.ResolveSingleProject(workspace.Settings.WatchedSolutionPath) is not null;
+
             // The terminal accept is the ONLY place the session's index refresh happens. When the
             // operator unchecks "rebuild index" (honored only here, on the terminal file), defer it:
             // the bytes are already on disk, but the index is left stale until the next reindex.
             // deferIndexRefresh drives BOTH paths — the session refreshPlan and the single-file path.
+            // In the rides-build order we ALSO defer here and run the reindex after the build below.
             ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
                 workspace.Settings,
                 logger,
@@ -305,8 +317,12 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 "accepted",
                 record.StagedHash,
                 "ClaudeWorkbench",
-                deferIndexRefresh: !rebuildIndex,
-                refreshPlan: rebuildIndex ? refreshPlan : null);
+                deferIndexRefresh: !rebuildIndex || ridesBuild,
+                refreshPlan: (rebuildIndex && !ridesBuild) ? refreshPlan : null);
+
+            // The reindex result surfaced to the operator/agent: today's flow gets it from the terminal Record
+            // above; the rides-build flow computes it after the build (below) and overwrites this.
+            PostAcceptIndexRefreshResult? effectiveIndexRefresh = ridesBuild ? null : decisionResult.IndexRefresh;
 
             string indexNote = rebuildIndex
                 ? "index rebuilt for the edit session"
@@ -325,12 +341,26 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // concurrent MSBuild handles contend on the watched tree). Skipped when buildConfiguration is
             // null (operator unchecked "Build after accept", or a programmatic/agent accept).
             string buildNote = string.Empty;
+            SolutionBuildService.BuildResult? postAcceptBuild = null;
             if (buildConfiguration is not null)
             {
                 bool buildSucceeded = false;
                 try
                 {
-                    SolutionBuildService.BuildResult build = new SolutionBuildService().Build(workspace.Settings, buildConfiguration);
+                    CompileIndexTrace.Record(
+                        workspace.Settings,
+                        "post-accept-build.start",
+                        workspace.Settings.WatchedSolutionPath,
+                        ridesBuild
+                            ? "build-after-accept (ADR-0007): the ONE real build — emits generated + refs; the index reads its output next"
+                            : "build-after-accept: real dotnet build of the watched solution for runnable output");
+                    postAcceptBuild = new SolutionBuildService().Build(workspace.Settings, buildConfiguration);
+                    SolutionBuildService.BuildResult build = postAcceptBuild;
+                    CompileIndexTrace.Record(
+                        workspace.Settings,
+                        "post-accept-build.done",
+                        workspace.Settings.WatchedSolutionPath,
+                        $"succeeded={!build.IsError} generatedRoot={(string.IsNullOrEmpty(build.GeneratedRoot) ? "-" : build.GeneratedRoot)} refs={build.HarvestedReferences.Count}");
                     logger.Write(
                         build.IsError ? MonitorLogLevel.Warning : MonitorLogLevel.Information,
                         "Host",
@@ -369,10 +399,34 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                 }
             }
 
+            // ADR-0007 reindex, AFTER the build. The build-after-accept above (running under the flag) emitted
+            // the generated .g.cs + harvested the refs, so the index READS that output — no compile of its own.
+            // If the build failed or produced no generated output, the source is still on disk and MUST be
+            // indexed, so fall back to the normal reindex (which self-builds under the flag / uses the loader).
+            if (ridesBuild)
+            {
+                effectiveIndexRefresh = postAcceptBuild is { IsError: false, RidesBuildProject: not null, GeneratedRoot: { Length: > 0 } }
+                    ? new IndexRefreshService().RebuildAfterAcceptedDecisionFromBuildOutput(
+                        workspace.Settings,
+                        logger,
+                        record,
+                        "ClaudeWorkbench",
+                        postAcceptBuild.RidesBuildProject,
+                        postAcceptBuild.GeneratedRoot,
+                        postAcceptBuild.HarvestedReferences,
+                        refreshPlan)
+                    : new IndexRefreshService().RebuildAfterAcceptedDecision(
+                        workspace.Settings,
+                        logger,
+                        record,
+                        "ClaudeWorkbench",
+                        refreshPlan);
+            }
+
             string message = writtenPaths.Count == 1
                 ? $"Accepted. {record.RelativePath} written; {indexNote}.{restoreNote}{buildNote}"
                 : $"Accepted. Edit session complete: {writtenPaths.Count} file(s) written ({DescribePaths(writtenPaths)}); {indexNote}.{restoreNote}{buildNote}";
-            string agentSummary = BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex) + restoreNote + buildNote;
+            string agentSummary = BuildOutcomeSummary(decisionResult, writtenPaths, terminalBuild, rebuildIndex, effectiveIndexRefresh) + restoreNote + buildNote;
             return new ReviewActionResult(message, agentSummary);
         }
         catch (Exception exception)
@@ -434,7 +488,8 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         ReviewDecisionWithIndexRefreshResult result,
         IReadOnlyCollection<string> writtenPaths,
         PreMergeValidationResult? terminalBuild,
-        bool rebuildIndex)
+        bool rebuildIndex,
+        PostAcceptIndexRefreshResult? effectiveIndexRefresh)
     {
         List<string> parts = new()
         {
@@ -457,7 +512,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         {
             parts.Add("Index refresh DEFERRED (operator choice) — this file is stale in the index until the next reindex.");
         }
-        else if (result.IndexRefresh is PostAcceptIndexRefreshResult index)
+        else if (effectiveIndexRefresh is PostAcceptIndexRefreshResult index)
         {
             parts.Add(index.IsError
                 ? $"Index refresh failed: {index.Message}"
