@@ -1,4 +1,6 @@
 using AIMonitor.Core;
+using AIMonitor.Data;
+using AIMonitor.Indexing;
 using AIMonitor.Workflow;
 
 namespace AIMonitor.Integration.Tests;
@@ -63,6 +65,45 @@ public sealed class IndexPostAcceptBuildOutputTests
         Assert.Null(result.RidesBuildProject);
         Assert.Null(result.GeneratedRoot);
         Assert.Empty(result.HarvestedReferences);
+    }
+
+    [Fact]
+    public async Task Read_only_reindex_from_build_output_lands_razor_in_the_index_without_its_own_compile()
+    {
+        (MonitorSettings settings, _) = CopySampleAsWatchedSolution();
+
+        // The ONE real build (the build-after-accept) emits the generated files + harvests refs.
+        string? previous = Environment.GetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable);
+        SolutionBuildService.BuildResult build;
+        try
+        {
+            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, "1");
+            build = new SolutionBuildService().Build(settings);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(IndexRidesBuild.EnvironmentVariable, previous);
+        }
+
+        Assert.False(build.IsError, $"post-accept build failed: {build.Message}");
+        Assert.NotNull(build.RidesBuildProject);
+        Assert.False(string.IsNullOrEmpty(build.GeneratedRoot));
+
+        // The reindex READS that output — no compile of its own (flag deliberately left off here to prove the
+        // read path is compile-free and flag-independent).
+        SolutionIndexSummary summary = await new SolutionIndexRebuildService().RebuildFromBuildOutputAsync(
+            settings,
+            build.RidesBuildProject!,
+            build.GeneratedRoot!,
+            build.HarvestedReferences);
+        Assert.True(summary.ProjectCount > 0, "the build-output read produced no projects");
+
+        // Through the real SQLite index: a .razor @code member is stored at the .razor, mapped via the build's
+        // #line directives — the index rode the build's output.
+        SolutionIndexQueryService query = SolutionIndexQueryService.Create(settings);
+        Assert.Contains(
+            query.ListSymbols(name: "LoadAsync"),
+            symbol => symbol.FilePath.EndsWith("CustomerList.razor", StringComparison.OrdinalIgnoreCase));
     }
 
     private static (MonitorSettings Settings, string ProjectDir) CopySampleAsWatchedSolution()

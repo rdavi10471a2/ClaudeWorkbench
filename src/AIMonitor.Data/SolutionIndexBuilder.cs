@@ -89,6 +89,55 @@ public sealed class SolutionIndexBuilder
         return summary;
     }
 
+    // ADR-0007 accept path: the index reads a build's ALREADY-produced output — the generated .g.cs the
+    // build-after-accept emitted, plus its harvested reference set — with NO compile of its own. This is the
+    // no-3-builds path: the terminal gate build validated, the build-after-accept produced the real output,
+    // and the index is a Roslyn pass over that. (RebuildAsync's own OpenProjectFromBuildAsync path still runs
+    // a build; this one is handed the outputs and only reads them.)
+    public async Task<SolutionIndexSummary> RebuildFromBuildOutputAsync(
+        MonitorSettings settings,
+        string projectPath,
+        string generatedRoot,
+        IReadOnlyList<string> references,
+        CancellationToken cancellationToken = default,
+        Action<string, long, IReadOnlyDictionary<string, string>>? timingSink = null)
+    {
+        CompileIndexTrace.Record(
+            settings,
+            "index-from-build.read.start",
+            projectPath,
+            "index rides the build (ADR-0007): reading the build-after-accept's already-emitted generated files + refs — NO compile here");
+        System.Diagnostics.Stopwatch snapshotStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        MSBuildSolutionSnapshot snapshot = await new BuildOutputSnapshotLoader()
+            .BuildProjectSnapshotAsync(projectPath, generatedRoot, references, cancellationToken);
+        snapshotStopwatch.Stop();
+        CompileIndexTrace.Record(
+            settings,
+            "index-from-build.read.done",
+            projectPath,
+            $"projects={snapshot.Projects.Count} refs={references.Count} ms={snapshotStopwatch.ElapsedMilliseconds}");
+        timingSink?.Invoke(
+            "index.full.snapshot",
+            snapshotStopwatch.ElapsedMilliseconds,
+            new Dictionary<string, string>
+            {
+                ["inputPath"] = Path.GetFullPath(settings.WatchedSolutionPath),
+                ["source"] = "build-output-read"
+            });
+
+        System.Diagnostics.Stopwatch saveFromBuildStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        SolutionIndexSummary summary = store.SaveSnapshot(snapshot, timingSink);
+        saveFromBuildStopwatch.Stop();
+        timingSink?.Invoke(
+            "index.full.sqlite-save",
+            saveFromBuildStopwatch.ElapsedMilliseconds,
+            new Dictionary<string, string>
+            {
+                ["inputPath"] = Path.GetFullPath(settings.WatchedSolutionPath)
+            });
+        return summary;
+    }
+
     public async Task<SolutionIndexSummary> RefreshProjectFilesAsync(
         MonitorSettings settings,
         string projectPath,

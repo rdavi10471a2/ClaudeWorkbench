@@ -223,6 +223,119 @@ public sealed class IndexRefreshService
         }
     }
 
+    // ADR-0007 accept path: refresh the index by READING the build-after-accept's output (its generated .g.cs
+    // + harvested refs) rather than running a compile. This is the no-3-builds path — the terminal gate build
+    // validated, the build-after-accept produced the real output, and this reads it. Always a whole-project
+    // (single-project) refresh, so it mirrors the solution-refresh branch of RebuildAfterAcceptedDecision.
+    public PostAcceptIndexRefreshResult RebuildAfterAcceptedDecisionFromBuildOutput(
+        MonitorSettings settings,
+        IMonitorLogger logger,
+        StagedEditRecord record,
+        string source,
+        string projectPath,
+        string generatedRoot,
+        IReadOnlyList<string> references,
+        PostAcceptIndexRefreshPlan? refreshPlan = null)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        string databasePath = MonitorDataPaths.GetDefaultIndexDatabasePath(settings);
+        string[] filePaths = GetFileRefreshPaths(record, refreshPlan);
+
+        CompileIndexTrace.Record(
+            settings,
+            "index-refresh.start",
+            settings.WatchedSolutionPath,
+            $"index refresh (trigger={source}, mode=build-output-read) — reads the build-after-accept's generated + refs, NO compile of its own");
+        logger.Write(
+            MonitorLogLevel.Information,
+            source,
+            "index.refresh-after-accept.started",
+            "Post-accept build-output index refresh started (reads the build's generated files + refs, no compile).",
+            new Dictionary<string, string>
+            {
+                ["stagedRecordId"] = record.StagedRecordId,
+                ["watchedFilePath"] = record.WatchedFilePath,
+                ["watchedSolutionPath"] = settings.WatchedSolutionPath,
+                ["databasePath"] = databasePath,
+                ["refreshMode"] = "build-output-read",
+                ["projectPath"] = projectPath,
+                ["generatedRoot"] = generatedRoot,
+                ["referenceCount"] = references.Count.ToString()
+            });
+
+        try
+        {
+            Action<string, long, IReadOnlyDictionary<string, string>> timingSink = CreateTimingSink(
+                logger, source, record, "build-output-read", [projectPath], filePaths);
+            SolutionIndexSummary summary = new SolutionIndexRebuildService()
+                .RebuildFromBuildOutputAsync(settings, projectPath, generatedRoot, references, timingSink: timingSink)
+                .GetAwaiter()
+                .GetResult();
+            stopwatch.Stop();
+            PostAcceptIndexRefreshResult result = new()
+            {
+                Status = "rebuilt",
+                RefreshMode = "build-output-read",
+                IsError = false,
+                DatabasePath = databasePath,
+                ProjectCount = summary.ProjectCount,
+                DocumentCount = summary.DocumentCount,
+                DiagnosticCount = summary.DiagnosticCount,
+                DurationMs = stopwatch.ElapsedMilliseconds,
+                Message = "Post-accept build-output index refresh completed."
+            };
+            // The build-output read reindexed the whole (single) project, so every accepted session file is fresh.
+            MarkRefreshFilesFresh(settings, record, filePaths, rebuiltWholeProjectOrSolution: true, refreshPlan);
+            logger.Write(
+                MonitorLogLevel.Information,
+                source,
+                "index.refresh-after-accept.completed",
+                result.Message,
+                new Dictionary<string, string>
+                {
+                    ["stagedRecordId"] = record.StagedRecordId,
+                    ["watchedFilePath"] = record.WatchedFilePath,
+                    ["databasePath"] = databasePath,
+                    ["projectCount"] = result.ProjectCount.ToString(),
+                    ["documentCount"] = result.DocumentCount.ToString(),
+                    ["diagnosticCount"] = result.DiagnosticCount.ToString(),
+                    ["durationMs"] = result.DurationMs.ToString(),
+                    ["isError"] = "false",
+                    ["refreshMode"] = result.RefreshMode
+                });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            PostAcceptIndexRefreshResult result = new()
+            {
+                Status = "failed",
+                RefreshMode = "build-output-read",
+                IsError = true,
+                DatabasePath = databasePath,
+                DurationMs = stopwatch.ElapsedMilliseconds,
+                Message = ex.Message
+            };
+            logger.Write(
+                MonitorLogLevel.Error,
+                source,
+                "index.refresh-after-accept.failed",
+                "Post-accept build-output index refresh failed.",
+                new Dictionary<string, string>
+                {
+                    ["stagedRecordId"] = record.StagedRecordId,
+                    ["watchedFilePath"] = record.WatchedFilePath,
+                    ["databasePath"] = databasePath,
+                    ["durationMs"] = result.DurationMs.ToString(),
+                    ["isError"] = "true",
+                    ["refreshMode"] = result.RefreshMode,
+                    ["error"] = ex.Message
+                });
+            return result;
+        }
+    }
+
     public static PostAcceptIndexRefreshResult DeferredUntilPlannedFilesComplete()
     {
         return new PostAcceptIndexRefreshResult
