@@ -202,11 +202,15 @@ Done:
   whole solution via `ReadSolutionSnapshotAsync`. No single-project and no single-file special case in the ride
   path (`c4ab7c7`).
 
-Remaining (parity shows no measured customer-code impact; hardening, not blockers):
+More done:
+- [x] **#3** index the evaluated `@(Compile)` set (`MSBuildEvaluatedProject.CompileFiles`) + build-time obj
+  helpers, not a directory glob. Parity re-run: eliminated the Host's `runtime/` over-collection entirely
+  (docs 226→84 exact; symbols 1817→1120, new +1 real win), and **halved build+read time (51s→27s)** by not
+  reading stray files. Makes the index robust to stray `.cs` regardless of the artifact (`8879418`).
+- [x] **#4** `RootNamespace` + `<ProjectReference>` graph read from the evaluated project, not regex; deleted
+  `ReadRootNamespace`/`ParseProjectReferences` (`8879418`).
+
+Remaining (hardening, not blockers):
 - [ ] **B** the per-file `RefreshProjectFilesAsync` → `OpenProjectFilesAsync` BuildHost path is now
   fallback-only (flag-off / failed-build); delete it when the flag flips / the old loader is removed.
-- [ ] **#3** `CollectSourceFiles` globbing — the dramatic trigger (`runtime/`) is a test artifact; still worth
-  the principled fix (evaluated `Compile` items) for `<Compile Remove>` / nested cones.
-- [ ] **#4** regex-scraped `RootNamespace` / `ProjectReference` — exact ref parity on all src projects shows
-  the literal scrape works for real projects; still worth reading from the evaluated project.
 - [ ] **single-TFM assumption** — make explicit: plural `<TargetFrameworks>` → pick first + log.
