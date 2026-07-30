@@ -134,15 +134,6 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // Reverse diff colors preference (Monaco viewer).
     private bool SwapDiffColors => Settings.Current.DiffSwapColors;
 
-    // RadzenTabs active tab: 0 = Monaco (first), 1 = Classic. Follows the preference so the chosen
-    // viewer opens active and the disabled one can't be the initial selection.
-    private int diffTabIndex;
-
-    protected override void OnInitialized()
-    {
-        diffTabIndex = MonacoSelected ? 0 : 1;
-    }
-
     protected override void OnParametersSet()
     {
         LoadReview(preserveSelection: false);

@@ -106,29 +106,30 @@
                 </div>
 
                 <section class="staged-review-diff-shell" aria-label="Side by side staged review">
-                    @* Two viewers, one live at a time per the operator's Diff viewer setting (default Monaco).
-                       The non-selected one keeps its tab but is disabled — kept, not removed. *@
-                    <RadzenTabs @bind-SelectedIndex="diffTabIndex">
-                        <Tabs>
-                            <RadzenTabsItem Text="Monaco Diff" Disabled="@(!MonacoSelected)">
-                                @* Monaco diff editor — F7/Shift+F7 change nav, overview ruler, word-level diff. *@
-                                <MonacoDiffView OldText="@(selectedModel.CurrentText)"
-                                                NewText="@(selectedModel.ProposedText)"
-                                                Path="@(selectedModel.RelativePath)"
-                                                OldLabel="Current Source"
-                                                NewLabel="Proposed Candidate"
-                                                NewOnLeft="@MergeNewOnLeft"
-                                                SwapColors="@SwapDiffColors" />
-                            </RadzenTabsItem>
-                            <RadzenTabsItem Text="Classic Diff" Disabled="@MonacoSelected">
-                                <DiffView OldText="@(selectedModel.CurrentText)"
-                                          NewText="@(selectedModel.ProposedText)"
-                                          OldLabel="Current Source"
-                                          NewLabel="Proposed Candidate"
-                                          NewOnLeft="@MergeNewOnLeft" />
-                            </RadzenTabsItem>
-                        </Tabs>
-                    </RadzenTabs>
+                    @* One viewer, chosen by the operator's Diff viewer setting (Monaco default; Classic =
+                       DiffPlex). Rendered straight into the pane — no tab chrome, because the choice is
+                       config-driven and a disabled tab you can't click is just noise. Change the setting to switch. *@
+                    <div class="staged-review-diff-pane">
+                        @if (MonacoSelected)
+                        {
+                            @* Monaco diff editor — F7/Shift+F7 change nav, overview ruler, word-level diff. *@
+                            <MonacoDiffView OldText="@(selectedModel.CurrentText)"
+                                            NewText="@(selectedModel.ProposedText)"
+                                            Path="@(selectedModel.RelativePath)"
+                                            OldLabel="Current Source"
+                                            NewLabel="Proposed Candidate"
+                                            NewOnLeft="@MergeNewOnLeft"
+                                            SwapColors="@SwapDiffColors" />
+                        }
+                        else
+                        {
+                            <DiffView OldText="@(selectedModel.CurrentText)"
+                                      NewText="@(selectedModel.ProposedText)"
+                                      OldLabel="Current Source"
+                                      NewLabel="Proposed Candidate"
+                                      NewOnLeft="@MergeNewOnLeft" />
+                        }
+                    </div>
                 </section>
 
                 <div class="staged-review-toggles">
