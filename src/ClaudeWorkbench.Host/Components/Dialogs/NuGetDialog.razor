@@ -1,0 +1,303 @@
+@using AIMonitor.Workflow
+@using Microsoft.AspNetCore.Components.Web
+@inject DialogService DialogService
+@inject NuGetPackageService Packages
+@inject AIMonitor.McpServer.WorkspaceManager Workspace
+
+@* Operator NuGet manager. Scope switch (Solution | project) + Browse/Installed/Updates/Consolidate.
+   Installed is index-backed; latest/Updates come from `dotnet list package --outdated`; search from
+   `dotnet package search`. Writes run host-side (dotnet add/remove + restore) then reindex. *@
+<div class="nuget-dialog" data-testid="nuget-dialog" @onkeydown="OnKeyDown">
+    <div class="nuget-toolbar">
+        <div class="nuget-scope">
+            <label for="nuget-scope">Scope</label>
+            <select id="nuget-scope" @bind="scope" disabled="@busy" data-testid="nuget-scope">
+                <option value="@SolutionScope">Whole solution</option>
+                @foreach (ProjectEntry project in projects)
+                {
+                    <option value="@project.Path">@project.Name</option>
+                }
+            </select>
+        </div>
+        <label class="nuget-prerelease">
+            <input type="checkbox" @bind="includePrerelease" @bind:after="RefreshOutdatedAsync" disabled="@busy" />
+            Include prerelease
+        </label>
+    </div>
+
+    <div class="nuget-tabs" role="tablist">
+        <button type="button" class="nuget-tab @(activeTab == Tab.Installed ? "active" : "")"
+                @onclick="@(() => activeTab = Tab.Installed)">Installed</button>
+        <button type="button" class="nuget-tab @(activeTab == Tab.Browse ? "active" : "")"
+                @onclick="@(() => activeTab = Tab.Browse)">Browse</button>
+        <button type="button" class="nuget-tab @(activeTab == Tab.Updates ? "active" : "")"
+                @onclick="@(() => activeTab = Tab.Updates)">
+            Updates@if (OutdatedInScope().Count > 0) { <span class="nuget-badge">@OutdatedInScope().Count</span> }
+        </button>
+        @if (scope == SolutionScope)
+        {
+            <button type="button" class="nuget-tab @(activeTab == Tab.Consolidate ? "active" : "")"
+                    @onclick="@(() => activeTab = Tab.Consolidate)">
+                Consolidate@if (ConsolidationCandidates().Count > 0) { <span class="nuget-badge nuget-badge-warn">@ConsolidationCandidates().Count</span> }
+            </button>
+        }
+    </div>
+
+    <div class="nuget-body">
+        @switch (activeTab)
+        {
+            case Tab.Installed:
+                @RenderInstalled
+                break;
+            case Tab.Browse:
+                @RenderBrowse
+                break;
+            case Tab.Updates:
+                @RenderUpdates
+                break;
+            case Tab.Consolidate:
+                @RenderConsolidate
+                break;
+        }
+    </div>
+
+    @if (statusMessage is not null)
+    {
+        <div class="nuget-status @(statusIsError ? "error" : "ok")">
+            <div class="nuget-status-title">
+                <RadzenIcon Icon="@(statusIsError ? "error_outline" : "check_circle")" /> @statusMessage
+            </div>
+            @if (statusDiagnostics.Count > 0)
+            {
+                <ul class="nuget-diagnostics">
+                    @foreach (string line in statusDiagnostics)
+                    {
+                        <li>@line</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+
+    <div class="nuget-footer">
+        @if (busy)
+        {
+            <span class="nuget-busy"><RadzenIcon Icon="autorenew" /> running the .NET SDK &amp; reindexing…</span>
+        }
+        <RadzenButton Text="Close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                      Disabled="@busy" Click="@(() => DialogService.Close(null))" />
+    </div>
+</div>
+
+@* ----------------- tab fragments ----------------- *@
+
+@code {
+    private RenderFragment RenderInstalled => __builder =>
+    {
+        <text>
+        @{
+            IReadOnlyList<InstalledGroup> groups = InstalledInScope();
+        }
+        @if (groups.Count == 0)
+        {
+            <div class="nuget-empty">No packages in this scope.</div>
+        }
+        else
+        {
+            <table class="nuget-table">
+                <thead>
+                    <tr><th>Package</th><th>Version</th><th>Latest</th><th>Used in</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (InstalledGroup group in groups)
+                    {
+                        string? latest = LatestFor(group.PackageId);
+                        bool hasUpdate = latest is not null;
+                        <tr>
+                            <td class="nuget-pkg">@group.PackageId</td>
+                            <td>
+                                @string.Join(", ", group.DistinctVersions)
+                                @if (group.IsMixed) { <span class="nuget-chip warn" title="Different versions across projects">mixed</span> }
+                            </td>
+                            <td>@(latest ?? "—")</td>
+                            <td>@(scope == SolutionScope ? $"{group.Uses.Count} project(s)" : "this project")</td>
+                            <td class="nuget-row-actions">
+                                @if (hasUpdate)
+                                {
+                                    <RadzenButton Text="Update" Icon="upgrade" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                                  Disabled="@busy" Click="@(() => UpdateToLatestAsync(group))" />
+                                }
+                                <RadzenButton Text="Uninstall" Icon="delete" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                              Disabled="@busy" Click="@(() => UninstallAsync(group))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        </text>
+    };
+
+    private RenderFragment RenderBrowse => __builder =>
+    {
+        <text>
+        <div class="nuget-search">
+            <input class="nuget-search-input" placeholder="Search nuget.org…"
+                   @bind="searchText" @bind:event="oninput"
+                   @onkeydown="@(e => { if (e.Key == "Enter") return SearchAsync(); return Task.CompletedTask; })"
+                   data-testid="nuget-search" />
+            <RadzenButton Text="Search" Icon="search" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                          Disabled="@(busy || searching)" Click="@SearchAsync" />
+        </div>
+
+        <div class="nuget-browse">
+            <div class="nuget-results">
+                @if (searching)
+                {
+                    <div class="nuget-empty"><RadzenIcon Icon="hourglass_empty" /> Searching…</div>
+                }
+                else if (searchHits.Count == 0)
+                {
+                    <div class="nuget-empty">Type a package name and search.</div>
+                }
+                else
+                {
+                    @foreach (NuGetPackageService.PackageSearchHit hit in searchHits)
+                    {
+                        <button type="button" class="nuget-hit @(selectedHit?.Id == hit.Id ? "active" : "")"
+                                @onclick="@(() => SelectHit(hit))">
+                            <span class="nuget-hit-id">@hit.Id</span>
+                            <span class="nuget-hit-meta">v@hit.LatestVersion · @FormatDownloads(hit.TotalDownloads) downloads</span>
+                            @if (!string.IsNullOrWhiteSpace(hit.Owners)) { <span class="nuget-hit-owners">@hit.Owners</span> }
+                        </button>
+                    }
+                }
+            </div>
+
+            <div class="nuget-detail">
+                @if (selectedHit is null)
+                {
+                    <div class="nuget-empty">Select a package to install.</div>
+                }
+                else
+                {
+                    <h4 class="nuget-detail-id">@selectedHit.Id</h4>
+                    <p class="nuget-detail-line">Latest: <strong>@selectedHit.LatestVersion</strong> · @selectedHit.SourceName</p>
+
+                    <label class="nuget-detail-label">Version <span class="nuget-optional">(blank = latest)</span></label>
+                    <input class="nuget-version-input" placeholder="@selectedHit.LatestVersion"
+                           @bind="installVersion" @bind:event="oninput" />
+
+                    @if (scope == SolutionScope)
+                    {
+                        <label class="nuget-detail-label">Install into</label>
+                        <div class="nuget-targets">
+                            @foreach (ProjectEntry project in projects)
+                            {
+                                <label class="nuget-target">
+                                    <input type="checkbox"
+                                           checked="@installTargets.Contains(project.Path)"
+                                           @onchange="@(e => ToggleTarget(project.Path, (bool)e.Value!))" />
+                                    @project.Name
+                                </label>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="nuget-detail-line">Into: <strong>@projects.FirstOrDefault(p => PathEquals(p.Path, scope))?.Name</strong></p>
+                    }
+
+                    <RadzenButton Text="Install" Icon="download" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                                  Disabled="@busy" Click="@InstallSelectedAsync" data-testid="nuget-install" />
+                }
+            </div>
+        </div>
+        </text>
+    };
+
+    private RenderFragment RenderUpdates => __builder =>
+    {
+        <text>
+        @{
+            IReadOnlyList<NuGetPackageService.OutdatedPackage> updates = OutdatedInScope();
+        }
+        @if (loadingOutdated)
+        {
+            <div class="nuget-empty"><RadzenIcon Icon="hourglass_empty" /> Checking for updates…</div>
+        }
+        else if (updates.Count == 0)
+        {
+            <div class="nuget-empty">Everything is up to date in this scope.</div>
+        }
+        else
+        {
+            <div class="nuget-updates-head">
+                <span>@updates.Count package/project update(s) available</span>
+                <RadzenButton Text="Update all" Icon="upgrade" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                              Disabled="@busy" Click="@UpdateAllInScopeAsync" />
+            </div>
+            <table class="nuget-table">
+                <thead><tr><th>Package</th><th>Project</th><th>Current</th><th>Latest</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (NuGetPackageService.OutdatedPackage entry in updates)
+                    {
+                        <tr>
+                            <td class="nuget-pkg">@entry.PackageId</td>
+                            <td>@System.IO.Path.GetFileNameWithoutExtension(entry.ProjectPath)</td>
+                            <td>@entry.ResolvedVersion</td>
+                            <td><strong>@entry.LatestVersion</strong></td>
+                            <td class="nuget-row-actions">
+                                <RadzenButton Text="Update" Icon="upgrade" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                              Disabled="@busy" Click="@(() => UpdateOutdatedAsync(entry))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        </text>
+    };
+
+    private RenderFragment RenderConsolidate => __builder =>
+    {
+        <text>
+        @{
+            IReadOnlyList<InstalledGroup> candidates = ConsolidationCandidates();
+        }
+        @if (candidates.Count == 0)
+        {
+            <div class="nuget-empty">No packages are installed at differing versions across projects.</div>
+        }
+        else
+        {
+            <p class="nuget-consolidate-hint">These packages are pinned at different versions across projects. Pick one version to apply everywhere it's used.</p>
+            @foreach (InstalledGroup group in candidates)
+            {
+                string chosen = ConsolidateTarget(group);
+                <div class="nuget-consolidate-row">
+                    <div class="nuget-consolidate-head">
+                        <span class="nuget-pkg">@group.PackageId</span>
+                        <div class="nuget-consolidate-apply">
+                            <select value="@chosen" @onchange="@(e => consolidateChoice[group.PackageId] = (string)e.Value!)" disabled="@busy">
+                                @foreach (string option in ConsolidateOptions(group))
+                                {
+                                    <option value="@option">@option</option>
+                                }
+                            </select>
+                            <RadzenButton Text="Apply to all" Icon="merge_type" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall"
+                                          Disabled="@busy" Click="@(() => ConsolidateAsync(group, chosen))" />
+                        </div>
+                    </div>
+                    <ul class="nuget-consolidate-uses">
+                        @foreach ((string _, string projectName, string version) in group.Uses.OrderBy(u => u.ProjectName, StringComparer.OrdinalIgnoreCase))
+                        {
+                            <li>@projectName <span class="nuget-consolidate-ver">@version</span></li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+        </text>
+    };
+}

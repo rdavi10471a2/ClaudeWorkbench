@@ -46,6 +46,16 @@ public partial class SourcePanel : IDisposable
         }
     }
 
+    // Open the NuGet manager (operator surface). It reads installed packages from the index, browses/
+    // installs via the .NET SDK, and reindexes itself after any change — so we just open it; no result to
+    // toast (the dialog shows its own status inline).
+    private async Task OpenPackagesAsync()
+    {
+        await Dialogs.OpenAsync<NuGetDialog>(
+            "NuGet packages",
+            options: new DialogOptions { Width = "900px", Height = "640px", Resizable = true, Draggable = false });
+    }
+
     // Operator Build — real output into bin/<config>. On a compile error, show the errors dialog (a toast
     // truncates a diagnostics list); on success, toast.
     private async Task OnBuildAsync(string configuration)

@@ -94,6 +94,10 @@ internal static class Program
         // Operator-driven "Add project" scaffolding for the Source tab. Runs the .NET SDK
         // (dotnet new / sln add / restore) out-of-process; not part of the agent surface.
         builder.Services.AddSingleton<AIMonitor.Workflow.ProjectScaffoldService>();
+        // Operator-driven NuGet package management for the Source tab (browse/install/update/
+        // uninstall, by project or by solution). Runs the .NET SDK (dotnet package search / list /
+        // add / remove + restore) out-of-process; not part of the agent surface.
+        builder.Services.AddSingleton<AIMonitor.Workflow.NuGetPackageService>();
 
         // Operator-driven git backing for the watched solution (host-side; the agent
         // never runs git). GitService is a stateless CLI wrapper; GitWorkspaceService
