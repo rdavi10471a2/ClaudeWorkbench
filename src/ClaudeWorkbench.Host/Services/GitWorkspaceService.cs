@@ -333,6 +333,50 @@ public sealed class GitWorkspaceService
 
     private static string Normalize(string text) => text.Replace("\r\n", "\n").Replace("\r", "\n");
 
+    // The built-in .gitignore template (used on init and as the starting point when a solution has none).
+    public string DefaultGitignoreTemplate => DefaultGitignore;
+
+    // Read the watched solution's .gitignore, or the built-in template when it doesn't exist yet — so the
+    // config dialog always has something to show/edit. Best-effort: returns the template on any error.
+    public string ReadGitignoreOrTemplate()
+    {
+        string? directory = WatchedDirectory;
+        if (directory is null)
+        {
+            return DefaultGitignore;
+        }
+
+        try
+        {
+            string path = Path.Combine(directory, ".gitignore");
+            return File.Exists(path) ? File.ReadAllText(path) : DefaultGitignore;
+        }
+        catch (Exception)
+        {
+            return DefaultGitignore;
+        }
+    }
+
+    // Write the watched solution's .gitignore (operator edit from the config dialog). Newline-normalized.
+    public bool WriteGitignore(string content)
+    {
+        string? directory = WatchedDirectory;
+        if (directory is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, ".gitignore"), Normalize(content));
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     // Standard .NET exclusions, written on init so build output and IDE files never enter the repo
     // (or its first checkpoint commit). Best-effort: a failure here does not fail the init.
     private static void EnsureDefaultGitignore(string directory)

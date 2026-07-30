@@ -19,12 +19,18 @@ public sealed class SourceWorkspace
     private readonly WorkspaceManager workspace;
     private readonly IndexRebuildStatus rebuildStatus;
     private readonly GitService git;
+    private readonly Services.WorkspaceConfigService config;
 
-    public SourceWorkspace(WorkspaceManager workspace, IndexRebuildStatus rebuildStatus, GitService git)
+    public SourceWorkspace(
+        WorkspaceManager workspace,
+        IndexRebuildStatus rebuildStatus,
+        GitService git,
+        Services.WorkspaceConfigService config)
     {
         this.workspace = workspace;
         this.rebuildStatus = rebuildStatus;
         this.git = git;
+        this.config = config;
         workspace.Changed += OnWorkspaceChanged;
     }
 
@@ -192,6 +198,16 @@ public sealed class SourceWorkspace
 
     private List<SourceFileEntry> BuildFilesFromDisk(string root)
     {
+        // Built-in noise plus any per-solution extras from .claudeworkbench.json.
+        HashSet<string> excluded = new(ExcludedDirectories, StringComparer.OrdinalIgnoreCase);
+        foreach (string extra in config.Load().FilesTree.ExcludeDirectories)
+        {
+            if (!string.IsNullOrWhiteSpace(extra))
+            {
+                excluded.Add(extra.Trim());
+            }
+        }
+
         List<SourceFileEntry> entries = [];
         Stack<string> pending = new();
         pending.Push(root);
@@ -237,8 +253,8 @@ public sealed class SourceWorkspace
             foreach (string child in childDirectories)
             {
                 string name = Path.GetFileName(child);
-                // Skip build/VCS/tool noise and any hidden directory (.*), matching a source-view intent.
-                if (ExcludedDirectories.Contains(name) || (name.StartsWith('.') && name.Length > 1))
+                // Skip build/VCS/tool noise (built-in + per-solution config) and any hidden directory (.*).
+                if (excluded.Contains(name) || (name.StartsWith('.') && name.Length > 1))
                 {
                     continue;
                 }

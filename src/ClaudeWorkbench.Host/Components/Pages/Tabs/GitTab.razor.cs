@@ -27,6 +27,23 @@ public partial class GitTab : IAsyncDisposable
     [Inject]
     private AgentSettingsService Settings { get; set; } = default!;
 
+    [Inject]
+    private Radzen.DialogService DialogService { get; set; } = default!;
+
+    // Open the per-solution workspace-config editor (.gitignore + .claudeworkbench.json). Operator-direct;
+    // if the .gitignore changed, reload so the working-tree/diff view reflects new exclusions.
+    private async Task OpenConfigAsync()
+    {
+        object? result = await DialogService.OpenAsync<Components.Dialogs.WorkspaceConfigDialog>(
+            "Workspace configuration",
+            options: new Radzen.DialogOptions { Width = "720px", Resizable = true, Draggable = false });
+
+        if (result is Components.Dialogs.WorkspaceConfigDialog.Saved saved && saved.GitignoreChanged)
+        {
+            await ReloadAsync();
+        }
+    }
+
     // The operator's diff-viewer preference (shared with Merge Review's setting). Monaco is the default;
     // "Classic" selects the DiffPlex side-by-side. Same choice drives both surfaces.
     private bool MonacoSelected => !string.Equals(

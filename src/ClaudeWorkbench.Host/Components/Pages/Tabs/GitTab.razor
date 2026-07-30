@@ -82,6 +82,9 @@
                               ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                               Click="@ToggleLeft" Title="Show or hide the review panel" />
                 <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@busy" Click="@ReloadAsync" />
+                <RadzenButton Icon="tune" Text="Configure" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                              Disabled="@busy" Click="@OpenConfigAsync"
+                              Title="Edit this solution's .gitignore and workbench config (.claudeworkbench.json)" />
                 <span class="git-bar-sep" aria-hidden="true"></span>
                 @if (ViewingHistory)
                 {

@@ -91,6 +91,9 @@ internal static class Program
         builder.Services.AddScoped<IApprovalQueue>(provider => provider.GetRequiredService<SidecarOperatorConsole>());
         builder.Services.AddSingleton<IReviewWorkflow, EngineReviewWorkflow>();
         builder.Services.AddSingleton<Source.SourceWorkspace>();
+        // Per-solution operator config (.claudeworkbench.json beside the solution) — edited in-app,
+        // committed with the repo, keyed to the current watched solution.
+        builder.Services.AddSingleton<Services.WorkspaceConfigService>();
         // Operator-driven "Add project" scaffolding for the Source tab. Runs the .NET SDK
         // (dotnet new / sln add / restore) out-of-process; not part of the agent surface.
         builder.Services.AddSingleton<AIMonitor.Workflow.ProjectScaffoldService>();
