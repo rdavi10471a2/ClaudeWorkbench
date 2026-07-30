@@ -231,7 +231,10 @@
                             <MonacoDiffView @key="@diffTitle"
                                             OldText="@(diffContent.OldText)"
                                             NewText="@(diffContent.NewText)"
-                                            Path="@diffTitle" />
+                                            Path="@diffTitle"
+                                            OldLabel="@diffOldLabel"
+                                            NewLabel="@diffNewLabel"
+                                            NewOnLeft="false" />
                         }
                         else
                         {

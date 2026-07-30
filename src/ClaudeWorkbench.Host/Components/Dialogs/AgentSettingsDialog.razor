@@ -74,6 +74,14 @@
                     </div>
                 </div>
 
+                <label class="settings-row">
+                    <input type="checkbox" @bind="draft.MergeReviewNewOnLeft" />
+                    <div class="settings-text">
+                        <strong>Merge Review: proposed change on the left</strong>
+                        <small>Show the proposed (new) file on the left and current (old) on the right when accepting an edit. Off = old-left / new-right. The Git page always uses the conventional old-left order.</small>
+                    </div>
+                </label>
+
                 <div class="settings-section-title">
                     Optional tools
                     <span>off by default &mdash; each one widens what the agent can do outside the governed gate</span>

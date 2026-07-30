@@ -16,6 +16,12 @@
         <RadzenButton Icon="keyboard_arrow_down" Text="Next change" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                       Click="@NextAsync" title="Next change (Shift+F7)" />
     </div>
+    @* Side headers — Monaco's diff editor has no native captions, so we label each pane (left/right)
+       so it's always clear which side is which, honoring the NewOnLeft orientation. *@
+    <div style="display:flex;flex:0 0 auto;border-bottom:1px solid #e3e8ee;font-size:12px;font-weight:600;color:#3a3f45;background:#f7f9fb;">
+        <div style="flex:1 1 50%;padding:4px 10px;border-right:1px solid #e3e8ee;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@LeftLabel">@LeftLabel</div>
+        <div style="flex:1 1 50%;padding:4px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@RightLabel">@RightLabel</div>
+    </div>
     <div @ref="container" style="flex:1 1 auto;min-height:0;width:100%;"></div>
 </div>
 
@@ -26,6 +32,21 @@
 
     // Used only to pick the Monaco language for syntax highlighting.
     [Parameter] public string? Path { get; set; }
+
+    // Side captions. Defaults keep the plain original/modified reading.
+    [Parameter] public string OldLabel { get; set; } = "Original";
+
+    [Parameter] public string NewLabel { get; set; } = "Modified";
+
+    // When true, the NEW text is shown on the LEFT and the OLD on the RIGHT (Merge Review's expected
+    // order). When false (default), it's the conventional old-left / new-right (git order).
+    [Parameter] public bool NewOnLeft { get; set; }
+
+    // What actually feeds Monaco's original(left)/modified(right) models, per the orientation.
+    private string LeftText => (NewOnLeft ? NewText : OldText) ?? string.Empty;
+    private string RightText => (NewOnLeft ? OldText : NewText) ?? string.Empty;
+    private string LeftLabel => NewOnLeft ? NewLabel : OldLabel;
+    private string RightLabel => NewOnLeft ? OldLabel : NewLabel;
 
     private ElementReference container;
     private IJSObjectReference? module;
@@ -72,7 +93,7 @@
         try
         {
             await module.InvokeVoidAsync(
-                "createDiff", container, Nav.BaseUri, OldText ?? string.Empty, NewText ?? string.Empty, Language());
+                "createDiff", container, Nav.BaseUri, LeftText, RightText, Language());
         }
         catch (JSDisconnectedException)
         {
