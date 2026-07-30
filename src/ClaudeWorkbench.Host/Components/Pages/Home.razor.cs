@@ -74,7 +74,7 @@ public partial class Home : IDisposable
     {
         if (firstRender)
         {
-            unloadModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+            unloadModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=6");
             // When a launcher owns this instance, the tab close is intentional (it tears the
             // backend down), so the "leaving will reset your session" guard must NOT fire —
             // it would prompt on close and delay the circuit drop that stops the backend.

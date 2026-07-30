@@ -151,6 +151,37 @@ h1:focus {
 .message-body pre code .hl-com, .source-markdown pre code .hl-com { color: #7d8ca0; font-style: italic; }
 .message-body pre code .hl-num, .source-markdown pre code .hl-num { color: #f0b072; }
 
+/* Per-code-block "Copy" button (addCodeCopyButtons). Reveals on hover of the block, pinned top-right.
+   Copies the block's exact source, CRLF-normalized (copyTextToClipboard) so it pastes into Windows
+   tools cleanly. `has-copy` gives the block the positioning context; the button lives inside the pre. */
+.message-body pre.has-copy,
+.source-markdown pre.has-copy { position: relative; }
+
+.message-body pre.has-copy .code-copy-btn,
+.source-markdown pre.has-copy .code-copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 3px 8px;
+    font: 500 11px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #cfe0f2;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 5px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s ease, background .12s ease, color .12s ease;
+}
+
+.message-body pre.has-copy:hover .code-copy-btn,
+.source-markdown pre.has-copy:hover .code-copy-btn,
+.code-copy-btn:focus-visible { opacity: 1; }
+
+.message-body pre.has-copy .code-copy-btn:hover,
+.source-markdown pre.has-copy .code-copy-btn:hover { background: rgba(255, 255, 255, 0.16); }
+
+.code-copy-btn.copied { color: #b5e8a0; border-color: #b5e8a0; opacity: 1; }
+
 /* Rendered ```mermaid diagrams (renderMermaidBlocks replaces <pre class="mermaid"> with this div).
    Mermaid's theme is light, so give it its own light surface rather than the dark code background. */
 .message-body .mermaid-rendered,

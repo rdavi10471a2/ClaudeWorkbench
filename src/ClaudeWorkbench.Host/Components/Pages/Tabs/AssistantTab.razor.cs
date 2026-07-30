@@ -437,7 +437,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+        resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=6");
         if (firstRender)
         {
             await resizeModule.InvokeVoidAsync(
@@ -465,6 +465,7 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             transcriptDirty = false;
             await resizeModule.InvokeVoidAsync("scrollElementToBottom", transcriptView);
             await resizeModule.InvokeVoidAsync("highlightCodeBlocks", transcriptView);
+            await resizeModule.InvokeVoidAsync("addCodeCopyButtons", transcriptView);
             await resizeModule.InvokeVoidAsync("renderMermaidBlocks", transcriptView);
         }
     }

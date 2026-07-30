@@ -78,7 +78,7 @@
                 // Click handler for neutralized relative links in the rendered-markdown pane.
                 selfRef = DotNetObjectReference.Create(this);
                 await module.InvokeVoidAsync("attachDocLinks", markdownContainer, selfRef);
-                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=5");
+                resizeModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=6");
                 ready = true;
                 await OpenAsync();
             }

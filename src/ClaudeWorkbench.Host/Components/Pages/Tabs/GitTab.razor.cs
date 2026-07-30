@@ -126,7 +126,7 @@ public partial class GitTab : IAsyncDisposable
         // CWB_EXIT_WITH_BROWSER, shuts the whole app (the crash-on-a-tab-you-are-not-using bug).
         try
         {
-            resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+            resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=6");
 
             // The splitter element itself carries the "already attached" guard (dataset flag),
             // so collapsing and restoring re-attaches only when the element is genuinely new.

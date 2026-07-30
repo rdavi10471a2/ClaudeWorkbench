@@ -58,7 +58,7 @@ public partial class DiffView : IAsyncDisposable
             return;
         }
 
-        scrollModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+        scrollModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=6");
         await scrollModule.InvokeVoidAsync("attachDiffHScroll", leftPane, rightPane, hBar, hBarInner);
     }
 

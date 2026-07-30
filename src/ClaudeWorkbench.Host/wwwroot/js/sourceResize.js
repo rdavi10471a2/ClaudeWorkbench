@@ -242,6 +242,12 @@ export async function copyTextToClipboard(text) {
         return;
     }
 
+    // Normalize every line ending to CRLF so pasted text lands correctly in Windows tools (Notepad,
+    // the VS/VS Code editors, terminals). Model output uses bare LF; collapsing LF / lone-CR / existing
+    // CRLF all to a single CRLF avoids producing "\r\r\n". Applies to every copy path (code block,
+    // per-message, whole transcript) since they all funnel through here.
+    text = text.replace(/\r\n?|\n/g, "\r\n");
+
     if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
         return;
@@ -351,6 +357,56 @@ export function highlightCodeBlocks(container) {
             block.innerHTML = hlTokenize(block.textContent || "", lang);
         } catch (e) {
             // Leave the block as plain text on any tokenizer error.
+        }
+    });
+}
+
+// Add a hover "Copy" button to every transcript code block. Runs in the same OnAfterRender decoration
+// sweep as highlightCodeBlocks (call it right after). code.textContent is the block's exact source —
+// the highlight spans decode back to plain text, so this works before OR after highlighting — and
+// copyTextToClipboard handles the CRLF normalization. Idempotent via a dataset guard so re-decoration
+// of a completed message doesn't stack duplicate buttons. Skips ```mermaid fences (they're diagrams,
+// owned by renderMermaidBlocks) and any <pre> without a <code> child.
+export function addCodeCopyButtons(container) {
+    if (!container) {
+        return;
+    }
+
+    container.querySelectorAll("pre").forEach(pre => {
+        try {
+            if (pre.dataset.copyBtn === "1" || pre.classList.contains("mermaid")) {
+                return;
+            }
+            const code = pre.querySelector("code");
+            if (!code || /\blanguage-mermaid\b/i.test(code.className || "")) {
+                return;
+            }
+            pre.dataset.copyBtn = "1";
+            pre.classList.add("has-copy");
+
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "code-copy-btn";
+            button.textContent = "Copy";
+            button.title = "Copy this code block";
+            button.addEventListener("click", async () => {
+                try {
+                    await copyTextToClipboard(code.textContent || "");
+                    button.textContent = "Copied";
+                    button.classList.add("copied");
+                    window.setTimeout(() => {
+                        button.textContent = "Copy";
+                        button.classList.remove("copied");
+                    }, 1200);
+                } catch (e) {
+                    button.textContent = "Failed";
+                    window.setTimeout(() => { button.textContent = "Copy"; }, 1200);
+                }
+            });
+
+            pre.appendChild(button);
+        } catch (e) {
+            // A decoration failure must never break the transcript render.
         }
     });
 }

@@ -80,7 +80,7 @@ public partial class ConversationsDialog : IAsyncDisposable
         // "already attached" dataset flag so re-renders re-attach only when genuinely new.
         try
         {
-            resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js");
+            resizeModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceResize.js?v=6");
             await resizeModule.InvokeVoidAsync("attachThreadsSplitter", threadsBody, threadsBoard, threadsDetails, threadsSplitter);
         }
         catch (JSException)
