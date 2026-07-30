@@ -704,6 +704,18 @@
     color: #0f766e;
 }
 
+/* A turn that ended with an error (error_during_execution / error_max_turns) — surfaced in the
+   transcript so a failed turn announces itself instead of ending silently. */
+.message.error {
+    border-color: #f3c0bd;
+    background: #fdf3f2;
+}
+
+.message.error .message-body {
+    color: #b23b32;
+    font-weight: 600;
+}
+
 .message-body {
     max-height: none;
     padding: 12px 14px;

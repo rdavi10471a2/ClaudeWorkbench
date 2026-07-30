@@ -239,6 +239,12 @@
                                     </div>
                                 </div>
                             }
+                            else if (entry.Kind == TranscriptKind.Error)
+                            {
+                                <div class="message error" data-testid="message-error">
+                                    <div class="message-body">@entry.Text</div>
+                                </div>
+                            }
                             else
                             {
                                 <div class="message assistant">

@@ -6,6 +6,7 @@ public enum TranscriptKind
     Assistant,
     ToolCall,
     Image,
+    Error,
 }
 
 // For Image entries, Text is the local file path (served via /local-file).

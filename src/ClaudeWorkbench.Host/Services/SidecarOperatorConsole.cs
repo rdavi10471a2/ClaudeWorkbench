@@ -44,15 +44,31 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         get
         {
             return stream.SnapshotEvents()
-                .Where(evt => evt.Type is "assistant_text" or "tool_call_started" or "user_prompt")
+                .Where(evt => evt.Type is "assistant_text" or "tool_call_started" or "user_prompt"
+                    || (evt.Type == "turn_finished" && IsErrorStop(evt.StopReason)))
                 .Select(evt => evt.Type switch
                 {
                     "tool_call_started" => ToolOrImageEntry(evt),
                     "user_prompt" => new TranscriptEntry(TranscriptKind.User, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
+                    "turn_finished" => new TranscriptEntry(TranscriptKind.Error, TurnErrorCeremony(evt.StopReason), FormatTime(evt.Ts)),
                     _ => new TranscriptEntry(TranscriptKind.Assistant, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
                 })
                 .ToArray();
         }
+    }
+
+    // A turn's result subtype other than "success" (e.g. error_during_execution, error_max_turns) means
+    // the turn FAILED mid-run. It used to end silently — the composer just re-enabled — so surface it as a
+    // visible transcript entry ("ceremony") instead of leaving the operator to spot it only in Activity.
+    private static bool IsErrorStop(string? stopReason) =>
+        !string.IsNullOrWhiteSpace(stopReason) && !string.Equals(stopReason, "success", StringComparison.OrdinalIgnoreCase);
+
+    private static string TurnErrorCeremony(string? stopReason)
+    {
+        string reason = string.IsNullOrWhiteSpace(stopReason) ? "error" : stopReason!;
+        return reason == "error_max_turns"
+            ? "⚠ The turn hit the maximum step limit and stopped. Nothing was written to watched source — narrow the request or continue in a new message."
+            : $"⚠ The turn ended with an error ({reason}). Nothing was written to watched source — this is usually transient, so try sending the message again.";
     }
 
     public IReadOnlyList<ActivityEntry> Activity
