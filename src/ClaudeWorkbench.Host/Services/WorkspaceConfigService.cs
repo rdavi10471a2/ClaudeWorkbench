@@ -9,7 +9,6 @@ namespace ClaudeWorkbench.Host.Services;
 public sealed class WorkspaceConfigService
 {
     public const string FileName = ".claudeworkbench.json";
-    public const string SchemaUrl = "https://claude.ai/schemas/claudeworkbench.v1.json";
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -59,7 +58,8 @@ public sealed class WorkspaceConfigService
 
         try
         {
-            config.Schema ??= SchemaUrl;
+            // No $schema is stamped: we don't host one, and pointing at a non-existent URL would just make
+            // editors fail to fetch it. The Schema property still round-trips a real one if a user adds it.
             if (config.Version <= 0)
             {
                 config.Version = 1;
