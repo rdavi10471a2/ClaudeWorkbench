@@ -16,10 +16,22 @@ query options; **Save** applies them, **Cancel** discards:
 > **Model** and **Reasoning level** apply to **new conversations** — start a fresh conversation
 > (**New** on the composer's conversation bar) for a change to take effect.
 
+### Merge review
+
+A **Merge review** section of the same dialog tunes how the [Merge Review](merge-review.md) diff
+looks. Each applies the next time a review dialog opens:
+
+| Setting | Effect |
+|---|---|
+| **Diff viewer** | Which diff renderer Merge Review shows: **Monaco** (default) — the rich Monaco diff editor (F7/Shift+F7 change nav, overview ruler, word-level diff, syntax highlighting) — or **Classic** — the original DiffPlex side-by-side. The non-chosen viewer is kept (switch back anytime) but not shown. |
+| **Merge Review: proposed change on the left** | On by default: show the **proposed (new)** file on the left and **current (old)** on the right — the order most people expect when accepting a change. Off = conventional old-left / new-right. Honored by both viewers. The [Git panel](git-panel.md) ignores this and always uses old-left / new-right. |
+| **Reverse diff colors** | Swap the diff colors (insertions red, deletions green) in the **Monaco** viewer. Pair it with proposed-on-left so additions still read green on the proposed side. Monaco themes are global, so this applies to every Monaco diff (Merge Review and the Git page alike). |
+
 **Auto-approve** is *not* in this dialog — it's a toggle on the **composer** in the
-Workbench tab. Per-**conversation**: `claude-workbench` candidate mutations proceed without a
-per-call gate prompt. The **merge-review Accept still gates every write to watched
-source.** Starting a new conversation turns it back off.
+Workbench tab, and it is **on by default**. Per-**conversation**: with it on, `claude-workbench`
+candidate mutations proceed without the per-tool-call permission prompt. That's *all* it skips — the
+**merge-review Accept still gates every write to watched source.** Uncheck it to approve each tool
+call; starting a new conversation resets it to its default (**on**).
 
 ## Usage meters
 
@@ -34,9 +46,9 @@ Usage appears once a turn has run in the current conversation. Hit **Refresh** t
 
 ## Conversations & continuity
 
-- **New** (conversation bar) starts a fresh conversation (and resets Auto-approve, and picks up any
-  changed Model / Reasoning level). The prior conversation is kept — name it in the popup, or discard
-  it if it was still on a default name.
+- **New** (conversation bar) starts a fresh conversation (and resets Auto-approve to its default —
+  **on** — and picks up any changed Model / Reasoning level). The prior conversation is kept — name it
+  in the popup, or discard it if it was still on a default name.
 - Within a conversation, the session **resumes** — the agent remembers the chat, and a turn survives a
   host rebuild mid-turn. See **[conversations.md](conversations.md)** for the full model.
 

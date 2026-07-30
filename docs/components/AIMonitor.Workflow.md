@@ -32,6 +32,7 @@ The safety invariants of the whole product live in this module; the layers above
 | `FileHash` | `FileHash.cs` | SHA-256 over raw file bytes (`Compute`) and over line-ending-normalized text (`ComputeText`/`ComputeNormalizedFile`). |
 | `WorkflowRunRecorder` | `WorkflowRunRecorder.cs` | Append-only run log + telemetry for compare/stage runs (atomic write pattern). |
 | `FileLedgerWriter` | `FileLedgerWriter.cs` | Appends a per-file Markdown ledger entry on each compare snapshot. |
+| `NuGetPackageService` | `NuGetPackageService.cs` | **Operator-only** package management. Host-run, out-of-process `dotnet package search` / `list package --outdated` / `add package` / `remove package` from the solution root. NOT an agent tool and NOT part of the staging workflow — the agent changes packages by editing a `<PackageReference>` as a governed staged edit; this service backs the Source tab's "Packages" dialog. |
 | `EditSessionStatus` / `CompareSnapshotResult` / `StagedEditSummary` / `ReplaceTextResult` / `TextSpanResult` | (respective files) | DTOs returned to callers. |
 | `EditSyntaxValidationResult` / `EditSyntaxDiagnostic` | `EditValidationResult.cs` | Per-candidate **syntax** validation result embedded in the manifest (`LastSyntaxValidation`). |
 
@@ -118,6 +119,34 @@ sequenceDiagram
 
 The classifier itself (`ReviewDecisionClassifier.Classify`) returns `accepted` when the watched raw hash equals the staged hash, `accepted-normalized` when only the line-ending-normalized hashes match, and `dirty-unexpected` when an "accepted" decision does not agree with the watched hash — which invariant 10 turns into a hard failure.
 
+## NuGet package management (operator-only, out-of-band)
+
+`NuGetPackageService` is the operator-driven counterpart to `SolutionRestoreService` / `ProjectScaffoldService`: it drives the real .NET SDK **out-of-process** from the solution root (`dotnet` with `WorkingDirectory = solutionRoot`), so `NuGet.config`, `Directory.Build.props`, and private feeds are honoured exactly as a normal `dotnet` invocation would be. It is deliberately **outside the governed-edit machinery** described above — it is not an `[McpServerTool]`, has no session/staging/hash gate, and never touches the Working mirror. The agent adds a package the governed way (edit a `<PackageReference>` as a planned staged file, then `restore_solution`); this service is what the **host** invokes from the Source tab's "Packages" dialog when the operator manages packages directly.
+
+**Reads** (return an empty list on launch failure / timeout / non-zero exit, and swallow JSON format drift rather than throwing into the Blazor circuit):
+
+- `Search(query, includePrerelease, take)` — `dotnet package search <query> --format json --take N` (45s timeout). Results are aggregated across the configured sources and **deduped by id**, first source listed winning (nuget.org is listed first). `PackageSearchHit` carries only what the CLI returns (id, latest version, total downloads, owners, source name) — no description.
+- `ListInstalled(settings)` — reads each project's `<PackageReference>` items **directly from the `.csproj` via `XDocument`**, with no SDK subprocess and no code index (installing a package changes no user symbols, so this stays instant and always fresh). Handles the version as an attribute or child element; `Version` is `null` under Central Package Management (the version lives in `Directory.Packages.props`). A malformed project file is skipped, not thrown.
+- `ListOutdated(settings, includePrerelease)` — `dotnet list <solution> package --outdated --format json` (3min timeout), one call for the whole solution, keyed by `(projectPath, packageId)` and de-duplicated across the frameworks of a multi-TFM project.
+
+**Writes** (`Install` / `Uninstall`, both funnelling through the private `Mutate`, default 5min timeout) validate up front, then run `dotnet add|remove package` **per target project** and let the SDK restore inline (no `--no-restore`) — no explicit reindex, since a package change alters no user symbols and the code index refreshes on its own on the next real build/accept:
+
+- **Package-id grammar** is validated (dot-separated letters/digits/`_`/`-`) before any process launches.
+- **Containment:** each target project's full path must sit under the solution root (`projectPath.StartsWith(solutionRoot + separator)`), the same sibling-prefix-safe `root + separator` guard the McpServer uses for watched paths; a project outside throws before anything runs.
+- A specific `version` is an `Install` with `--version` — which is also how **"Update to X"** is expressed. Under Central Package Management the SDK routes the version into `Directory.Packages.props` itself; the service does not special-case it.
+- `PackageMutationResult(IsError, Message, Diagnostics)` is the guided result. A missing `dotnet` yields a friendly "install the .NET 10 SDK" message; a timeout / non-zero exit extracts up to 30 diagnostic lines (those containing `: error`, `error:`, `not found`, or `NU1`), falling back to the tail of stderr/stdout when none match.
+
+```mermaid
+flowchart TD
+    op[Operator: Source tab Packages dialog] --> svc[NuGetPackageService]
+    svc -->|Search / ListOutdated| sdkRead[dotnet package search / list --outdated]
+    svc -->|ListInstalled| csproj[.csproj PackageReference read - no SDK, no index]
+    svc -->|Install / Uninstall / Update| gate{valid id? project under solution root?}
+    gate -->|no| err[PackageMutationResult IsError]
+    gate -->|yes| sdkWrite[dotnet add / remove package per project - restores inline]
+    sdkWrite --> done[PackageMutationResult summary; no reindex]
+```
+
 ## The safety invariants (the crux)
 
 The product's core promise is: **an accepted edit is byte-for-byte (or normalized-equal) the thing the operator reviewed.** Three mechanisms combine to make that true:
@@ -140,6 +169,7 @@ Supporting these: `expectedStagedHash` must be supplied by the caller and match 
 - The pre-merge `dotnet build` (persistent incremental workspace) at plan-complete and accept, plus accept-time invariant enforcement + classification.
 - Per-candidate Roslyn **syntax** feedback (semantic validation is the real pre-merge build, not a per-edit overlay).
 - Compare snapshots, run/telemetry logs, and per-file ledgers.
+- The **operator-only** NuGet package surface (`NuGetPackageService`): out-of-process `dotnet` search/outdated reads, direct `.csproj` `<PackageReference>` reads, and `add`/`remove` writes with id-grammar validation and solution-root containment. This is out-of-band of the staging workflow — no session, no hash gate, no Working mirror, no agent tool.
 
 **Does Not Own:**
 - Actually merging the accepted staged file into the watched source (the runtime/host review workflow applies the merge; this module classifies the result).

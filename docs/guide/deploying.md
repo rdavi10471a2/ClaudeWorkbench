@@ -10,8 +10,14 @@ Two ways to run ClaudeWorkbench:
 
 ## The Launcher
 
-`ClaudeWorkbench.Launcher` is a small WinForms control panel: one row per workspace, with
+The **Launcher** is a small control panel: one row per workspace, with
 **Start** / **Stop** / **Add workspace** / **Remove** / **Settings** / **Help**.
+
+A publish ships **two** launcher UIs side by side — the WPF rewrite
+(`ClaudeWorkbench.Launcher.Wpf.exe`, the **primary**) and the original WinForms one
+(`ClaudeWorkbench.Launcher.exe`, the **fallback**). They share one `launcher.json` and one
+`runtime\` in the install root, so either exe drives the same workspaces; only the exe you launch
+differs.
 
 Starting a workspace allocates a free host+sidecar port pair, writes that instance its own
 config, launches the host (which spawns its sidecar) and a browser window — all inside **one
@@ -53,21 +59,25 @@ Defaults to `C:\ClaudeWorkBenchLive`, Release. Options:
 | `-Destination <path>` | Where to publish (default `C:\ClaudeWorkBenchLive`) |
 | `-Configuration <cfg>` | Build configuration (default `Release`) |
 | `-Clean` | Delete `host\`, `sidecar\`, `launcher\` first. **`runtime\` is preserved.** |
-| `-NoShortcut` | Don't create the Desktop shortcut (one is still written into the install folder) |
+| `-NoShortcut` | Don't create the Desktop shortcuts (in-folder ones are still written) |
 
 It produces:
 
 ```
 C:\ClaudeWorkBenchLive\
-    host\       ClaudeWorkbench.Host.exe (the Blazor app) + config\
-    sidecar\    dist\index.js + production node_modules
-    launcher\   ClaudeWorkbench.Launcher.exe
-    samples\    CalculatorSample — a small watched solution to try
-    runtime\    created on first Start: one folder per workspace
-    ClaudeWorkbench Launcher.lnk
+    host\               ClaudeWorkbench.Host.exe (the Blazor app) + config\
+    sidecar\            dist\index.js + production node_modules
+    launcher\wpf\       ClaudeWorkbench.Launcher.Wpf.exe (primary)
+    launcher\winforms\  ClaudeWorkbench.Launcher.exe (fallback)
+    samples\            CalculatorSample, MixedTfmSample, BlazorSample — watched solutions to try
+    runtime\            created on first Start: one folder per workspace
+    ClaudeWorkbench Launcher (WPF).lnk
+    ClaudeWorkbench Launcher (WinForms).lnk
 ```
 
-plus a **Desktop shortcut**. Double-click either one; there is nothing else to configure.
+plus a **Desktop shortcut for each** — "ClaudeWorkbench Launcher (WPF)" and "(WinForms)". Both
+launcher UIs share `launcher.json` and `runtime\` in the install root. Double-click either one
+(the WPF is the primary); there is nothing else to configure.
 
 On a **first run with no state**, the Launcher seeds the bundled sample as a workspace, so there
 is a row to Start immediately instead of having to go find a solution. Remove it and it stays

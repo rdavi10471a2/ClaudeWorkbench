@@ -10,13 +10,25 @@ Automatically, when an agent turn **finishes** with one or more staged edits. It
 the turn to finish so the whole edit session is staged and it can advance through every
 file in order.
 
+If a turn instead **fails** mid-run (it hits the step limit, or errors out), it no longer ends
+silently: a marker now surfaces in the **chat transcript** telling you the turn stopped and that
+nothing was written to watched source — so a failed turn that staged nothing to review is still
+visible, not just something you'd spot in the Activity log.
+
 ## What you see
 
-A **side-by-side diff** of the **Proposed Candidate** (left) against your **Current
-Source** (right), rendered by the shared `DiffView` (green = added, red = removed,
-amber = modified). The same renderer is used by the Git panel, so diffs look identical
-everywhere. Review is entirely in-app — there is no external diff tool to install or
-launch.
+A header shows the file under review — **"File X of N"** when the edit session staged several
+files, or just the filename for a single one — and a **side-by-side diff** of the **Proposed
+Candidate** against your **Current Source** (proposed on the left, current on the right, by default).
+
+The diff renders in **Monaco by default** — the same editor the source viewer uses — giving
+**F7 / Shift+F7** change navigation, a prev/next-change toolbar, an overview ruler, **word-level**
+diffs, and syntax highlighting. The original **DiffPlex** side-by-side (green = added, red = removed,
+amber = modified; the same renderer the [Git panel](git-panel.md) uses) is **kept** and switchable —
+flip **Diff viewer** in [Settings](settings-and-usage.md#merge-review) to **Classic**. Only the chosen
+viewer is shown; the other isn't rendered. Orientation and (for Monaco) reversed colors follow the
+same [Merge review settings](settings-and-usage.md#merge-review). Review is entirely in-app — there is
+no external diff tool to install or launch.
 
 ## The three actions
 

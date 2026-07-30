@@ -50,7 +50,7 @@ An optional third container, the **Launcher**, runs several of those pairs side 
 ```mermaid
 flowchart TB
     operator([Operator])
-    launcher["ClaudeWorkbench.Launcher (optional)<br/>WinForms control panel · Job Object"]
+    launcher["ClaudeWorkbench.Launcher (optional)<br/>WPF (primary) or WinForms control panel · Job Object"]
 
     subgraph host["Blazor Host — .NET 10 process, :6100"]
         direction TB
@@ -103,14 +103,16 @@ pipe. Details: [`../components/Sidecar.md`](../components/Sidecar.md) and
 |---|---|---|---|
 | **Host** | 6100 | .NET 10 (ASP.NET/Blazor Server) | Engine, MCP HTTP surface, operator UI, sidecar supervisor, the sole watched-source writer |
 | **Sidecar** | 6110 | Node (Claude Agent SDK, Express) | Drives Claude, MCP client, the `canUseTool` operator gate, neutral SSE events |
-| **Launcher** *(optional)* | n/a — assigns a free pair per instance | .NET 10 WinForms (Windows) | Multi-instance control panel: one Host+sidecar+browser per workspace, held in a Job Object |
+| **Launcher** *(optional)* | n/a — assigns a free pair per instance | .NET 10 WPF (primary) or WinForms (fallback), Windows | Multi-instance control panel: one Host+sidecar+browser per workspace, held in a Job Object. Two interchangeable UIs share one `launcher.json` + `runtime\` |
 
 The sidecar binds **loopback only** (`127.0.0.1`) and rejects any request whose `Host` header
 isn't localhost or that carries a non-local `Origin` — a DNS-rebinding defense on the control
 surface. See [`../components/Sidecar.md`](../components/Sidecar.md).
 
 **The optional third container.** [`ClaudeWorkbench.Launcher`](../components/ClaudeWorkbench.Launcher.md)
-runs *above* the pair, not inside the governed path: the Host is single-workspace (one
+runs *above* the pair, not inside the governed path. It ships in two interchangeable UIs — a WPF
+rewrite (primary) and the original WinForms one (fallback), sharing one `launcher.json` and `runtime\`:
+the Host is single-workspace (one
 `WatchedSolutionPath`, one port pair, one runtime), so the Launcher allocates a free host+sidecar
 port pair per instance, writes each instance its own config, and starts Host + browser window
 inside a Windows **Job Object** so they die together. It sets `CWB_EXIT_WITH_BROWSER=1`, which

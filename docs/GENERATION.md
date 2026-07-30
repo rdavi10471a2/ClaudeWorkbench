@@ -59,6 +59,33 @@ about. What changed, and what it invalidated:
 - **Paths are anchored to a discovered workbench root**, so a published install runs anywhere;
   any doc quoting an absolute checkout path is stale by construction.
 
+## Since the pass — 2026-07-30 update
+
+A second regeneration ran the same method (README + connective docs by the lead session; the
+component and guide pages by parallel subagents re-reading the real source). What the code gained
+since 2026-07-19, and where it's now documented:
+
+- **A second launcher UI.** `ClaudeWorkbench.Launcher.Wpf` (a DPI-correct WPF rewrite) is now the
+  **primary**, published alongside the original WinForms one as a fallback — both share `launcher.json`
+  + `runtime\` and publish into `launcher\wpf\` / `launcher\winforms\`. The two projects carry
+  **independent copies** of the engine files (`InstanceController`/`JobObject`/`LauncherModel`), so a
+  fix to one must be mirrored to the other. See [`components/ClaudeWorkbench.Launcher.md`](components/ClaudeWorkbench.Launcher.md).
+- **NuGet package management** — an operator surface on the Source tab (browse/install/update/uninstall,
+  by project or solution), host-run out-of-process via `AIMonitor.Workflow.NuGetPackageService`; not an
+  agent tool. (`AIMonitor.Workflow.md`, `guide/source-tab.md`.)
+- **Per-solution config** — `.claudeworkbench.json` beside the `.slnx` (Files-tree exclusions + default
+  git branch), edited via the Git tab's **Configure** dialog; plus a filesystem fallback for the Files
+  tree when git is unavailable. (`ClaudeWorkbench.Host.md`, `guide/workspaces.md`, `guide/git-panel.md`.)
+- **Merge Review diff is Monaco by default** (change-nav, word-level, syntax highlighting), with the
+  classic DiffPlex view kept as a switchable **Diff viewer** setting; plus proposed-on-left orientation,
+  a reverse-colors toggle, and a "File X of N" header. (`guide/merge-review.md`.)
+- **Elevated Admin shell** on the Source tab (UAC `cmd.exe` at the solution root); **per-code-block copy**
+  in chat with a CRLF-normalized clipboard; **auto-approve on by default**; and **failed turns are now
+  surfaced** in the transcript instead of ending silently (`TranscriptKind.Error`).
+
+The MCP tool count moved with the notes scratchpad (`write_note`/`list_notes`/`read_note`/`delete_note`);
+the McpServer page's count was re-verified against the actual tool methods during this pass.
+
 ## Regenerating or updating
 
 - **A single module page:** point Claude at `src/<Module>/` (or `sidecar/`) with the

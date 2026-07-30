@@ -57,6 +57,24 @@ The agent's CWD is the **watched solution's folder** (auto-derived from the host
 `/health`, so it tracks whatever solution you selected). The agent is **read-only** there
 — it reads with `Read`/`Grep`/`Glob` and changes only through governed tools.
 
+## Per-solution config (`.claudeworkbench.json`)
+
+Each watched solution can carry a small operator config file, **`.claudeworkbench.json`**, at the
+solution root **beside the `.slnx`**. It is **committed with the repo** and travels with it — the
+same root-level, shared convention as `.editorconfig` or `.vscode/settings.json`. **A missing file
+means all defaults.**
+
+| Key | What it does |
+|---|---|
+| `version` | Config format version (currently `1`) — lets the shape migrate later. |
+| `filesTree.excludeDirectories` | Extra directory names hidden from the Source **Files** tree's *filesystem fallback*, merged with the built-in `bin`/`obj`/`.git`/`node_modules` set. Only consulted when git isn't the source of truth. |
+| `git.defaultBranch` | Branch name written into a freshly-**initialized** repo. Blank/absent = the machine's git default. |
+
+It is edited **in-app** through the **Git** tab's **Configure** button (see
+[the Git panel](git-panel.md)) — host-side and operator-driven, written straight to disk, **never
+through the agent** or merge review. Because it is committed, a save shows up as an ordinary
+change on the Git page.
+
 ## Git-backing (optional but recommended)
 
 If the watched solution is a git repo, the **Git** tab lets you commit and push accepted

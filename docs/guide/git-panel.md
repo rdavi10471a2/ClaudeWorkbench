@@ -22,10 +22,17 @@ Open the **Git** tab. Left review panel + a side-by-side diff on the right.
 - **History** — recent commits, newest first. **Click a commit** to expand its changed
   files; **click a file** → that commit's diff (**`<hash>~1`** on the left, **`<hash>`** on
   the right). This is how you review exactly what a commit did.
-- The diff uses the same `DiffView` renderer as merge review (conventional
-  old-left/new-right orientation; merge review flips it to put the proposal on the left).
+- The diff honours the shared **Diff viewer** setting (the same one merge review uses):
+  the **Monaco** diff viewer by default, or the classic **DiffPlex** side-by-side when
+  that's chosen. On this page the orientation is **always old-left/new-right** — HEAD (or
+  the commit's parent) on the left, the newer state on the right. (Merge review flips it to
+  put the agent's proposal on the left; this page never does.)
 - **Hide Panel** collapses the review list to give the diff full width; drag the splitter
   to resize.
+- **Configure** opens the workspace-config editor for this solution — its `.gitignore` and
+  its committed [`.claudeworkbench.json`](workspaces.md#per-solution-config-claudeworkbenchjson).
+  Edits are written straight to disk (host-side, never through the agent); saving a changed
+  `.gitignore` reloads the Git view so the working-tree list reflects the new exclusions.
 
 If the watched folder **isn't a git repo**, the page offers **Initialize Git repository**
 instead. If `git` isn't on PATH, you get a clear "Git is not available" warning.

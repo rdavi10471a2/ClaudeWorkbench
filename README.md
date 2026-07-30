@@ -4,7 +4,7 @@ A Blazor operator console for **governed, watched-source AI edits**, driven by *
 
 An agent proposes changes to a watched .NET solution. Every change is composed against a local *Working* candidate, staged, and held at a human **accept / reject** gate before it ever touches real source. The engine that enforces this — Roslyn indexing, edit sessions, staging, two compile gates, and an MCP tool surface — runs UI-agnostic behind a Blazor host and a Node sidecar.
 
-**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversations** (autosaved per session, with a Conversations modal to resume/rename/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), a read-only **Source** browser (Solution + Files trees, an in-app Monaco viewer with markdown rendering, and in-app Build/Run to real output), and single-start supervision of the sidecar. Browser-visible end-to-end tests drive the real UI through the whole loop.
+**Status: working end-to-end.** The full governed loop (index → governed edit → stage → in-app review → operator accept writes source → post-accept build + reindex) is built and operator-verified, along with session continuity, an operator questions dialog (`AskUserQuestion`), file upload, context/usage meters, a model + reasoning selector, named/resumable **conversations** (autosaved per session, with a Conversations modal to resume/rename/delete; transcripts mirrored into an app-owned runtime copy), an agent notes scratchpad (`write_note`), a read-only **Source** browser (Solution + Files trees, an in-app Monaco viewer with markdown rendering, in-app Build/Run to real output, a NuGet package manager, and an elevated Admin shell), a per-solution **workspace config** editor (`.claudeworkbench.json` + the solution's `.gitignore`), and single-start supervision of the sidecar. Merge Review defaults to a Monaco diff (change-navigation, word-level) with the classic DiffPlex view still available; the chat renders Markdown, images, and Mermaid, with per-code-block copy; and the launcher ships in both a WPF (primary) and WinForms (fallback) UI. Browser-visible end-to-end tests drive the real UI through the whole loop.
 
 ---
 
@@ -18,7 +18,7 @@ choose workspace → index → refresh_file / new_file → governed edit
 - **You work in conversations.** The working unit is a named, resumable **conversation** with Claude — it autosaves, you name/reopen/delete it from the Conversations list, and it records the exact edits it produced. (It replaced the old Tasks board; see [docs/guide/conversations.md](docs/guide/conversations.md).)
 - **Reason in the cloud, edit locally.** The model reasons from compact context; watched-source changes are composed against explicit local Working candidates and promoted only through review.
 - **The gate is code, not a prompt.** Mutations (file writes, staged-review accept) are intercepted by the sidecar's `canUseTool` / `PreToolUse` hook, surfaced to the Blazor UI, and applied only on operator approval.
-- **Review is an in-app diff/merge.** The staged candidate vs. current watched source is rendered by [DiffPlex](https://github.com/mmanela/diffplex) in a resizable **Merge Review** dialog; the operator accepts or rejects there, and Accept is the only path that writes watched source. No external diff tool is involved.
+- **Review is an in-app diff/merge.** The staged candidate vs. current watched source is rendered in a resizable **Merge Review** dialog — by default an in-app **[Monaco](https://microsoft.github.io/monaco-editor/)** diff editor (F7 / Shift+F7 change navigation, an overview ruler, word-level diff, syntax highlighting), with the original **[DiffPlex](https://github.com/mmanela/diffplex)** side-by-side kept as a switchable option (a **Diff viewer** setting, plus proposed-on-left orientation and a reverse-colors toggle). The operator accepts or rejects there, and Accept is the only path that writes watched source. No external diff tool is involved.
 - **The edit session is atomic.** Watched source is written once, on the terminal accept, after the whole session's combined overlay passes a real `dotnet build`; a single reject voids the session (see [ADR-0005](docs/decisions/0005-edit-session-is-atomic.md)).
 - **Freshness is restored at accept.** The solution index rebuilds after an accepted decision (scoped where safe, full otherwise).
 
@@ -104,16 +104,20 @@ Publishes the Blazor host, the sidecar, and the Launcher side by side:
 C:\ClaudeWorkBenchLive\
   host\       ClaudeWorkbench.Host.exe + config\
   sidecar\    dist\index.js + production node_modules
-  launcher\   ClaudeWorkbench.Launcher.exe
-  samples\    seed workspaces (CalculatorSample, MixedTfmSample)
+  launcher\
+    wpf\      ClaudeWorkbench.Launcher.Wpf.exe   (primary)
+    winforms\ ClaudeWorkbench.Launcher.exe       (fallback)
+  samples\    seed workspaces (CalculatorSample, MixedTfmSample, BlazorSample)
   runtime\    one folder per workspace, created on first Start
 ```
+
+Both launcher UIs publish side by side into their own subfolders and share the same `launcher.json` + `runtime\` in the install root, so either exe drives the same workspaces — only the window you open differs. The publish creates a desktop shortcut for each.
 
 Re-running the script updates an install **without touching `runtime\`** (workspaces and indexes survive).
 
 ### The Launcher
 
-`ClaudeWorkbench.Launcher` is a small WinForms control panel — the normal way to start the app. It runs **several watched solutions side by side, one window per solution, each fully isolated** (its own port, runtime, and index).
+The Launcher is a small control panel — the normal way to start the app. It runs **several watched solutions side by side, one window per solution, each fully isolated** (its own port, runtime, and index). It ships in **two interchangeable UIs**: **`ClaudeWorkbench.Launcher.Wpf`** (the primary, a modernized WPF rewrite with DPI-correct layout) and the original **`ClaudeWorkbench.Launcher`** (WinForms, kept as a fallback). Both read the same `launcher.json` and drive the same workspaces — pick either shortcut.
 
 - **Workspaces** — **Add workspace** (pick a `.sln`/`.slnx`; it gets a free port and an isolated runtime), **New blank solution** (pick/create an empty folder → writes an empty `.slnx` named after it and registers it, so you can start greenfield from nothing and fill it from the Source tab), **Start** (launches that workspace's host + sidecar and opens a browser window), **Stop**, **Remove**, and **Settings** (host exe path, sidecar folder, runtime folder, browser choice).
 - **Sign in (Claude / GitHub)** — buttons that open a terminal on each CLI's own login flow (Sign in / Check status / Sign out). Sign-in is **machine-wide, not per-workspace**: Claude caches under `~/.claude` (the sidecar inherits it) and `gh` under the user profile (the Git panel uses it), so it's once per machine until the credential expires. Force a fresh login by signing out first.
@@ -129,7 +133,9 @@ A read-only browser of the watched solution, with two trees in sidebar sub-tabs:
 - **Solution** — projects → files → symbols, built from the in-process index (the code model). Types and members are navigable; click a symbol to jump to its line.
 - **Files** — a plain file browser fed by `git ls-files --cached --others --exclude-standard` in the watched folder: tracked **plus** new-but-not-ignored files (so a just-created file shows up before it's committed), minus `.gitignore`'d junk (`bin/obj`, generated output, `.git`) — no hand-maintained ignore list. It's index-independent, so it works even before the first index build, and surfaces the non-code files the index never had (README, docs, scripts, `.slnx`, decision docs).
 
-Both trees drive one persistent in-app **Monaco** viewer (vendored locally, not an iframe), model-swapped per file. **Markdown** files render as formatted HTML (via the same `MarkdownRenderer` the chat uses) with a **Rendered / Raw** toggle — Raw drops back to Monaco source. The top toolbar adds operator **Build** / **Run** (Debug/Release, with a startup-project picker) that produce real `bin/<config>` output, **Refresh** (re-read source) / **Rebuild Index**, and **Add project** (below). Build/Run are **operator** actions run host-side — they are *not* part of the agent's tool surface. Full detail: **[docs/guide/source-tab.md](docs/guide/source-tab.md)**.
+The **Files** tree also has a filesystem fallback: when the watched folder isn't a git repo (or git is unavailable), it falls back to a pruned recursive walk — skipping `bin`/`obj`/`.git`/`node_modules` and other noise (extendable per-solution via `.claudeworkbench.json`) — so the tree still works before the first commit or without git.
+
+Both trees drive one persistent in-app **Monaco** viewer (vendored locally, not an iframe), model-swapped per file. **Markdown** files render as formatted HTML (via the same `MarkdownRenderer` the chat uses) with a **Rendered / Raw** toggle — Raw drops back to Monaco source. The top toolbar adds operator **Build** / **Run** (Debug/Release, with a startup-project picker) that produce real `bin/<config>` output, **Refresh** (re-read source) / **Rebuild Index**, **Packages** (a NuGet manager — browse/install/update/uninstall by project or solution, driving the SDK's `dotnet package` commands out-of-process), **Admin shell** (opens an elevated command window rooted at the solution folder, via UAC — for hand-running dotnet/git or killing a stuck process), and **Add project** (below). These are all **operator** actions run host-side — they are *not* part of the agent's tool surface. Full detail: **[docs/guide/source-tab.md](docs/guide/source-tab.md)**.
 
 ### Creating projects
 
@@ -161,7 +167,8 @@ src/
   AIMonitor.Indexing/    Roslyn semantic extraction → index; post-accept refresh
   AIMonitor.McpServer/   MCP tool surface (governed discovery + mutation + review)
   ClaudeWorkbench.Host/  in-proc ASP.NET host: the tool surface over HTTP (:6100) + Blazor UI
-  ClaudeWorkbench.Launcher/  WinForms control panel: one process per workspace
+  ClaudeWorkbench.Launcher.Wpf/  WPF control panel (primary): one process per workspace
+  ClaudeWorkbench.Launcher/      WinForms control panel (fallback)
 sidecar/                 Node/TS Claude Agent SDK driver: operator gate, event stream to the host
 scripts/                 publish-live.ps1
 tests/
@@ -187,7 +194,7 @@ ClaudeWorkbench is built on and informed by:
 - **[AIMonitor](https://github.com/rdavi10471a2/AIMonitor)** — the governed engine (Roslyn indexing, the compile gates, session staging, post-accept freshness) originates here and runs UI-agnostic in this project.
 - **CodexAppServerDemo** — the Blazor control-surface and agent-driver pattern.
 - **[Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript)** — drives Claude and registers the MCP surface in the sidecar.
-- **[DiffPlex](https://github.com/mmanela/diffplex)** — the in-app merge-review diff. **[Radzen Blazor](https://blazor.radzen.com/)** — UI components. **[Microsoft.Playwright](https://playwright.dev/dotnet/)** — the browser-visible E2E tests. **SQLite** (`Microsoft.Data.Sqlite`) — the solution index store.
+- **[Monaco](https://microsoft.github.io/monaco-editor/)** — the default in-app diff (and the read-only source viewer), vendored locally. **[DiffPlex](https://github.com/mmanela/diffplex)** — the classic side-by-side merge-review diff, kept as an option. **[Radzen Blazor](https://blazor.radzen.com/)** — UI components. **[Microsoft.Playwright](https://playwright.dev/dotnet/)** — the browser-visible E2E tests. **SQLite** (`Microsoft.Data.Sqlite`) — the solution index store.
 
 Related open-source servers also expose Roslyn/C# semantics to agents over MCP, for comparison:
 **[roslyn-codelens-mcp](https://github.com/MarcelRoozekrans/roslyn-codelens-mcp)** and
@@ -198,7 +205,7 @@ workflow rather than the whole product.
 
 ## Roadmap
 
-Done: engine + in-proc MCP endpoint (73-tool surface); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); **greenfield project creation** (Launcher *New blank solution* + Source-tab *Add project*, SDK-template-driven, operator-run, C# only); the **Source** browser (Solution + Files sub-tabs, an in-app Monaco viewer with markdown Rendered/Raw rendering, and in-app Build/Run to real `bin/<config>` output with a startup-project picker); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); single-start with the injected role card; and the Playwright E2E harness.
+Done: engine + in-proc MCP endpoint (74-tool surface — 70 engine + 4 git); the Claude sidecar with the operator gate and event stream; the Blazor host (workspace picker, tabs, live transcript, gate dialog, Monaco/DiffPlex merge review); named, resumable **Conversations** that replaced the retired Tasks board (autosaved per session; a Conversations modal to resume/rename/delete; Current + Archived; transcripts mirrored into an app-owned runtime copy; all host-side — the agent needs no tools or awareness of it); **greenfield project creation** (Launcher *New blank solution* + Source-tab *Add project*, SDK-template-driven, operator-run, C# only); the **Source** browser (Solution + Files sub-tabs, an in-app Monaco viewer with markdown Rendered/Raw rendering, and in-app Build/Run to real `bin/<config>` output with a startup-project picker); `AskUserQuestion` operator dialog; per-conversation auto-approve + Stop; file upload; context/usage meters; model + reasoning selector; NuGet restore (`restore_solution` + auto-restore); the agent notes scratchpad (`write_note` MCP tool, path-confined to `runtime\<workspace>\agent-notes`, outside watched source); a **NuGet package manager** and an elevated **Admin shell** on the Source tab; a per-solution **workspace config** editor (`.claudeworkbench.json` + `.gitignore`); a **Monaco** Merge Review diff (default; change-nav + word-level; DiffPlex still selectable) with orientation/color settings; per-code-block **copy** with CRLF-normalized clipboard; auto-approve on by default; failed turns surfaced in the transcript; the **WPF** launcher rewrite shipped alongside WinForms; single-start with the injected role card; and the Playwright E2E harness.
 
 Next:
 
