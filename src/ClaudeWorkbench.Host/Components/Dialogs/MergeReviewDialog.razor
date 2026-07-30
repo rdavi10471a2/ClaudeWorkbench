@@ -23,7 +23,8 @@
             <div class="staged-review-busy-card">
                 <div class="staged-review-busy-spinner"></div>
                 <strong>Applying review decision</strong>
-                <span>@AcceptBusyMessage</span>
+                @* Live engine step once it starts reporting; the static "what will run" line until then. *@
+                <span>@(currentPhase ?? AcceptBusyMessage)</span>
             </div>
         </div>
     }

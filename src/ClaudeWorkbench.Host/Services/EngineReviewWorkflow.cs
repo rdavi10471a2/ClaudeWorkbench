@@ -75,7 +75,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         return Load(next.StagedRecordId);
     }
 
-    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, bool buildAfterAccept = false, bool runAfterAccept = false)
+    public ReviewActionResult Accept(string stagedRecordId, bool forceApproveValidation, bool rebuildIndex = true, bool buildAfterAccept = false, bool runAfterAccept = false, IProgress<string>? progress = null)
     {
         StagedEditRecord record = workspace.EditService.GetStagedRecord(stagedRecordId);
         EnsureValidatedAndLaunched(record);
@@ -182,6 +182,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         PreMergeValidationResult terminalBuild;
         try
         {
+            progress?.Report("Validating the edit session (build)…");
             terminalBuild = new PreMergeValidationService().Validate(workspace.Settings, record, pendingWrites);
         }
         catch (Exception exception)
@@ -216,6 +217,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
         // written to a sibling temp then atomically renamed, so no single file can be left
         // truncated and the window in which the set is half-applied is as small as it can be.
         // If a write fails partway, we stop and report exactly which files reached source.
+        progress?.Report("Writing accepted files to source…");
         List<string> writtenPaths = new();
         foreach (StagedEditRecord pending in pendingWrites)
         {
@@ -310,6 +312,9 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             // the bytes are already on disk, but the index is left stale until the next reindex.
             // deferIndexRefresh drives BOTH paths — the session refreshPlan and the single-file path.
             // In the rides-build order we ALSO defer here and run the reindex after the build below.
+            progress?.Report(rebuildIndex && !ridesBuild
+                ? "Rebuilding the solution index…"
+                : "Recording the decision…");
             ReviewDecisionWithIndexRefreshResult decisionResult = new StagedDecisionWorkflow().Record(
                 workspace.Settings,
                 logger,
@@ -356,6 +361,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
                         ridesBuild
                             ? "build-after-accept (ADR-0007): the ONE real build — emits generated + refs; the index reads its output next"
                             : "build-after-accept: real dotnet build of the watched solution for runnable output");
+                    progress?.Report("Building output…");
                     postAcceptBuild = new SolutionBuildService().Build(workspace.Settings, IndexRidesBuild.IndexBuildConfiguration);
                     SolutionBuildService.BuildResult build = postAcceptBuild;
                     CompileIndexTrace.Record(
@@ -409,6 +415,7 @@ public sealed class EngineReviewWorkflow : IReviewWorkflow
             {
                 if (postAcceptBuild is { IsError: false })
                 {
+                    progress?.Report("Rebuilding the solution index…");
                     effectiveIndexRefresh = new IndexRefreshService().RebuildAfterAcceptedDecisionFromBuildOutput(
                         workspace.Settings,
                         logger,

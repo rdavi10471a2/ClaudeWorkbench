@@ -27,12 +27,16 @@ public interface IReviewWorkflow
     // failure is reported, not rolled back. Sequenced after the reindex (they run serially — no MSBuild
     // handle contention). runAfterAccept launches the built executable after a successful build (requires
     // buildAfterAccept — you can't run what wasn't built). Off by default. Operator-only.
+    // progress (optional) receives coarse phase labels as the terminal accept moves through its steps
+    // (validate/build → write → reindex → build output), so the UI can show which step is running
+    // instead of a static message. Null = no reporting (the programmatic/agent path passes none).
     ReviewActionResult Accept(
         string stagedRecordId,
         bool forceApproveValidation,
         bool rebuildIndex = true,
         bool buildAfterAccept = false,
-        bool runAfterAccept = false);
+        bool runAfterAccept = false,
+        IProgress<string>? progress = null);
 
     ReviewActionResult Reject(string stagedRecordId);
 }

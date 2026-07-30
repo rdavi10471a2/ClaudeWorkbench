@@ -47,6 +47,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // operator think the index rebuilt per file. It never did. See IsTerminalAccept.
     private bool building;
 
+    // The engine-reported step the terminal accept is currently on (validate/build → write → reindex →
+    // build output), shown live in the busy overlay. Null falls back to the static AcceptBusyMessage.
+    private string? currentPhase;
+
     // "Rebuild index after accept" — honored only on the terminal accept (the one that reindexes).
     // Checked by default preserves the current always-rebuild behavior; unchecking it on the last
     // file defers the expensive index rebuild (files still write; the index goes stale until the
@@ -230,7 +234,15 @@ public partial class MergeReviewDialog : IAsyncDisposable
             // the app live on the Source tab (which can pick the startup project — the merge dialog never could).
             bool doBuildAfterAccept = terminal && buildAfterAccept;
             // Never auto-run from the merge dialog — running the app lives on the Source tab.
-            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, doBuildAfterAccept, false));
+            // Live phase progress for the busy overlay: the engine reports a coarse step label as it moves
+            // through validate/build → write → reindex → build output. Progress<T> captures this circuit's
+            // sync context, so the callback marshals back on its own — stash the label and re-render.
+            IProgress<string> progress = new Progress<string>(phase =>
+            {
+                currentPhase = phase;
+                _ = InvokeAsync(StateHasChanged);
+            });
+            ReviewActionResult result = await Task.Run(() => Review.Accept(recordId, forceApproveValidation, rebuildIndex, doBuildAfterAccept, false, progress));
             errorMessage = result.Message;
             if (result.OverrideAvailable)
             {
@@ -277,6 +289,7 @@ public partial class MergeReviewDialog : IAsyncDisposable
         {
             actionBusy = false;
             building = false;
+            currentPhase = null;
             await InvokeAsync(StateHasChanged);
         }
     }
