@@ -45,7 +45,7 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         {
             return stream.SnapshotEvents()
                 .Where(evt => evt.Type is "assistant_text" or "tool_call_started" or "user_prompt"
-                    || (evt.Type == "turn_finished" && IsErrorStop(evt.StopReason)))
+                    || (evt.Type == "turn_finished" && IsErrorStop(evt.StopReason) && !WasStopped(evt.TurnId)))
                 .Select(evt => evt.Type switch
                 {
                     "tool_call_started" => ToolOrImageEntry(evt),
@@ -97,9 +97,39 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         await client.PromptAsync(prompt, toolPolicy);
     }
 
+    // Turns the OPERATOR deliberately interrupted (hit Stop). An interrupt comes back as a non-success
+    // turn_finished — indistinguishable by stop reason from a real failure — so remember which turn was
+    // stopped and suppress its error entry. A deliberate Stop is not a failure and must not paint the
+    // red banner.
+    private readonly HashSet<string> stoppedTurns = new(StringComparer.Ordinal);
+
     public async Task StopAsync()
     {
+        // Capture the turn being interrupted BEFORE the stop lands, so its imminent turn_finished
+        // (non-success) is recognized as an intentional stop, not an error.
+        string? interrupted = stream.ActiveTurn;
+        if (!string.IsNullOrEmpty(interrupted))
+        {
+            lock (stoppedTurns)
+            {
+                stoppedTurns.Add(interrupted);
+            }
+        }
+
         await client.StopAsync();
+    }
+
+    private bool WasStopped(string? turnId)
+    {
+        if (string.IsNullOrEmpty(turnId))
+        {
+            return false;
+        }
+
+        lock (stoppedTurns)
+        {
+            return stoppedTurns.Contains(turnId);
+        }
     }
 
     public Task<UsageSnapshot> GetUsageAsync()
