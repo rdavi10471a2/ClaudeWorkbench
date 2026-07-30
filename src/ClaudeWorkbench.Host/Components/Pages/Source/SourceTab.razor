@@ -90,6 +90,12 @@
                     ⚠ Index blocked — build failing
                 </span>
             }
+            <RadzenButton Icon="terminal"
+                          Text="Admin shell"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Title="Open an elevated (admin) command window at the solution root (UAC prompt)"
+                          Click="@OpenTerminal" />
             <RadzenButton Icon="inventory_2"
                           Text="Packages"
                           ButtonStyle="ButtonStyle.Light"
@@ -244,6 +250,9 @@
 
     [Parameter]
     public EventCallback Packages { get; set; }
+
+    [Parameter]
+    public EventCallback OpenTerminal { get; set; }
 
     [Parameter]
     public EventCallback<string> Build { get; set; }

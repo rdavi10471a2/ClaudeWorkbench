@@ -56,6 +56,21 @@ public partial class SourcePanel : IDisposable
             options: new DialogOptions { Width = "900px", Height = "640px", Resizable = true, Draggable = false });
     }
 
+    // Open an elevated command window rooted at the solution folder (operator convenience). UAC-gated;
+    // Task.Run keeps the circuit responsive while the shell/prompt spins up. The result (opened, or
+    // cancelled at the prompt) is toasted.
+    private async Task OpenTerminalAsync()
+    {
+        (bool ok, string message) = await Task.Run(Workspace.OpenAdminShell);
+        Notifications.Notify(new NotificationMessage
+        {
+            Severity = ok ? NotificationSeverity.Success : NotificationSeverity.Warning,
+            Summary = "Command window",
+            Detail = message,
+            Duration = 4000,
+        });
+    }
+
     // Operator Build — real output into bin/<config>. On a compile error, show the errors dialog (a toast
     // truncates a diagnostics list); on success, toast.
     private async Task OnBuildAsync(string configuration)

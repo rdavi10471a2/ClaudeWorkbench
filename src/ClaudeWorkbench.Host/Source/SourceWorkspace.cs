@@ -497,6 +497,47 @@ public sealed class SourceWorkspace
         return Task.Run(() => new SolutionRunService().Stop());
     }
 
+    // Open an ELEVATED (admin) command window rooted at the solution folder — an operator convenience
+    // for the Source tab (a place to run git/dotnet/system commands by hand against the watched tree
+    // with the rights some need). Human-only; not part of the agent surface. Uses ShellExecute + the
+    // `runas` verb so Windows shows the UAC prompt, and `cmd /K cd /d` into the root because an elevated
+    // process otherwise starts in system32. Best-effort: returns a message, never throws into the UI.
+    public (bool Ok, string Message) OpenAdminShell()
+    {
+        if (!workspace.HasWorkspace)
+        {
+            return (false, "Open a watched workspace first.");
+        }
+
+        string root = Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
+        if (!Directory.Exists(root))
+        {
+            return (false, "The watched solution folder doesn't exist.");
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/K cd /d \"{root}\"",
+                UseShellExecute = true, // required for the runas verb (elevation via UAC)
+                Verb = "runas",
+                WorkingDirectory = root,
+            });
+            return (true, $"Opened an admin command window at {root}.");
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            // ERROR_CANCELLED — the operator dismissed the UAC prompt.
+            return (false, "Admin command window cancelled at the UAC prompt.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Couldn't open an admin command window: {ex.Message}");
+        }
+    }
+
     private void Refresh()
     {
         current = BuildSnapshot(selectedPath, selectedLine, filter);
