@@ -220,10 +220,23 @@
                         <span class="git-diff-title" title="@diffTitle">@diffTitle</span>
                     </div>
                     <div class="git-diff-view">
-                        <DiffView OldText="@(diffContent.OldText)"
-                                  NewText="@(diffContent.NewText)"
-                                  OldLabel="@diffOldLabel"
-                                  NewLabel="@diffNewLabel" />
+                        @* Monaco diff is the default (F7/Shift+F7 nav, word-level, syntax highlighting);
+                           the classic DiffPlex side-by-side is shown when the operator picks it in the
+                           shared Diff viewer setting. @key on the path so the viewer re-inits per file. *@
+                        @if (MonacoSelected)
+                        {
+                            <MonacoDiffView @key="@diffTitle"
+                                            OldText="@(diffContent.OldText)"
+                                            NewText="@(diffContent.NewText)"
+                                            Path="@diffTitle" />
+                        }
+                        else
+                        {
+                            <DiffView OldText="@(diffContent.OldText)"
+                                      NewText="@(diffContent.NewText)"
+                                      OldLabel="@diffOldLabel"
+                                      NewLabel="@diffNewLabel" />
+                        }
                     </div>
                 }
             </div>
