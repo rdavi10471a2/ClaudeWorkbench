@@ -35,6 +35,11 @@ public sealed class AgentToolPolicy
     // conventional git diff order). Applies to both the Monaco and classic viewers in Merge Review.
     public bool MergeReviewNewOnLeft { get; set; } = true;
 
+    // Reverse the diff colors (insertions red, deletions green) in the Monaco viewer. Pairs with
+    // proposed-on-left so additions still read green on the proposed side. Monaco themes are global, so
+    // this applies to every Monaco diff (Merge Review and the Git page alike).
+    public bool DiffSwapColors { get; set; }
+
     public AgentToolPolicy Clone()
     {
         return new AgentToolPolicy
@@ -46,6 +51,7 @@ public sealed class AgentToolPolicy
             Effort = Effort,
             DiffViewer = DiffViewer,
             MergeReviewNewOnLeft = MergeReviewNewOnLeft,
+            DiffSwapColors = DiffSwapColors,
         };
     }
 }

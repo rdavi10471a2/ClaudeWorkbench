@@ -226,7 +226,34 @@ export function dispose(container) {
 // highlighting all come for free from createDiffEditor. One diff editor per container, models swapped
 // per file (and disposed) exactly like openFile swaps the viewer's model. original = current source
 // (left/"before"), modified = proposed candidate (right/"after").
-export async function createDiff(container, baseUrl, original, modified, language) {
+// A one-time theme that SWAPS the diff colors: insertions read red, deletions read green. Used when the
+// operator turns on "reverse diff colors" — e.g. with proposed-on-left, so additions still read green on
+// the proposed side. Inherits 'vs' so only the diff colors change; everything else stays the light theme.
+// NOTE: Monaco themes are GLOBAL (setTheme applies to every editor), so this is an all-diffs preference.
+let swapThemeDefined = false;
+function ensureSwapTheme() {
+    if (swapThemeDefined) {
+        return;
+    }
+    monaco.editor.defineTheme('cwb-diff-swapped', {
+        base: 'vs',
+        inherit: true,
+        rules: [],
+        colors: {
+            'diffEditor.insertedTextBackground': '#e0202022',
+            'diffEditor.insertedLineBackground': '#e0202016',
+            'diffEditor.removedTextBackground': '#1a8f3322',
+            'diffEditor.removedLineBackground': '#1a8f3316',
+            'diffEditorGutter.insertedLineBackground': '#e0202033',
+            'diffEditorGutter.removedLineBackground': '#1a8f3333',
+            'diffEditorOverview.insertedForeground': '#e02020a0',
+            'diffEditorOverview.removedForeground': '#1a8f33a0'
+        }
+    });
+    swapThemeDefined = true;
+}
+
+export async function createDiff(container, baseUrl, original, modified, language, swapColors) {
     if (!(container instanceof Element)) {
         return;
     }
@@ -241,13 +268,21 @@ export async function createDiff(container, baseUrl, original, modified, languag
         return;
     }
 
+    // Global theme (Monaco has no per-editor theme): swapped colors when requested, else the default 'vs'.
+    if (swapColors) {
+        ensureSwapTheme();
+        monaco.editor.setTheme('cwb-diff-swapped');
+    } else {
+        monaco.editor.setTheme('vs');
+    }
+
     let editor = container.__monacoDiff;
     if (!editor) {
         editor = monaco.editor.createDiffEditor(container, {
             readOnly: true,
             automaticLayout: true,
             renderSideBySide: true,
-            theme: 'vs',
+            theme: swapColors ? 'cwb-diff-swapped' : 'vs',
             minimap: { enabled: false },
             fontFamily: 'Cascadia Code, Consolas, monospace',
             fontSize: 13,

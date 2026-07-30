@@ -117,7 +117,8 @@
                                                 Path="@(selectedModel.RelativePath)"
                                                 OldLabel="Current Source"
                                                 NewLabel="Proposed Candidate"
-                                                NewOnLeft="@MergeNewOnLeft" />
+                                                NewOnLeft="@MergeNewOnLeft"
+                                                SwapColors="@SwapDiffColors" />
                             </RadzenTabsItem>
                             <RadzenTabsItem Text="Classic Diff" Disabled="@MonacoSelected">
                                 <DiffView OldText="@(selectedModel.CurrentText)"

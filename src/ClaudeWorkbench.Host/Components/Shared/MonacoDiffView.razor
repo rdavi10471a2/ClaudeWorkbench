@@ -42,6 +42,10 @@
     // order). When false (default), it's the conventional old-left / new-right (git order).
     [Parameter] public bool NewOnLeft { get; set; }
 
+    // When true, the diff colors are swapped (insertions red, deletions green). Pairs with NewOnLeft so
+    // additions still read green on the proposed side. Global to all Monaco diffs (Monaco theme limitation).
+    [Parameter] public bool SwapColors { get; set; }
+
     // What actually feeds Monaco's original(left)/modified(right) models, per the orientation.
     private string LeftText => (NewOnLeft ? NewText : OldText) ?? string.Empty;
     private string RightText => (NewOnLeft ? OldText : NewText) ?? string.Empty;
@@ -60,7 +64,7 @@
             {
                 // ?v bump matches SourceCodeViewer — the launcher window caches JS hard, so a republish
                 // that changed sourceMonaco.js is only picked up when the query bumps.
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=7");
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=8");
                 ready = true;
                 await RenderAsync();
             }
@@ -93,7 +97,7 @@
         try
         {
             await module.InvokeVoidAsync(
-                "createDiff", container, Nav.BaseUri, LeftText, RightText, Language());
+                "createDiff", container, Nav.BaseUri, LeftText, RightText, Language(), SwapColors);
         }
         catch (JSDisconnectedException)
         {
