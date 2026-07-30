@@ -24,6 +24,9 @@ public partial class MergeReviewDialog : IAsyncDisposable
     [Inject]
     private Conversations.ConversationService Conversations { get; set; } = default!;
 
+    [Inject]
+    private Services.AgentSettingsService Settings { get; set; } = default!;
+
     [Parameter]
     public string? SessionId { get; set; }
 
@@ -116,6 +119,20 @@ public partial class MergeReviewDialog : IAsyncDisposable
         && !selectedModel.PreMergeValidationForceApproved
         && (selectedModel.PreMergeValidationIsError
             || string.Equals(overrideOfferedForRecordId, selectedRecordId, StringComparison.Ordinal));
+
+    // The operator's diff-viewer preference (settings dialog). Monaco is the default; the other
+    // viewer's tab stays present but disabled so it's kept, not removed. Read when the dialog opens.
+    private bool MonacoSelected => !string.Equals(
+        Settings.Current.DiffViewer, DiffViewerOptions.Classic, StringComparison.Ordinal);
+
+    // RadzenTabs active tab: 0 = Monaco (first), 1 = Classic. Follows the preference so the chosen
+    // viewer opens active and the disabled one can't be the initial selection.
+    private int diffTabIndex;
+
+    protected override void OnInitialized()
+    {
+        diffTabIndex = MonacoSelected ? 0 : 1;
+    }
 
     protected override void OnParametersSet()
     {

@@ -23,6 +23,12 @@ public sealed class AgentToolPolicy
     // Reasoning effort: "", low, medium, high, xhigh, max (empty => default).
     public string Effort { get; set; } = string.Empty;
 
+    // Which diff viewer Merge Review shows: "monaco" (default) is the rich Monaco diff editor
+    // (F7/Shift+F7 change nav, overview ruler, word-level diff, syntax highlighting); "classic" is
+    // the original DiffPlex side-by-side. The non-selected one stays present in the dialog but
+    // disabled — kept, not removed — so flipping this switches which viewer is live.
+    public string DiffViewer { get; set; } = DiffViewerOptions.Monaco;
+
     public AgentToolPolicy Clone()
     {
         return new AgentToolPolicy
@@ -32,8 +38,25 @@ public sealed class AgentToolPolicy
             EnabledOptionalTools = new HashSet<string>(EnabledOptionalTools, StringComparer.Ordinal),
             Model = Model,
             Effort = Effort,
+            DiffViewer = DiffViewer,
         };
     }
+}
+
+// Diff-viewer choices offered in the settings dialog. Monaco is the default; the classic DiffPlex
+// view is kept (not removed) so the operator can switch back.
+public sealed record DiffViewerOption(string Label, string Value);
+
+public static class DiffViewerOptions
+{
+    public const string Monaco = "monaco";
+    public const string Classic = "classic";
+
+    public static readonly IReadOnlyList<DiffViewerOption> All =
+    [
+        new("Monaco — rich diff (F7 nav · word-level)", Monaco),
+        new("Classic — DiffPlex side-by-side", Classic),
+    ];
 }
 
 // Model choices offered in the settings dialog. Empty value = inherit the default.

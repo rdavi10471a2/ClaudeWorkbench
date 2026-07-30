@@ -12,12 +12,8 @@
         </div>
     }
 
-    <div class="staged-review-dialog-header">
-        <div>
-            <h3>@DialogTitle</h3>
-            <p>@DialogSubtitle</p>
-        </div>
-    </div>
+    @* Header/subtitle removed: the Radzen dialog chrome already titles this "Merge Review"; the record
+       bar below carries the useful per-file context. *@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
@@ -110,11 +106,25 @@
                 </div>
 
                 <section class="staged-review-diff-shell" aria-label="Side by side staged review">
-                    <DiffView OldText="@(selectedModel.CurrentText)"
-                              NewText="@(selectedModel.ProposedText)"
-                              OldLabel="Current Source"
-                              NewLabel="Proposed Candidate"
-                              NewOnLeft="true" />
+                    @* Two viewers, one live at a time per the operator's Diff viewer setting (default Monaco).
+                       The non-selected one keeps its tab but is disabled — kept, not removed. *@
+                    <RadzenTabs @bind-SelectedIndex="diffTabIndex">
+                        <Tabs>
+                            <RadzenTabsItem Text="Monaco Diff" Disabled="@(!MonacoSelected)">
+                                @* Monaco diff editor — F7/Shift+F7 change nav, overview ruler, word-level diff. *@
+                                <MonacoDiffView OldText="@(selectedModel.CurrentText)"
+                                                NewText="@(selectedModel.ProposedText)"
+                                                Path="@(selectedModel.RelativePath)" />
+                            </RadzenTabsItem>
+                            <RadzenTabsItem Text="Classic Diff" Disabled="@MonacoSelected">
+                                <DiffView OldText="@(selectedModel.CurrentText)"
+                                          NewText="@(selectedModel.ProposedText)"
+                                          OldLabel="Current Source"
+                                          NewLabel="Proposed Candidate"
+                                          NewOnLeft="true" />
+                            </RadzenTabsItem>
+                        </Tabs>
+                    </RadzenTabs>
                 </section>
 
                 <div class="staged-review-toggles">

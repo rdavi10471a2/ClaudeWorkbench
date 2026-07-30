@@ -182,3 +182,20 @@ h1:focus {
     color: #a12d2d;
     font-size: 0.85em;
 }
+
+/* Merge Review dialog (CssClass on the Radzen dialog): make the dialog a flex column and let its content
+   wrapper fill the remaining height, so the diff pane stretches to (nearly) the whole window instead of
+   leaving dead space below the action bar. The component's own flex chain (.staged-review-dialog ->
+   -layout -> -diff-shell) then reaches all the way down. Global because .rz-dialog-content is an ANCESTOR
+   of the component, so scoped ::deep can't reach it. */
+.merge-review-dialog.rz-dialog,
+.rz-dialog.merge-review-dialog {
+    display: flex;
+    flex-direction: column;
+}
+
+.merge-review-dialog .rz-dialog-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 95%;
+}
