@@ -1,4 +1,4 @@
-using AIMonitor.Data;
+using AIMonitor.Core;
 using AIMonitor.Workflow;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -9,9 +9,11 @@ namespace ClaudeWorkbench.Host.Components.Dialogs;
 // uninstall packages, scoped to the whole Solution or a single project (VS's two entry points in one
 // modal). All work is host-side and out-of-process via NuGetPackageService; the agent is not involved.
 //
-// Installed packages are read from the index (fast, already populated); "latest" / Updates come from
-// `dotnet list package --outdated`; search from `dotnet package search`. After any mutation we reindex
-// (which restores were already run inside the service) so the views — and the Source tree — refresh.
+// The Installed view is read straight from the project files (<PackageReference> items); Updates come
+// from `dotnet list package --outdated` and search from `dotnet package search`. Everything is
+// deliberately INDEPENDENT of the code index: installing a package changes no user symbols, so a package
+// change restores inline (via `dotnet add`) but never triggers a reindex. The index's package graph
+// refreshes on its own on the next real build/accept.
 public partial class NuGetDialog
 {
     private enum Tab { Browse, Installed, Updates, Consolidate }
@@ -31,8 +33,9 @@ public partial class NuGetDialog
     private bool includePrerelease;
 
     private IReadOnlyList<ProjectEntry> projects = [];
-    private IReadOnlyList<IndexedPackageReferenceRow> installed = [];
+    private IReadOnlyList<NuGetPackageService.InstalledPackage> installed = [];
     private IReadOnlyList<NuGetPackageService.OutdatedPackage> outdated = [];
+    private bool loadingInstalled;
     private bool loadingOutdated;
 
     // Browse state.
@@ -59,31 +62,35 @@ public partial class NuGetDialog
             scope = System.IO.Path.GetFullPath(InitialProjectPath);
         }
 
-        LoadInstalled();
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        await RefreshOutdatedAsync();
-    }
-
-    // ---- data loading ----
-
-    private void LoadInstalled()
-    {
-        installed = Workspace.Query.ListPackageReferences();
-        projects = installed
-            .Select(row => System.IO.Path.GetFullPath(row.ProjectPath))
+        // Every project in the solution — including package-less ones, so they're valid install targets.
+        projects = WatchedSolutionInfo.ResolveAllProjects(Workspace.Settings.WatchedSolutionPath)
+            .Select(path => System.IO.Path.GetFullPath(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path => new ProjectEntry(path, System.IO.Path.GetFileNameWithoutExtension(path)))
             .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        // Keep the scope valid if the selected project vanished.
         if (scope != SolutionScope && projects.All(p => !PathEquals(p.Path, scope)))
         {
             scope = SolutionScope;
         }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Installed + outdated are both live SDK reads — run them together so the dialog fills quickly.
+        await Task.WhenAll(RefreshInstalledAsync(), RefreshOutdatedAsync());
+    }
+
+    // ---- data loading (all live from the SDK; never touches the code index) ----
+
+    private async Task RefreshInstalledAsync()
+    {
+        loadingInstalled = true;
+        StateHasChanged();
+        installed = await Task.Run(() => Packages.ListInstalled(Workspace.Settings));
+        loadingInstalled = false;
+        StateHasChanged();
     }
 
     private async Task RefreshOutdatedAsync()
@@ -105,13 +112,13 @@ public partial class NuGetDialog
         HashSet<string> inScope = new(ScopeProjectPaths, StringComparer.OrdinalIgnoreCase);
         return installed
             .Where(row => inScope.Contains(System.IO.Path.GetFullPath(row.ProjectPath)))
-            .GroupBy(row => row.Include, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(row => row.PackageId, StringComparer.OrdinalIgnoreCase)
             .Select(group => new InstalledGroup(
                 group.Key,
                 group.Select(row => (
                     System.IO.Path.GetFullPath(row.ProjectPath),
                     System.IO.Path.GetFileNameWithoutExtension(row.ProjectPath),
-                    row.Version))
+                    row.Version ?? "(central)"))
                     .ToArray()))
             .OrderBy(g => g.PackageId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -294,10 +301,9 @@ public partial class NuGetDialog
 
         if (!result.IsError)
         {
-            // Reindex so the package graph + Source tree reflect the change, then re-read the views.
-            await Workspace.ProvisionAsync();
-            LoadInstalled();
-            await RefreshOutdatedAsync();
+            // No reindex: the package change restored assets for the next build but altered no user
+            // symbols. Just re-read the live package views (independent of the code index).
+            await Task.WhenAll(RefreshInstalledAsync(), RefreshOutdatedAsync());
         }
 
         busy = false;

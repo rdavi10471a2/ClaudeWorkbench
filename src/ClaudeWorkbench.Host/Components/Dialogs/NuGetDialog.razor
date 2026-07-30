@@ -98,7 +98,11 @@
         @{
             IReadOnlyList<InstalledGroup> groups = InstalledInScope();
         }
-        @if (groups.Count == 0)
+        @if (loadingInstalled && groups.Count == 0)
+        {
+            <div class="nuget-empty"><RadzenIcon Icon="hourglass_empty" /> Reading installed packages…</div>
+        }
+        else if (groups.Count == 0)
         {
             <div class="nuget-empty">No packages in this scope.</div>
         }

@@ -70,9 +70,13 @@ Mechanism notes:
 - **Search**: `dotnet package search <q> --format json [--prerelease] --take N` (SDK 9+/10). Parse
   JSON; degrade to an empty result + message if `dotnet` is missing (same launch-failure handling
   as scaffold).
-- **Installed + status**: base list from the index (`ListPackageReferences`), enriched by
-  `dotnet list package --format json` with `--outdated`, `--vulnerable`, `--deprecated`. The index
-  gives instant paint; the `dotnet list` calls fill the badges asynchronously.
+- **Installed**: read straight from each project's `<PackageReference>` items (parse the `.csproj`).
+  This is instant, always fresh, needs no SDK subprocess, and — crucially — is **independent of the
+  code index**. Installing a package changes no *user* symbols, so the package manager must never
+  trigger a reindex; refreshing the Installed list is just a re-parse. (This mirrors VS Code's NuGet
+  Gallery, which parses `.csproj` and re-parses after a change — no language-server reindex.) Status
+  badges (`--outdated` / `--vulnerable` / `--deprecated`) come from `dotnet list package` and fill in
+  asynchronously.
 - **Versions dropdown**: NuGet V3 flat-container `.../v3-flatcontainer/{id-lower}/index.json`
   (honor the configured source; fall back to "latest stable / latest prerelease / type a version"
   if the feed can't be reached).
@@ -122,9 +126,11 @@ Detect CPM up front:
 
 ## Post-mutation pipeline
 
-`add/remove` → **one** `dotnet restore` (solution) → reindex (ride-the-build path) → refresh the
-Installed/Updates lists from the index. Batch a multi-project apply into a single restore+reindex.
-Restore/reindex already exist; this feature only sequences them after the mutation.
+`add/remove` → refresh the Installed (re-parse `.csproj`) and Updates lists. **No reindex** — a package
+change alters no user symbols, so the code index is left alone and refreshes on its own on the next real
+build/accept. **No explicit restore either**: `dotnet add package` restores the changed project inline
+(we don't pass `--no-restore`), which is all the next build needs. This is the key correction from the
+first cut, which wrongly reindexed after every package change.
 
 ## MCP parity (optional, small)
 

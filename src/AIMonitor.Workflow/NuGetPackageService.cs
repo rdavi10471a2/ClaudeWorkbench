@@ -27,6 +27,16 @@ public sealed class NuGetPackageService
         string? Owners,
         string SourceName);
 
+    // A package referenced by a project, read straight from the .csproj's <PackageReference> items — NOT
+    // from the code index and not via an SDK subprocess. Installing a package changes no user symbols, so
+    // the package manager never reindexes; refreshing this list is just an instant re-parse of the project
+    // files (the same approach VS Code's NuGet Gallery uses). Version is null under Central Package
+    // Management (the version lives in Directory.Packages.props).
+    public sealed record InstalledPackage(
+        string ProjectPath,
+        string PackageId,
+        string? Version);
+
     // A package that has a newer version than the one resolved in a project (from `dotnet list package
     // --outdated`). Drives the "Updates" tab and the "latest" column of the Installed view.
     public sealed record OutdatedPackage(
@@ -112,6 +122,58 @@ public sealed class NuGetPackageService
         }
 
         return hits;
+    }
+
+    // The packages referenced across the solution, read directly from each project's <PackageReference>
+    // items. No SDK subprocess and no code index — installing a package changes no user symbols, so this
+    // is just a file read that is always fresh and instant to refresh after a change.
+    public IReadOnlyList<InstalledPackage> ListInstalled(MonitorSettings settings)
+    {
+        List<InstalledPackage> installed = [];
+        foreach (string projectPath in WatchedSolutionInfo.ResolveAllProjects(settings.WatchedSolutionPath))
+        {
+            installed.AddRange(ReadProjectPackages(Path.GetFullPath(projectPath)));
+        }
+
+        return installed;
+    }
+
+    // Parse a single .csproj's <PackageReference> items. Handles the version as an attribute
+    // (<PackageReference Include="X" Version="1.2.3" />) or a child element (<Version>1.2.3</Version>), and
+    // a missing version (Central Package Management) as null.
+    private static IReadOnlyList<InstalledPackage> ReadProjectPackages(string projectPath)
+    {
+        List<InstalledPackage> packages = [];
+        if (!File.Exists(projectPath))
+        {
+            return packages;
+        }
+
+        try
+        {
+            System.Xml.Linq.XDocument document = System.Xml.Linq.XDocument.Load(projectPath);
+            foreach (System.Xml.Linq.XElement reference in document.Descendants()
+                .Where(element => element.Name.LocalName == "PackageReference"))
+            {
+                string id = reference.Attribute("Include")?.Value
+                    ?? reference.Attribute("Update")?.Value
+                    ?? string.Empty;
+                if (id.Length == 0)
+                {
+                    continue;
+                }
+
+                string? version = reference.Attribute("Version")?.Value
+                    ?? reference.Elements().FirstOrDefault(e => e.Name.LocalName == "Version")?.Value;
+                packages.Add(new InstalledPackage(projectPath, id, string.IsNullOrWhiteSpace(version) ? null : version));
+            }
+        }
+        catch (System.Xml.XmlException)
+        {
+            // Malformed project file: skip it rather than throwing into the Blazor circuit.
+        }
+
+        return packages;
     }
 
     // Ask the SDK which top-level packages have a newer version. One call for the whole solution; results
@@ -305,13 +367,9 @@ public sealed class NuGetPackageService
             changed++;
         }
 
-        // One restore for the whole batch so the index's build sees restored assets. Cheap when current.
-        ProcessResult restored = RunProcess(
-            "dotnet",
-            ["restore", solutionPath, "--nologo", "-nodeReuse:false"],
-            solutionRoot,
-            runTimeout);
-
+        // No explicit restore or reindex: `dotnet add package` restores the changed project inline (we
+        // don't pass --no-restore), and a package change alters no user symbols, so the code index is left
+        // alone — it refreshes on its own on the next real build/accept.
         string action = remove ? "Removed" : string.IsNullOrWhiteSpace(version) ? "Installed" : $"Set {packageId} to {version} in";
         string scope = changed == 1 ? "1 project" : $"{changed} projects";
         string summary = remove
@@ -319,15 +377,6 @@ public sealed class NuGetPackageService
             : string.IsNullOrWhiteSpace(version)
                 ? $"{action} {packageId} in {scope}."
                 : $"{action} {scope}.";
-
-        if (restored.TimedOut || restored.ExitCode != 0)
-        {
-            // Non-fatal: the .csproj changes are applied; restore/reindex can be retried.
-            return new PackageMutationResult(
-                false,
-                $"{summary} Restore reported issues — a rebuild may be needed.",
-                ExtractDiagnostics(restored));
-        }
 
         return new PackageMutationResult(false, summary, []);
     }
