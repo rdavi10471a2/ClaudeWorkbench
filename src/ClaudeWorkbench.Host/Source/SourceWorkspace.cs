@@ -130,7 +130,9 @@ public sealed class SourceWorkspace
                 ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]);
             if (!result.Ok)
             {
-                trackedFiles = [];
+                // No git, or the folder isn't a repo: fall back to a plain filesystem walk so the Files
+                // tree still works (VS Explorer style) when the governed git loop isn't turned on.
+                trackedFiles = BuildFilesFromDisk(root);
                 Refresh();
                 return;
             }
@@ -164,9 +166,90 @@ public sealed class SourceWorkspace
         }
         catch (Exception)
         {
-            // Best-effort: the Files tree just stays empty if git is unavailable or errors.
-            trackedFiles = [];
+            // Best-effort: fall back to a filesystem walk if git is unavailable or errored.
+            try
+            {
+                string root = Path.GetFullPath(workspace.Settings.WatchedProjectFolder);
+                trackedFiles = Directory.Exists(root) ? BuildFilesFromDisk(root) : [];
+            }
+            catch (Exception)
+            {
+                trackedFiles = [];
+            }
         }
+    }
+
+    // Filesystem fallback for the Files tree when git can't provide the list (no git on PATH, or the
+    // watched folder isn't a repository). A pruned recursive walk that skips build output and tool/VCS
+    // metadata — the same noise .gitignore would normally exclude — and is capped so a pathological tree
+    // can't stall the UI. Produces the SAME relative-path SourceFileEntry shape as the git path.
+    private static readonly HashSet<string> ExcludedDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", "bin", "obj", "node_modules", ".vs", ".idea", ".vscode", "packages", "TestResults",
+    };
+
+    private const int MaxFallbackFiles = 10_000;
+
+    private List<SourceFileEntry> BuildFilesFromDisk(string root)
+    {
+        List<SourceFileEntry> entries = [];
+        Stack<string> pending = new();
+        pending.Push(root);
+
+        while (pending.Count > 0 && entries.Count < MaxFallbackFiles)
+        {
+            string directory = pending.Pop();
+
+            string[] childDirectories;
+            string[] files;
+            try
+            {
+                childDirectories = Directory.GetDirectories(directory);
+                files = Directory.GetFiles(directory);
+            }
+            catch (Exception)
+            {
+                // Unreadable directory (permissions/locks): skip it rather than failing the whole walk.
+                continue;
+            }
+
+            foreach (string file in files)
+            {
+                if (entries.Count >= MaxFallbackFiles)
+                {
+                    break;
+                }
+
+                string relative = NormalizePath(Path.GetRelativePath(root, file));
+                if (relative.Length == 0)
+                {
+                    continue;
+                }
+
+                entries.Add(new SourceFileEntry(
+                    relative,
+                    file,
+                    GetLanguage(Path.GetExtension(file)),
+                    GetFileSize(file),
+                    File.GetLastWriteTime(file)));
+            }
+
+            foreach (string child in childDirectories)
+            {
+                string name = Path.GetFileName(child);
+                // Skip build/VCS/tool noise and any hidden directory (.*), matching a source-view intent.
+                if (ExcludedDirectories.Contains(name) || (name.StartsWith('.') && name.Length > 1))
+                {
+                    continue;
+                }
+
+                pending.Push(child);
+            }
+        }
+
+        return entries
+            .OrderBy(entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     // Re-read the current source WITHOUT a reindex: rebuild the snapshot from the existing index DB
