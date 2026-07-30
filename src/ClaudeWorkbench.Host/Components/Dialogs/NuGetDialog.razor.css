@@ -1,0 +1,409 @@
+.nuget-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 460px;
+}
+
+/* toolbar: scope + prerelease */
+.nuget-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.nuget-scope {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nuget-scope label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.nuget-scope select {
+    padding: 5px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #333);
+    font: inherit;
+    min-width: 200px;
+    cursor: pointer;
+}
+
+.nuget-prerelease {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+/* tabs */
+.nuget-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--rz-border-color, #e1e4e8);
+}
+
+.nuget-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--rz-text-secondary-color, #52606d);
+    cursor: pointer;
+}
+
+.nuget-tab:hover {
+    color: var(--rz-text-color, #1f2933);
+}
+
+.nuget-tab.active {
+    color: var(--rz-primary, #0969da);
+    border-bottom-color: var(--rz-primary, #0969da);
+}
+
+.nuget-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: var(--rz-primary, #0969da);
+    color: #fff;
+    font-size: 0.72rem;
+    line-height: 1.5;
+}
+
+.nuget-badge-warn {
+    background: var(--rz-warning-dark, #b26a00);
+}
+
+/* body */
+.nuget-body {
+    flex: 1;
+    min-height: 300px;
+    max-height: 52vh;
+    overflow-y: auto;
+}
+
+.nuget-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 28px 8px;
+    color: var(--rz-text-secondary-color, #52606d);
+    font-size: 0.88rem;
+}
+
+/* tables (installed / updates) */
+.nuget-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.nuget-table th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--rz-border-color, #e1e4e8);
+    color: var(--rz-text-secondary-color, #52606d);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    background: var(--rz-base-background-color, #fff);
+}
+
+.nuget-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--rz-border-color, #f0f2f4);
+    vertical-align: middle;
+}
+
+.nuget-pkg {
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.nuget-row-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.nuget-chip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.nuget-chip.warn {
+    background: var(--rz-warning-lighter, #fff3e0);
+    color: var(--rz-warning-dark, #b26a00);
+}
+
+/* browse */
+.nuget-search {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.nuget-search-input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #333);
+    font: inherit;
+}
+
+.nuget-browse {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 12px;
+    align-items: start;
+}
+
+.nuget-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 42vh;
+    overflow-y: auto;
+}
+
+.nuget-hit {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px 10px;
+    cursor: pointer;
+    font: inherit;
+}
+
+.nuget-hit:hover {
+    background: var(--rz-base-100, #f6f8fa);
+}
+
+.nuget-hit.active {
+    background: var(--rz-primary-lighter, #ddf4ff);
+    border-color: var(--rz-primary, #0969da);
+}
+
+.nuget-hit-id {
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+    font-size: 0.86rem;
+}
+
+.nuget-hit-meta {
+    font-size: 0.78rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.nuget-hit-owners {
+    font-size: 0.74rem;
+    color: var(--rz-text-tertiary-color, #7a8593);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nuget-detail {
+    border: 1px solid var(--rz-border-color, #e1e4e8);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+}
+
+.nuget-detail-id {
+    margin: 0;
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-size: 0.95rem;
+    word-break: break-all;
+}
+
+.nuget-detail-line {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.nuget-detail-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+    margin-top: 4px;
+}
+
+.nuget-optional {
+    font-weight: 400;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.nuget-version-input {
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    font: inherit;
+}
+
+.nuget-targets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.nuget-target {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+}
+
+/* updates */
+.nuget-updates-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+/* consolidate */
+.nuget-consolidate-hint {
+    margin: 0 0 10px;
+    font-size: 0.84rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.nuget-consolidate-row {
+    border: 1px solid var(--rz-border-color, #e1e4e8);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.nuget-consolidate-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.nuget-consolidate-apply {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nuget-consolidate-apply select {
+    padding: 4px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    font: inherit;
+    cursor: pointer;
+}
+
+.nuget-consolidate-uses {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.8rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.nuget-consolidate-ver {
+    font-family: var(--rz-font-family-monospace, monospace);
+    margin-left: 6px;
+    color: var(--rz-text-color, #1f2933);
+}
+
+/* status + footer */
+.nuget-status {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
+
+.nuget-status.ok {
+    border-color: var(--rz-success, #1a7f37);
+    background: var(--rz-success-lighter, rgba(26, 127, 55, 0.08));
+}
+
+.nuget-status.error {
+    border-color: var(--rz-danger, #d1242f);
+    background: var(--rz-danger-lighter, rgba(209, 36, 47, 0.08));
+}
+
+.nuget-status-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.nuget-diagnostics {
+    margin: 0;
+    padding-left: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-size: 0.76rem;
+    color: var(--rz-text-secondary-color, #52606d);
+    max-height: 140px;
+    overflow-y: auto;
+}
+
+.nuget-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.nuget-busy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+    font-size: 0.8rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}

@@ -90,6 +90,12 @@
                     ⚠ Index blocked — build failing
                 </span>
             }
+            <RadzenButton Icon="inventory_2"
+                          Text="Packages"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Title="Manage NuGet packages (by project or by solution)"
+                          Click="@Packages" />
             <RadzenButton Icon="add"
                           Text="Add project"
                           ButtonStyle="ButtonStyle.Primary"
@@ -235,6 +241,9 @@
 
     [Parameter]
     public EventCallback AddProject { get; set; }
+
+    [Parameter]
+    public EventCallback Packages { get; set; }
 
     [Parameter]
     public EventCallback<string> Build { get; set; }
