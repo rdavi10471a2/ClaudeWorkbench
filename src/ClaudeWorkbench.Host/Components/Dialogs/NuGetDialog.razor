@@ -32,13 +32,15 @@
                 @onclick="@(() => activeTab = Tab.Browse)">Browse</button>
         <button type="button" class="nuget-tab @(activeTab == Tab.Updates ? "active" : "")"
                 @onclick="@(() => activeTab = Tab.Updates)">
-            Updates@if (OutdatedInScope().Count > 0) { <span class="nuget-badge">@OutdatedInScope().Count</span> }
+            <span>Updates</span>
+            @if (OutdatedInScope().Count > 0) { <span class="nuget-badge">@OutdatedInScope().Count</span> }
         </button>
         @if (scope == SolutionScope)
         {
             <button type="button" class="nuget-tab @(activeTab == Tab.Consolidate ? "active" : "")"
                     @onclick="@(() => activeTab = Tab.Consolidate)">
-                Consolidate@if (ConsolidationCandidates().Count > 0) { <span class="nuget-badge nuget-badge-warn">@ConsolidationCandidates().Count</span> }
+                <span>Consolidate</span>
+                @if (ConsolidationCandidates().Count > 0) { <span class="nuget-badge nuget-badge-warn">@ConsolidationCandidates().Count</span> }
             </button>
         }
     </div>
@@ -171,7 +173,7 @@
                         <button type="button" class="nuget-hit @(selectedHit?.Id == hit.Id ? "active" : "")"
                                 @onclick="@(() => SelectHit(hit))">
                             <span class="nuget-hit-id">@hit.Id</span>
-                            <span class="nuget-hit-meta">v@hit.LatestVersion · @FormatDownloads(hit.TotalDownloads) downloads</span>
+                            <span class="nuget-hit-meta">v@(hit.LatestVersion) · @FormatDownloads(hit.TotalDownloads) downloads</span>
                             @if (!string.IsNullOrWhiteSpace(hit.Owners)) { <span class="nuget-hit-owners">@hit.Owners</span> }
                         </button>
                     }
