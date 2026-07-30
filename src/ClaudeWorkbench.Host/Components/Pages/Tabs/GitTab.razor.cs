@@ -24,6 +24,16 @@ public partial class GitTab : IAsyncDisposable
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
+    [Inject]
+    private AgentSettingsService Settings { get; set; } = default!;
+
+    // The operator's diff-viewer preference (shared with Merge Review's setting). Monaco is the default;
+    // "Classic" selects the DiffPlex side-by-side. Same choice drives both surfaces.
+    private bool MonacoSelected => !string.Equals(
+        Settings.Current.DiffViewer,
+        ClaudeWorkbench.Host.Console.DiffViewerOptions.Classic,
+        StringComparison.Ordinal);
+
     // Collapsible / resizable left review panel vs the diff on the right.
     private ElementReference gitBody;
     private ElementReference gitLeft;
