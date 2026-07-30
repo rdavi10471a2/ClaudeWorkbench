@@ -134,6 +134,40 @@ public partial class MergeReviewDialog : IAsyncDisposable
     // Reverse diff colors preference (Monaco viewer).
     private bool SwapDiffColors => Settings.Current.DiffSwapColors;
 
+    // Multi-file review progress ("File X of N"). Session flow advances one file per accept, so N is the
+    // session's file count captured at the START (adding reviewed + still-pending would double-count
+    // approved-but-unwritten files), and X is the count resolved so far plus the current one. In the queue
+    // (non-session) mode the whole list is present, so position and total come straight from it.
+    private int reviewedInSession;
+    private int sessionTotal;
+
+    // Total files this review covers.
+    private int ReviewTotal => UseSessionFlow
+        ? (sessionTotal > 0 ? sessionTotal : SessionPendingCount)
+        : pendingItems.Count;
+
+    // 1-based position of the file currently on screen within the review.
+    private int ReviewPosition
+    {
+        get
+        {
+            if (UseSessionFlow)
+            {
+                int total = ReviewTotal;
+                return total > 0 ? Math.Min(reviewedInSession + 1, total) : 1;
+            }
+
+            int index = pendingItems
+                .ToList()
+                .FindIndex(item => string.Equals(item.StagedRecordId, selectedRecordId, StringComparison.Ordinal));
+            return index >= 0 ? index + 1 : 1;
+        }
+    }
+
+    private int SessionPendingCount => UseSessionFlow
+        ? pendingItems.Count(item => string.Equals(item.SessionId, SessionId, StringComparison.Ordinal))
+        : pendingItems.Count;
+
     protected override void OnParametersSet()
     {
         LoadReview(preserveSelection: false);
@@ -204,6 +238,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
             }
             else
             {
+                // A file was resolved (accepted, or approved on a non-terminal file) — advance the
+                // "File X of N" progress counter.
+                reviewedInSession++;
+
                 // Accepted (or approved, on a non-terminal file). Record it for the live thread's
                 // provenance; the terminal accept is where the whole set was written, so commit then.
                 acceptedRecordIds.Add(recordId);
@@ -304,6 +342,13 @@ public partial class MergeReviewDialog : IAsyncDisposable
         {
             pendingItems = Review.ListPending();
             errorMessage = null;
+
+            // Capture the session's file total once, on the first load (before any accept resolves a file),
+            // so "File X of N" has a stable N.
+            if (UseSessionFlow && sessionTotal == 0)
+            {
+                sessionTotal = SessionPendingCount;
+            }
 
             if (UseSessionFlow)
             {
