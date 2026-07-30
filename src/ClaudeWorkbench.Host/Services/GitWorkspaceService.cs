@@ -17,6 +17,13 @@ public sealed class GitWorkspaceService
         this.workspace = workspace;
     }
 
+    // Raised to ask the Git page to reload its status/diff — and ONLY the Git page. A merge-review
+    // terminal accept writes the working tree, so the Git view is stale even when it isn't the active
+    // tab; this is a targeted signal (not the broad WorkspaceManager.Changed) so nothing else reacts.
+    public event Action? RefreshRequested;
+
+    public void RequestRefresh() => RefreshRequested?.Invoke();
+
     public bool HasWorkspace => workspace.HasWorkspace;
 
     // The watched solution's folder — where a not-yet-initialized repo would be created.

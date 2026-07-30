@@ -27,6 +27,9 @@ public partial class MergeReviewDialog : IAsyncDisposable
     [Inject]
     private Services.AgentSettingsService Settings { get; set; } = default!;
 
+    [Inject]
+    private Services.GitWorkspaceService Git { get; set; } = default!;
+
     [Parameter]
     public string? SessionId { get; set; }
 
@@ -211,6 +214,10 @@ public partial class MergeReviewDialog : IAsyncDisposable
                 {
                     Conversations.RecordAcceptedEdits(acceptedRecordIds);
                     acceptedRecordIds.Clear();
+
+                    // The terminal accept wrote the working tree — ask the Git page (only) to refresh so
+                    // it reflects the new change even when it isn't the active tab.
+                    Git.RequestRefresh();
                 }
             }
 

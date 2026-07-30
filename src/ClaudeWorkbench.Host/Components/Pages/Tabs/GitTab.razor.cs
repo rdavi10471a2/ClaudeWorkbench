@@ -77,7 +77,23 @@ public partial class GitTab : IAsyncDisposable
 
     private const string MainBranch = "main";
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        // Refresh when a merge-review terminal accept writes the working tree — even though this tab is
+        // usually in the background (Radzen keeps every tab rendered). Targeted signal: nothing but the
+        // Git page reacts to it.
+        Git.RefreshRequested += OnGitRefreshRequested;
+        await ReloadAsync();
+    }
+
+    private void OnGitRefreshRequested() => _ = InvokeAsync(async () =>
+    {
+        // Skip if a reload is already in flight; ReloadAsync marshals its own StateHasChanged.
+        if (!busy)
+        {
+            await ReloadAsync();
+        }
+    });
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -402,6 +418,7 @@ public partial class GitTab : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Git.RefreshRequested -= OnGitRefreshRequested;
         if (resizeModule is not null)
         {
             try
