@@ -7,10 +7,11 @@
     Produces this layout, which the Launcher recognises as a workbench root:
 
         <Destination>\
-            host\      ClaudeWorkbench.Host.exe (the Blazor app) + its config\
-            sidecar\   dist\index.js + production node_modules
-            launcher\  ClaudeWorkbench.Launcher.exe
-            runtime\   created on first run: one folder per workspace
+            host\               ClaudeWorkbench.Host.exe (the Blazor app) + its config\
+            sidecar\            dist\index.js + production node_modules
+            launcher\wpf\       ClaudeWorkbench.Launcher.Wpf.exe (primary)
+            launcher\winforms\  ClaudeWorkbench.Launcher.exe (fallback)
+            runtime\            created on first run: one folder per workspace
 
     The Launcher finds the host next to itself (<root>\host), the sidecar at <root>\sidecar,
     and provisions every instance into <root>\runtime\<workspace>. So this install works
@@ -48,17 +49,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Break the recursion: this script runs `dotnet publish -c Release`, which builds the same
-# projects whose Release build triggers this script (see Directory.Build.targets). The child
-# builds inherit this variable and skip the post-build publish target.
-$env:CWB_SKIP_PUBLISH_LIVE = '1'
-
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $hostProject = Join-Path $repoRoot 'src\ClaudeWorkbench.Host\ClaudeWorkbench.Host.csproj'
-$launcherProject = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher\ClaudeWorkbench.Launcher.csproj'
+# Both launcher UIs are published side by side for now: the WPF rewrite (primary) and the
+# original WinForms one (fallback). They share launcher.json in the install root, so either can
+# drive the same workspaces; only the exe you launch differs.
+$launcherProjectWpf = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher.Wpf\ClaudeWorkbench.Launcher.Wpf.csproj'
+$launcherProjectWinForms = Join-Path $repoRoot 'src\ClaudeWorkbench.Launcher\ClaudeWorkbench.Launcher.csproj'
 $sidecarSource = Join-Path $repoRoot 'sidecar'
 
-foreach ($required in @($hostProject, $launcherProject, $sidecarSource)) {
+foreach ($required in @($hostProject, $launcherProjectWpf, $launcherProjectWinForms, $sidecarSource)) {
     if (-not (Test-Path $required)) {
         throw "Not a ClaudeWorkbench checkout - missing $required"
     }
@@ -67,10 +67,15 @@ foreach ($required in @($hostProject, $launcherProject, $sidecarSource)) {
 $hostOut = Join-Path $Destination 'host'
 $sidecarOut = Join-Path $Destination 'sidecar'
 $launcherOut = Join-Path $Destination 'launcher'
+# Each launcher UI in its own subfolder so their outputs never intermix. Both walk up to the
+# install root (via the host\ marker) and share launcher.json + runtime there, so either drives
+# the same workspaces; only the exe you launch differs.
+$launcherOutWpf = Join-Path $launcherOut 'wpf'
+$launcherOutWinForms = Join-Path $launcherOut 'winforms'
 
 # A running install holds its exes open and publish fails partway through with an unhelpful
 # MSBuild error. Say so up front instead.
-$inUse = Get-Process -Name 'ClaudeWorkbench.Launcher', 'ClaudeWorkbench.Host' -ErrorAction SilentlyContinue |
+$inUse = Get-Process -Name 'ClaudeWorkbench.Launcher.Wpf', 'ClaudeWorkbench.Launcher', 'ClaudeWorkbench.Host' -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and $_.Path.StartsWith($Destination, [StringComparison]::OrdinalIgnoreCase) }
 if ($inUse) {
     $names = ($inUse | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
@@ -105,11 +110,16 @@ if (Test-Path $strayConfig) {
     Write-Host '  removed build-machine config\appsettings.json (instances get their own)'
 }
 
-# --- 2. Launcher ----------------------------------------------------------------------
+# --- 2. Launcher (each UI in its own subfolder under launcher\) ------------------------
 Write-Host ''
-Write-Host '[2/4] Publishing launcher...' -ForegroundColor Cyan
-dotnet publish $launcherProject -c $Configuration -o $launcherOut --nologo
-if ($LASTEXITCODE -ne 0) { throw "Launcher publish failed ($LASTEXITCODE)." }
+Write-Host '[2/4] Publishing launcher (WPF + WinForms)...' -ForegroundColor Cyan
+# Clear the launcher tree first (build output, not runtime) so stale files and the old flat
+# layout do not linger next to the new per-UI subfolders.
+if (Test-Path $launcherOut) { Remove-Item $launcherOut -Recurse -Force }
+dotnet publish $launcherProjectWpf -c $Configuration -o $launcherOutWpf --nologo
+if ($LASTEXITCODE -ne 0) { throw "WPF launcher publish failed ($LASTEXITCODE)." }
+dotnet publish $launcherProjectWinForms -c $Configuration -o $launcherOutWinForms --nologo
+if ($LASTEXITCODE -ne 0) { throw "WinForms launcher publish failed ($LASTEXITCODE)." }
 
 # --- 3. Sidecar -----------------------------------------------------------------------
 Write-Host ''
@@ -193,12 +203,14 @@ foreach ($sampleName in @('CalculatorSample', 'MixedTfmSample', 'BlazorSample'))
 
 # --- 4. Shortcuts ---------------------------------------------------------------------
 Write-Host ''
-Write-Host '[4/4] Creating shortcut...' -ForegroundColor Cyan
-$launcherExe = Join-Path $launcherOut 'ClaudeWorkbench.Launcher.exe'
-if (-not (Test-Path $launcherExe)) { throw "Launcher exe not found at $launcherExe" }
+Write-Host '[4/4] Creating shortcuts...' -ForegroundColor Cyan
+$wpfExe = Join-Path $launcherOutWpf 'ClaudeWorkbench.Launcher.Wpf.exe'
+$winFormsExe = Join-Path $launcherOutWinForms 'ClaudeWorkbench.Launcher.exe'
+if (-not (Test-Path $wpfExe)) { throw "WPF launcher exe not found at $wpfExe" }
+if (-not (Test-Path $winFormsExe)) { throw "WinForms launcher exe not found at $winFormsExe" }
 
 function New-LauncherShortcut {
-    param([string]$LinkPath, [string]$TargetExe, [string]$WorkingDir)
+    param([string]$LinkPath, [string]$TargetExe, [string]$WorkingDir, [string]$Description)
 
     $shell = New-Object -ComObject WScript.Shell
     try {
@@ -206,7 +218,7 @@ function New-LauncherShortcut {
         $shortcut.TargetPath = $TargetExe
         $shortcut.WorkingDirectory = $WorkingDir
         $shortcut.IconLocation = $TargetExe
-        $shortcut.Description = 'ClaudeWorkbench Launcher'
+        $shortcut.Description = $Description
         $shortcut.Save()
         Write-Host "  $LinkPath"
     }
@@ -215,17 +227,26 @@ function New-LauncherShortcut {
     }
 }
 
-New-LauncherShortcut -LinkPath (Join-Path $Destination 'ClaudeWorkbench Launcher.lnk') -TargetExe $launcherExe -WorkingDir $launcherOut
-if (-not $NoShortcut) {
-    $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'ClaudeWorkbench Launcher.lnk'
-    New-LauncherShortcut -LinkPath $desktopLink -TargetExe $launcherExe -WorkingDir $launcherOut
+# Both UIs get a shortcut. The WPF one is the primary; the WinForms one is the fallback, named
+# so the two are told apart at a glance while both are shipped.
+$shortcuts = @(
+    @{ Name = 'ClaudeWorkbench Launcher (WPF).lnk';      Exe = $wpfExe;      Desc = 'ClaudeWorkbench Launcher (WPF)' },
+    @{ Name = 'ClaudeWorkbench Launcher (WinForms).lnk'; Exe = $winFormsExe; Desc = 'ClaudeWorkbench Launcher (WinForms)' }
+)
+foreach ($s in $shortcuts) {
+    $workDir = Split-Path -Parent $s.Exe
+    New-LauncherShortcut -LinkPath (Join-Path $Destination $s.Name) -TargetExe $s.Exe -WorkingDir $workDir -Description $s.Desc
+    if (-not $NoShortcut) {
+        $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) $s.Name
+        New-LauncherShortcut -LinkPath $desktopLink -TargetExe $s.Exe -WorkingDir $workDir -Description $s.Desc
+    }
 }
 
 Write-Host ''
 Write-Host "Done. Install root: $Destination" -ForegroundColor Green
 Write-Host "  host      $hostOut"
 Write-Host "  sidecar   $sidecarOut"
-Write-Host "  launcher  $launcherOut"
+Write-Host "  launcher  $launcherOut  (wpf\ + winforms\)"
 Write-Host "  runtime   $(Join-Path $Destination 'runtime')  (per-workspace state, created on first Start)"
 Write-Host ''
 Write-Host 'This publish is framework-dependent. A target machine also needs:' -ForegroundColor Yellow
