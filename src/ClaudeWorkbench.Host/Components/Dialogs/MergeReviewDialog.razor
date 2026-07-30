@@ -114,14 +114,17 @@
                                 @* Monaco diff editor — F7/Shift+F7 change nav, overview ruler, word-level diff. *@
                                 <MonacoDiffView OldText="@(selectedModel.CurrentText)"
                                                 NewText="@(selectedModel.ProposedText)"
-                                                Path="@(selectedModel.RelativePath)" />
+                                                Path="@(selectedModel.RelativePath)"
+                                                OldLabel="Current Source"
+                                                NewLabel="Proposed Candidate"
+                                                NewOnLeft="@MergeNewOnLeft" />
                             </RadzenTabsItem>
                             <RadzenTabsItem Text="Classic Diff" Disabled="@MonacoSelected">
                                 <DiffView OldText="@(selectedModel.CurrentText)"
                                           NewText="@(selectedModel.ProposedText)"
                                           OldLabel="Current Source"
                                           NewLabel="Proposed Candidate"
-                                          NewOnLeft="true" />
+                                          NewOnLeft="@MergeNewOnLeft" />
                             </RadzenTabsItem>
                         </Tabs>
                     </RadzenTabs>

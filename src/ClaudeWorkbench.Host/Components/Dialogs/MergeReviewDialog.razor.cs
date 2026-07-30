@@ -128,6 +128,9 @@ public partial class MergeReviewDialog : IAsyncDisposable
     private bool MonacoSelected => !string.Equals(
         Settings.Current.DiffViewer, DiffViewerOptions.Classic, StringComparison.Ordinal);
 
+    // Merge Review orientation preference: proposed (new) on the left by default. Both viewers honor it.
+    private bool MergeNewOnLeft => Settings.Current.MergeReviewNewOnLeft;
+
     // RadzenTabs active tab: 0 = Monaco (first), 1 = Classic. Follows the preference so the chosen
     // viewer opens active and the disabled one can't be the initial selection.
     private int diffTabIndex;

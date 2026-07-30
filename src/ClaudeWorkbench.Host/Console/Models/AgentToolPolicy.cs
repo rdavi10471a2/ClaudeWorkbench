@@ -29,6 +29,12 @@ public sealed class AgentToolPolicy
     // disabled — kept, not removed — so flipping this switches which viewer is live.
     public string DiffViewer { get; set; } = DiffViewerOptions.Monaco;
 
+    // Merge Review orientation: when true (default), the PROPOSED (new) file is on the LEFT and the
+    // current (old) on the RIGHT — matching the classic reviewer, which is the order most people expect
+    // when accepting a change. The Git page ignores this and always uses old-left/new-right (the
+    // conventional git diff order). Applies to both the Monaco and classic viewers in Merge Review.
+    public bool MergeReviewNewOnLeft { get; set; } = true;
+
     public AgentToolPolicy Clone()
     {
         return new AgentToolPolicy
@@ -39,6 +45,7 @@ public sealed class AgentToolPolicy
             Model = Model,
             Effort = Effort,
             DiffViewer = DiffViewer,
+            MergeReviewNewOnLeft = MergeReviewNewOnLeft,
         };
     }
 }
