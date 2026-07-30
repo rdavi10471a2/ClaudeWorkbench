@@ -44,7 +44,10 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
     private IJSObjectReference? attachModule;
     private DotNetObjectReference<AssistantTab>? selfRef;
     private string draft = string.Empty;
-    private bool autoApprove;
+    // On by default (operator preference): the agent's tool calls auto-approve without a per-call prompt.
+    // The merge review still gates every write to watched source — this only skips the tool-permission gate.
+    // Per-thread; New Thread resets it back to this default (on).
+    private bool autoApprove = true;
     private bool usageOpen;
     private bool wasWorking;
     // True when the TRANSCRIPT changed and the per-render JS (scroll/highlight/mermaid) must run.
@@ -337,8 +340,8 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         // and in Conversations at once; its first turn adopts this row.
         ConversationStore.StartNamedConversation(names.NewName);
 
-        // Auto-approve is per-thread; a fresh thread starts back at the gate.
-        autoApprove = false;
+        // Auto-approve is per-thread; a fresh thread returns to the default (on).
+        autoApprove = true;
         await Session.NewThreadAsync();
     }
 

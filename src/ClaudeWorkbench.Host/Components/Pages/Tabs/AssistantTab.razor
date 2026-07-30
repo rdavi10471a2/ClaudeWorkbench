@@ -11,7 +11,7 @@
                 </span>
                 <div class="composer-convo-actions">
                     <RadzenButton Icon="add_comment" Text="New" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                  Title="Start a fresh conversation — a popup lets you name it (resets auto-approve)."
+                                  Title="Start a fresh conversation — a popup lets you name it (auto-approve resets to its default: on)."
                                   Click="@NewThreadAsync" data-testid="new-thread" Disabled="@(Session.Status.Working || newThreadInProgress)" />
                     <RadzenButton Icon="expand_more" Text="History" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                                   Title="Browse, resume, rename, or delete saved conversations."
@@ -25,7 +25,7 @@
                     <RadzenIcon Icon="monitoring" />
                 </button>
                 <label class="composer-check"
-                       title="Auto-approve claude-workbench edits for THIS thread only. The merge review still gates every write to watched source; New Thread turns it back off.">
+                       title="Auto-approve claude-workbench edits for THIS thread. On by default; the merge review still gates every write to watched source. Uncheck to approve each tool call; New Thread resets it back to on.">
                     <input type="checkbox" data-testid="auto-approve" @bind="autoApprove" />
                     <span>Auto-approve</span>
                 </label>
