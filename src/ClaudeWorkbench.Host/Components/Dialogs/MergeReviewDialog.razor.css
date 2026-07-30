@@ -196,9 +196,12 @@
     overflow: hidden;
 }
 
+/* Column, not a fixed 3-row grid. The old grid pinned the diff to row 2 — which only worked while a
+   banner occupied row 1; removing the banner shoved the diff into the auto row and it stopped filling.
+   Flex column + flex:1 on the diff shell fills correctly no matter how many blocks precede it. */
 .staged-review-detail {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .staged-review-queue-header,
