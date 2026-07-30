@@ -267,6 +267,39 @@
     text-align: center;
 }
 
+/* Compact header strip (right edge, under the dialog title) — filename + "File X of N". Replaces the old
+   Record/Status/Session/Pending banner. */
+.staged-review-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 2px 4px 10px;
+    border-bottom: 1px solid #e3e8ee;
+    margin-bottom: 8px;
+}
+
+.staged-review-file {
+    font-weight: 600;
+    color: #1f2933;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60ch;
+}
+
+.staged-review-progress {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #0969da;
+    background: #ddf4ff;
+    border-radius: 999px;
+    padding: 2px 10px;
+    white-space: nowrap;
+}
+
 .staged-review-diff-shell {
     background: #ffffff;
     border-top: 1px solid #d7e1ea;

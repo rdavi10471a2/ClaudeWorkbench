@@ -1,6 +1,22 @@
 @using ClaudeWorkbench.Host.Console.Models
 
 <div class="staged-review-dialog">
+    @* Compact progress in the header's right edge — replaces the old Record/Status/Session/Pending banner.
+       Reads as "File X of N" for a multi-file review (clear that more remain) and just the filename for a
+       single file. *@
+    @if (selectedModel is not null && !selectedModel.IsSessionComplete)
+    {
+        <div class="staged-review-topbar">
+            <span class="staged-review-file" title="@selectedModel.RelativePath">@selectedModel.RelativePath</span>
+            @if (ReviewTotal > 1)
+            {
+                <span class="staged-review-progress" title="This review covers @ReviewTotal staged files">
+                    File @ReviewPosition of @ReviewTotal
+                </span>
+            }
+        </div>
+    }
+
     @if (building)
     {
         <div class="staged-review-busy-overlay" data-testid="review-busy" role="status" aria-live="polite" aria-busy="true">
@@ -86,24 +102,6 @@
             }
             else
             {
-                <div class="staged-review-meta">
-                    <div>
-                        <span class="eyebrow">Record</span>
-                        <strong>@selectedModel.RelativePath</strong>
-                    </div>
-                    <div>
-                        <span class="eyebrow">Status</span>
-                        <strong>@selectedModel.DecisionStatus</strong>
-                    </div>
-                    <div>
-                        <span class="eyebrow">Session</span>
-                        <strong>@(string.IsNullOrWhiteSpace(selectedModel.SessionId) ? "single-file" : selectedModel.SessionId)</strong>
-                    </div>
-                    <div>
-                        <span class="eyebrow">Pending queue</span>
-                        <strong>@pendingItems.Count item(s)</strong>
-                    </div>
-                </div>
 
                 <section class="staged-review-diff-shell" aria-label="Side by side staged review">
                     @* One viewer, chosen by the operator's Diff viewer setting (Monaco default; Classic =
