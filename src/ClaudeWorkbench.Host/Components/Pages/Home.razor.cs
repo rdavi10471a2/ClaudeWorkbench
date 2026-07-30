@@ -144,8 +144,9 @@ public partial class Home : IDisposable
                 },
                 new DialogOptions
                 {
-                    Width = "88vw",
-                    Height = "88vh",
+                    Width = "92vw",
+                    Height = "95vh",
+                    CssClass = "merge-review-dialog",
                     CloseDialogOnEsc = false,
                     CloseDialogOnOverlayClick = false,
                     Resizable = true,

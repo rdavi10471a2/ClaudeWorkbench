@@ -1,0 +1,134 @@
+@inject IJSRuntime JS
+@inject Microsoft.AspNetCore.Components.NavigationManager Nav
+@implements IAsyncDisposable
+
+@* The default Merge Review diff viewer (the classic DiffPlex DiffView is kept as a disabled tab, switchable
+   via the Diff viewer setting). Reuses the same vendored Monaco + interop as the read-only source viewer
+   (SourceCodeViewer). Gives F7/Shift+F7 change nav, the overview ruler, word-level diff, and syntax
+   highlighting natively. Read-only — display only. *@
+@* A toolbar (prev/next change) above the editor, then the editor filling the rest. The whole thing fills
+   the (flex-filled) Radzen tab panel; min-height is a floor so it can't collapse to a sliver. *@
+<div class="monaco-diff-view" style="display:flex;flex-direction:column;width:100%;height:100%;min-height:340px;">
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #e3e8ee;flex:0 0 auto;">
+        <span style="color:#60656e;font-size:12px;margin-right:auto;">F7 / Shift+F7 also navigate · word-level diff</span>
+        <RadzenButton Icon="keyboard_arrow_up" Text="Prev change" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                      Click="@PrevAsync" title="Previous change (F7)" />
+        <RadzenButton Icon="keyboard_arrow_down" Text="Next change" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                      Click="@NextAsync" title="Next change (Shift+F7)" />
+    </div>
+    <div @ref="container" style="flex:1 1 auto;min-height:0;width:100%;"></div>
+</div>
+
+@code {
+    [Parameter] public string? OldText { get; set; }
+
+    [Parameter] public string? NewText { get; set; }
+
+    // Used only to pick the Monaco language for syntax highlighting.
+    [Parameter] public string? Path { get; set; }
+
+    private ElementReference container;
+    private IJSObjectReference? module;
+    private bool ready;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                // ?v bump matches SourceCodeViewer — the launcher window caches JS hard, so a republish
+                // that changed sourceMonaco.js is only picked up when the query bumps.
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sourceMonaco.js?v=7");
+                ready = true;
+                await RenderAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception)
+        {
+            // A display-only diff must never crash the host.
+        }
+    }
+
+    // The selected file changes as the operator clicks the queue; re-feed the models.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ready)
+        {
+            await RenderAsync();
+        }
+    }
+
+    private async Task RenderAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.InvokeVoidAsync(
+                "createDiff", container, Nav.BaseUri, OldText ?? string.Empty, NewText ?? string.Empty, Language());
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private async Task NextAsync()
+    {
+        if (module is null) { return; }
+        try { await module.InvokeVoidAsync("diffNext", container); }
+        catch (JSDisconnectedException) { }
+        catch (Exception) { }
+    }
+
+    private async Task PrevAsync()
+    {
+        if (module is null) { return; }
+        try { await module.InvokeVoidAsync("diffPrevious", container); }
+        catch (JSDisconnectedException) { }
+        catch (Exception) { }
+    }
+
+    private string Language()
+    {
+        return System.IO.Path.GetExtension(Path ?? string.Empty).ToLowerInvariant() switch
+        {
+            ".cs" => "csharp",
+            ".razor" or ".cshtml" or ".html" => "html",
+            ".json" => "json",
+            ".xml" or ".xaml" or ".csproj" or ".slnx" => "xml",
+            ".css" => "css",
+            ".js" => "javascript",
+            ".ts" => "typescript",
+            ".md" or ".markdown" => "markdown",
+            _ => "plaintext"
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("disposeDiff", container);
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (Exception)
+            {
+            }
+        }
+    }
+}

@@ -219,3 +219,110 @@ export function dispose(container) {
         container.__monacoDecorations = [];
     }
 }
+
+// --- Monaco diff editor (spike: tabbed alongside the DiffPlex view in Merge Review) -------------------
+// Reuses the SAME vendored Monaco + loader as the source viewer, so F7/Shift+F7 change navigation, the
+// overview ruler (the whole-file change summary strip), word-level intra-line diff, and syntax
+// highlighting all come for free from createDiffEditor. One diff editor per container, models swapped
+// per file (and disposed) exactly like openFile swaps the viewer's model. original = current source
+// (left/"before"), modified = proposed candidate (right/"after").
+export async function createDiff(container, baseUrl, original, modified, language) {
+    if (!(container instanceof Element)) {
+        return;
+    }
+
+    try {
+        await loadMonaco(baseUrl);
+    } catch (error) {
+        container.textContent = (error && error.message) ? error.message : String(error);
+        container.style.font = '13px Consolas, monospace';
+        container.style.padding = '12px';
+        container.style.whiteSpace = 'pre-wrap';
+        return;
+    }
+
+    let editor = container.__monacoDiff;
+    if (!editor) {
+        editor = monaco.editor.createDiffEditor(container, {
+            readOnly: true,
+            automaticLayout: true,
+            renderSideBySide: true,
+            theme: 'vs',
+            minimap: { enabled: false },
+            fontFamily: 'Cascadia Code, Consolas, monospace',
+            fontSize: 13,
+            scrollBeyondLastLine: false,
+            overviewRulerBorder: false,
+            scrollbar: { verticalScrollbarSize: 12, horizontalScrollbarSize: 12, useShadows: false }
+        });
+        container.__monacoDiff = editor;
+    }
+
+    // Dispose the prior pair before swapping so file-to-file switches don't leak models.
+    const prior = editor.getModel();
+    editor.setModel({
+        original: monaco.editor.createModel(original ?? '', language || 'plaintext'),
+        modified: monaco.editor.createModel(modified ?? '', language || 'plaintext')
+    });
+    if (prior) {
+        if (prior.original) { prior.original.dispose(); }
+        if (prior.modified) { prior.modified.dispose(); }
+    }
+}
+
+export function disposeDiff(container) {
+    if (!(container instanceof Element) || !container.__monacoDiff) {
+        return;
+    }
+
+    if (container.__monacoDiffNav) {
+        try { container.__monacoDiffNav.dispose(); } catch (e) { /* best-effort */ }
+        container.__monacoDiffNav = null;
+    }
+
+    const editor = container.__monacoDiff;
+    const model = editor.getModel();
+    editor.dispose();
+    if (model) {
+        if (model.original) { model.original.dispose(); }
+        if (model.modified) { model.modified.dispose(); }
+    }
+
+    container.__monacoDiff = null;
+}
+
+// Jump to the next/previous change block. Newer Monaco exposes editor.goToDiff directly; older builds use
+// a diff navigator — support both so the Prev/Next buttons (and F7/Shift+F7) work regardless of version.
+function navDiff(container, direction) {
+    const editor = container && container.__monacoDiff;
+    if (!editor) {
+        return;
+    }
+
+    if (typeof editor.goToDiff === 'function') {
+        editor.goToDiff(direction === 'previous' ? 'previous' : 'next');
+        return;
+    }
+
+    let nav = container.__monacoDiffNav;
+    if (!nav && monaco.editor.createDiffNavigator) {
+        nav = monaco.editor.createDiffNavigator(editor, { followsCaret: true, ignoreCharChanges: true });
+        container.__monacoDiffNav = nav;
+    }
+
+    if (nav) {
+        if (direction === 'previous') { nav.previous(); } else { nav.next(); }
+    }
+}
+
+export function diffNext(container) {
+    if (container instanceof Element) {
+        navDiff(container, 'next');
+    }
+}
+
+export function diffPrevious(container) {
+    if (container instanceof Element) {
+        navDiff(container, 'previous');
+    }
+}

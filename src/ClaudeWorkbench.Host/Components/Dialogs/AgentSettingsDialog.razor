@@ -57,6 +57,24 @@
                 </div>
 
                 <div class="settings-section-title">
+                    Merge review
+                    <span>applies the next time a review dialog opens</span>
+                </div>
+
+                <div class="settings-row settings-select-row">
+                    <div class="settings-text">
+                        <strong>Diff viewer</strong>
+                        <select class="settings-select" @bind="draft.DiffViewer">
+                            @foreach (DiffViewerOption option in DiffViewerOptions.All)
+                            {
+                                <option value="@option.Value">@option.Label</option>
+                            }
+                        </select>
+                        <small>The other viewer stays available (its tab is kept but disabled) so you can switch back.</small>
+                    </div>
+                </div>
+
+                <div class="settings-section-title">
                     Optional tools
                     <span>off by default &mdash; each one widens what the agent can do outside the governed gate</span>
                 </div>
