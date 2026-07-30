@@ -1,0 +1,64 @@
+@using Microsoft.AspNetCore.Components.Web
+@inject DialogService DialogService
+@inject Services.WorkspaceConfigService Config
+@inject Services.GitWorkspaceService Git
+
+@* Per-solution config: the solution's .gitignore plus .claudeworkbench.json. Operator-edited, written
+   straight to disk (no agent/merge-review workflow), and meant to be committed. *@
+<div class="wsconfig-dialog" data-testid="workspace-config-dialog" @onkeydown="OnKeyDown">
+    <p class="wsconfig-intro">
+        These settings live beside the solution (<code>.gitignore</code> and
+        <code>@Services.WorkspaceConfigService.FileName</code>) and are committed with it — each watched
+        solution has its own.
+    </p>
+
+    <section class="wsconfig-section">
+        <label class="wsconfig-label" for="wsconfig-gitignore">.gitignore</label>
+        <p class="wsconfig-hint">What git excludes for this solution. Also the template written when a repo is first initialized.</p>
+        <textarea id="wsconfig-gitignore"
+                  class="wsconfig-textarea code"
+                  spellcheck="false"
+                  rows="12"
+                  @bind="gitignoreText"
+                  @bind:event="oninput"></textarea>
+    </section>
+
+    <section class="wsconfig-section">
+        <label class="wsconfig-label" for="wsconfig-excludes">Source Files — extra excluded folders</label>
+        <p class="wsconfig-hint">
+            Folder names hidden from the Source “Files” browser when git isn’t on (one per line). Merged with the
+            built-ins (<code>bin</code>, <code>obj</code>, <code>.git</code>, <code>node_modules</code>, …).
+        </p>
+        <textarea id="wsconfig-excludes"
+                  class="wsconfig-textarea"
+                  spellcheck="false"
+                  rows="4"
+                  placeholder="e.g. artifacts&#10;vendor"
+                  @bind="excludeDirectoriesText"
+                  @bind:event="oninput"></textarea>
+    </section>
+
+    <section class="wsconfig-section">
+        <label class="wsconfig-label" for="wsconfig-branch">Default branch (on init)</label>
+        <p class="wsconfig-hint">Branch name used when initializing this solution’s repo. Blank = the git default.</p>
+        <input id="wsconfig-branch"
+               class="wsconfig-input"
+               placeholder="main"
+               @bind="defaultBranch"
+               @bind:event="oninput" />
+    </section>
+
+    @if (statusMessage is not null)
+    {
+        <div class="wsconfig-status @(statusIsError ? "error" : "ok")">
+            <RadzenIcon Icon="@(statusIsError ? "error_outline" : "check_circle")" /> @statusMessage
+        </div>
+    }
+
+    <div class="wsconfig-actions">
+        <RadzenButton Text="@(busy ? "Saving…" : "Save")" Icon="save" ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small" Disabled="@busy" Click="@SaveAsync" data-testid="wsconfig-save" />
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                      Disabled="@busy" Click="@(() => DialogService.Close(null))" />
+    </div>
+</div>

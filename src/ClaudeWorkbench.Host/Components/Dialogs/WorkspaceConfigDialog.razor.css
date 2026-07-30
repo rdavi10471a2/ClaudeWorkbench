@@ -1,0 +1,90 @@
+.wsconfig-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.wsconfig-intro {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.wsconfig-intro code,
+.wsconfig-hint code {
+    font-family: var(--rz-font-family-monospace, monospace);
+    font-size: 0.8em;
+    background: var(--rz-base-100, #f6f8fa);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.wsconfig-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.wsconfig-label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--rz-text-color, #1f2933);
+}
+
+.wsconfig-hint {
+    margin: 0 0 2px;
+    font-size: 0.78rem;
+    color: var(--rz-text-secondary-color, #52606d);
+}
+
+.wsconfig-textarea,
+.wsconfig-input {
+    width: 100%;
+    padding: 7px 9px;
+    border-radius: 5px;
+    border: 1px solid var(--rz-border-color, #ccc);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #333);
+    font: inherit;
+    resize: vertical;
+}
+
+.wsconfig-textarea.code {
+    font-family: var(--rz-font-family-monospace, Consolas, "Courier New", monospace);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+}
+
+.wsconfig-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.wsconfig-status.ok {
+    border-color: var(--rz-success, #1a7f37);
+    background: var(--rz-success-lighter, rgba(26, 127, 55, 0.08));
+    color: var(--rz-text-color, #1f2933);
+}
+
+.wsconfig-status.error {
+    border-color: var(--rz-danger, #d1242f);
+    background: var(--rz-danger-lighter, rgba(209, 36, 47, 0.08));
+    color: var(--rz-text-color, #1f2933);
+}
+
+.wsconfig-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
+}
