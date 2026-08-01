@@ -8,4 +8,9 @@
     <RootNamespace>CalculatorSample</RootNamespace>
   </PropertyGroup>
 
+  <!-- The test project lives in a subfolder; keep its sources out of this SDK project's default recursive glob. -->
+  <ItemGroup>
+    <Compile Remove="CalculatorSample.Tests\**\*.cs" />
+  </ItemGroup>
+
 </Project>
