@@ -91,6 +91,10 @@ public partial class GitTab : IAsyncDisposable
     private string commitMessage = string.Empty;
     // The commit body: pre-filled with the changed file list, editable, appended under the message.
     private string commitBody = string.Empty;
+    // "Publish to GitHub" inline form: repo name (prefilled to the solution name) + private/public.
+    private bool publishOpen;
+    private string publishName = string.Empty;
+    private bool publishPrivate = true;
 
     private const string MainBranch = "main";
 
@@ -365,6 +369,37 @@ public partial class GitTab : IAsyncDisposable
     }
 
     private Task InitAsync() => RunAsync(() => Git.InitAsync(), "Initialized git repository.");
+
+    // Open the "Publish to GitHub" popup, prefilling the name with the solution name and defaulting to
+    // a private repo.
+    private void OpenPublish()
+    {
+        publishName = Git.DefaultRepoName ?? string.Empty;
+        publishPrivate = true;
+        publishOpen = true;
+    }
+
+    private async Task PublishAsync()
+    {
+        string name = publishName.Trim();
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        string visibility = publishPrivate ? "private" : "public";
+        // Outward + creates an external resource — confirm before it leaves the machine.
+        if (!await ConfirmAsync($"Create a {visibility} GitHub repository \"{name}\" and push this code to it?"))
+        {
+            return;
+        }
+
+        bool ok = await RunAsync(() => Git.PublishToGitHubAsync(name, publishPrivate), $"Published to GitHub ({visibility}) and pushed.");
+        if (ok)
+        {
+            publishOpen = false;
+        }
+    }
 
     private async Task<bool> ConfirmAsync(string message) =>
         await JS.InvokeAsync<bool>("confirm", message);

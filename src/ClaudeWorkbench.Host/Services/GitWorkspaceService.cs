@@ -36,6 +36,60 @@ public sealed class GitWorkspaceService
         }
     }
 
+    // The default name to prefill the "Publish to GitHub" popup with: the watched solution's file
+    // name (no extension), e.g. CalculatorSample.slnx -> "CalculatorSample".
+    public string? DefaultRepoName
+    {
+        get
+        {
+            string? solution = workspace.WatchedSolutionPath;
+            return string.IsNullOrEmpty(solution) ? null : Path.GetFileNameWithoutExtension(solution);
+        }
+    }
+
+    // Operator "Publish to GitHub": create a NEW GitHub repo from the watched repo, wire origin, and
+    // push. Outward + creates an external resource, so the caller confirms first. Guards produce clear
+    // messages instead of raw gh errors: needs a repo, NO existing remote, gh authenticated, and at
+    // least one commit to push. Never MCP — operator-only, like init/commit/push.
+    public async Task<GitResult> PublishToGitHubAsync(string name, bool isPrivate, CancellationToken cancellationToken = default)
+    {
+        string? directory = await ResolveDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        if (directory is null)
+        {
+            return NoWorkspace;
+        }
+
+        string repoName = (name ?? string.Empty).Trim();
+        if (repoName.Length == 0)
+        {
+            return new GitResult(-1, string.Empty, "A repository name is required.");
+        }
+
+        GitStatus status = await git.GetStatusAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (!status.IsRepository)
+        {
+            return new GitResult(-1, string.Empty, "Initialize the repository first, then publish.");
+        }
+
+        if (status.HasRemote)
+        {
+            return new GitResult(-1, string.Empty, "This repository already has a remote — use Push instead.");
+        }
+
+        bool? auth = await git.GetGitHubAuthAsync(cancellationToken).ConfigureAwait(false);
+        if (auth != true)
+        {
+            return new GitResult(-1, string.Empty, "GitHub CLI isn't authenticated. Sign in to GitHub (the launcher's GitHub sign-in), then try again.");
+        }
+
+        if (!await git.HasCommitsAsync(directory, cancellationToken).ConfigureAwait(false))
+        {
+            return new GitResult(-1, string.Empty, "Commit at least once before publishing — the push needs a commit.");
+        }
+
+        return await git.CreateGitHubRepoAsync(directory, repoName, isPrivate, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<GitStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
         string? directory = await ResolveDirectoryAsync(cancellationToken).ConfigureAwait(false);
