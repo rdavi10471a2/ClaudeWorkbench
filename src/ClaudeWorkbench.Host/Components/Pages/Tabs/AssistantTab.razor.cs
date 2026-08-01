@@ -251,15 +251,73 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
             builder.Append(draft).Append("\n\n");
         }
 
-        builder.Append("[Operator attached ").Append(attachments.Count)
-            .Append(attachments.Count == 1 ? " file" : " files")
-            .Append(" — read each with the Read tool:]\n");
-        foreach (PendingAttachment attachment in attachments)
+        // A folder attachment is an extracted archive: hand over the folder + a manifest so the agent
+        // explores it lazily (Glob/Grep/Read), rather than us attaching every file. Plain files are
+        // still listed for a direct Read.
+        List<PendingAttachment> files = attachments.Where(a => !Directory.Exists(a.Path)).ToList();
+        List<PendingAttachment> folders = attachments.Where(a => Directory.Exists(a.Path)).ToList();
+
+        if (files.Count > 0)
         {
-            builder.Append("- ").Append(attachment.Path).Append('\n');
+            builder.Append("[Operator attached ").Append(files.Count)
+                .Append(files.Count == 1 ? " file" : " files")
+                .Append(" — read each with the Read tool:]\n");
+            foreach (PendingAttachment file in files)
+            {
+                builder.Append("- ").Append(file.Path).Append('\n');
+            }
+        }
+
+        foreach (PendingAttachment folder in folders)
+        {
+            AppendFolderHandoff(builder, folder.Path);
         }
 
         return builder.ToString();
+    }
+
+    // Describe an extracted-archive folder for the agent: the readable root plus a capped manifest of
+    // its files. The agent uses Glob/Grep to explore and Read to open what it needs.
+    private static void AppendFolderHandoff(StringBuilder builder, string folderPath)
+    {
+        const int manifestCap = 200;
+        List<string> relative = new();
+        int total = 0;
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(folderPath, "*", SearchOption.AllDirectories))
+            {
+                total++;
+                if (relative.Count < manifestCap)
+                {
+                    relative.Add(Path.GetRelativePath(folderPath, file).Replace('\\', '/'));
+                }
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        if (builder.Length > 0 && builder[^1] != '\n')
+        {
+            builder.Append('\n');
+        }
+
+        builder.Append("[Operator attached an extracted archive folder: ").Append(folderPath)
+            .Append(" (").Append(total).Append(total == 1 ? " file" : " files")
+            .Append("). It is readable — explore it with Glob/Grep and Read the files you need. Paths below are relative to that folder:]\n");
+        foreach (string entry in relative)
+        {
+            builder.Append("- ").Append(entry).Append('\n');
+        }
+
+        if (total > relative.Count)
+        {
+            builder.Append("- … and ").Append(total - relative.Count).Append(" more (use Glob to list all).\n");
+        }
     }
 
     private async Task StopAsync()

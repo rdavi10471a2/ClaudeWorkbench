@@ -1,3 +1,4 @@
+using ClaudeWorkbench.Host.Console;
 using ClaudeWorkbench.Host.Services;
 
 namespace ClaudeWorkbench.Host.Conversations;
@@ -268,6 +269,21 @@ public sealed class ConversationService
         }
 
         return thread.SessionId;
+    }
+
+    // The last `counted` interactions of a thread as renderable transcript entries, read from our
+    // RUNTIME mirror (never ~/.claude), for repainting the chat pane on resume. Empty for a stub, an
+    // unknown thread, or one whose mirror hasn't been written yet. See ClaudeTranscriptReader.
+    public IReadOnlyList<TranscriptEntry> ReadTranscriptWindow(string conversationId, int counted = 50)
+    {
+        ConversationRecord? thread = Repository().Get(conversationId);
+        if (thread is null || string.IsNullOrWhiteSpace(thread.TranscriptFile))
+        {
+            return [];
+        }
+
+        string mirror = Path.Combine(workspace.SessionsDirectory, thread.TranscriptFile);
+        return ClaudeTranscriptReader.ReadWindow(mirror, counted);
     }
 
     // Hard delete on demand (also the "opt out of saving" discard when leaving an unnamed thread):

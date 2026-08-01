@@ -245,6 +245,13 @@
                                     <div class="message-body">@entry.Text</div>
                                 </div>
                             }
+                            else if (entry.Kind == TranscriptKind.Notice)
+                            {
+                                <div class="transcript-notice" data-testid="transcript-notice" role="separator">
+                                    <RadzenIcon Icon="history" />
+                                    <span>@entry.Text</span>
+                                </div>
+                            }
                             else
                             {
                                 <div class="message assistant">

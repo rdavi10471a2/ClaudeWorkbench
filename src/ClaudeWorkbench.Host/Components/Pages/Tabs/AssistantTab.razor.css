@@ -632,6 +632,29 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* "history restored" divider at the bottom of a rehydrated-on-resume block: a muted centered rule
+   that separates restored history above from live turns below. */
+.transcript-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 14px 0;
+    padding: 6px 12px;
+    color: #6c8199;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    border-top: 1px dashed #cdd9e5;
+    border-bottom: 1px dashed #cdd9e5;
+    background: #f4f7fa;
+}
+
+.transcript-notice .rz-icon {
+    font-size: 16px;
+    color: #8aa0b6;
+}
+
 /* time + per-message copy, grouped on the right of the message header */
 .message-header-right {
     display: flex;

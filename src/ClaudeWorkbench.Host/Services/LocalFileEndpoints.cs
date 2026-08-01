@@ -22,12 +22,17 @@ public static class LocalFileEndpoints
         ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".avif", ".svg",
     };
 
-    // Images plus the common text/data types an operator pastes or drops. Anything else is refused
-    // so the paste zone can't be used to smuggle arbitrary files into the workspace uploads folder.
+    // Images, common text/data types, and archives an operator hands the agent (e.g. a zipped
+    // codebase or a bundle of logs). Anything else is refused so the paste zone can't be used to
+    // smuggle arbitrary files into the workspace uploads folder.
     private static readonly HashSet<string> AllowedUploadExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".avif", ".svg",
         ".txt", ".log", ".md", ".markdown", ".csv", ".tsv", ".json", ".xml", ".yml", ".yaml",
+        // Archives the host can extract in-box (see ArchiveExtractor). .7z/.rar are intentionally
+        // excluded — extracting them needs a third-party library, so accepting them would be a
+        // dead-end (landed but not extractable, hence unusable by the agent).
+        ".zip", ".tar", ".gz", ".tgz",
     };
 
     public static void MapLocalFiles(this WebApplication app)
@@ -109,6 +114,29 @@ public static class LocalFileEndpoints
             try
             {
                 string saved = await uploads.SaveAsync(fileName, request.Body, cancellationToken);
+
+                // An archive is landed then EXTRACTED into a fresh uploads/ folder, and the FOLDER is
+                // handed to the agent (readable via additionalDirectories; it explores with Glob/Grep/
+                // Read). Claude can't Read a binary archive, so attaching the raw file would be useless.
+                if (ArchiveExtractor.IsSupportedArchive(saved))
+                {
+                    ArchiveExtractor.Result extraction = ArchiveExtractor.Extract(saved, uploads.UploadsDirectory!);
+                    TryDelete(saved); // the raw archive is redundant once extracted
+                    if (!extraction.Ok)
+                    {
+                        return Results.BadRequest(new { error = extraction.Error ?? "Could not extract the archive." });
+                    }
+
+                    return Results.Ok(new
+                    {
+                        name = Path.GetFileName(extraction.FolderPath!),
+                        path = extraction.FolderPath,
+                        isImage = false,
+                        kind = "folder",
+                        fileCount = extraction.FileCount,
+                    });
+                }
+
                 return Results.Ok(new
                 {
                     name = Path.GetFileName(saved),
@@ -121,6 +149,24 @@ public static class LocalFileEndpoints
                 return Results.BadRequest(new { error = exception.Message });
             }
         }).DisableAntiforgery();
+    }
+
+    // Best-effort delete of the redundant raw archive after a successful extraction.
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     // The client sends the pasted/dropped name in ?name= (file.name for a drop, a synthesized

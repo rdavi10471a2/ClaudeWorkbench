@@ -39,11 +39,15 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
 
     public AuthStatus Auth => authProbe.Current;
 
+    // History restored on resume (the last N interactions from the runtime mirror), shown ahead of
+    // this run's live events. Empty until a resume repaints it; cleared on New Thread.
+    private IReadOnlyList<TranscriptEntry> restoredPrefix = [];
+
     public IReadOnlyList<TranscriptEntry> Transcript
     {
         get
         {
-            return stream.SnapshotEvents()
+            IEnumerable<TranscriptEntry> live = stream.SnapshotEvents()
                 .Where(evt => evt.Type is "assistant_text" or "tool_call_started" or "user_prompt"
                     || (evt.Type == "turn_finished" && IsErrorStop(evt.StopReason) && !WasStopped(evt.TurnId)))
                 .Select(evt => evt.Type switch
@@ -52,9 +56,16 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
                     "user_prompt" => new TranscriptEntry(TranscriptKind.User, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
                     "turn_finished" => new TranscriptEntry(TranscriptKind.Error, TurnErrorCeremony(evt.StopReason), FormatTime(evt.Ts)),
                     _ => new TranscriptEntry(TranscriptKind.Assistant, evt.Text ?? string.Empty, FormatTime(evt.Ts)),
-                })
-                .ToArray();
+                });
+
+            return restoredPrefix.Count == 0 ? live.ToArray() : restoredPrefix.Concat(live).ToArray();
         }
+    }
+
+    public void RestoreHistory(IReadOnlyList<TranscriptEntry> entries)
+    {
+        restoredPrefix = entries ?? [];
+        Relay();
     }
 
     // A turn's result subtype other than "success" (e.g. error_during_execution, error_max_turns) means
@@ -139,6 +150,8 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
 
     public async Task NewThreadAsync()
     {
+        // A fresh conversation drops any resumed history so the new thread starts with an empty pane.
+        restoredPrefix = [];
         await client.NewThreadAsync();
     }
 

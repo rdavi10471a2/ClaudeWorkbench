@@ -212,6 +212,11 @@ public partial class ConversationsDialog : IAsyncDisposable
         busy = false;
         if (ok)
         {
+            // Repaint the chat pane from the runtime mirror so the operator sees the same history the
+            // agent's context was just restored to (resume alone leaves the pane blank). Last 50
+            // interactions, tool calls included, with a "restored" divider at the bottom.
+            Session.RestoreHistory(Conversations.ReadTranscriptWindow(thread.ConversationId));
+
             // Close the modal and drop the operator back on the Workbench to continue the thread.
             DialogService.Close();
             return;

@@ -30,4 +30,9 @@ public interface IOperatorConsole
 
     // Start a fresh conversation thread (drops resumed context, clears the transcript).
     Task NewThreadAsync();
+
+    // Repaint the chat pane on resume: prepend a restored history window (the last N interactions read
+    // from the runtime mirror) ahead of this run's live events. Replaces any previously restored
+    // history. Live turns after the resume append below it. Cleared by NewThreadAsync.
+    void RestoreHistory(IReadOnlyList<TranscriptEntry> entries);
 }
