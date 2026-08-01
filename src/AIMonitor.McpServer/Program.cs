@@ -24,6 +24,7 @@ internal static class Program
             settings.RuntimeRoot,
             settings));
         builder.Services.AddSingleton<AIMonitorMcpRuntimeState>();
+        builder.Services.AddSingleton<BackgroundTestRunner>();
         builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()
