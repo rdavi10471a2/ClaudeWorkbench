@@ -49,6 +49,7 @@ public static class AgentGuidance
         builder.AppendLine();
         builder.AppendLine(StagingGuide);
         builder.AppendLine("- DEPENDENCIES (NuGet): you add a package the same governed way you change any code — add a `<PackageReference Include=\"Name\" Version=\"X.Y.Z\" />` to the OWNING project's .csproj as a planned file (if the repo uses central package management, i.e. a Directory.Packages.props with `<PackageVersion>` entries, put the version there and use a version-less `<PackageReference>` in the .csproj). Then call `restore_solution` so the host runs `dotnet restore` and the package is fetched for the pre-merge build and the index. You never run `dotnet`, `dotnet add package`, or any shell yourself — edit the .csproj and call restore_solution.");
+        builder.AppendLine("- TESTS: to run the watched solution's tests, use the BACKGROUND test tools — never run `dotnet test` or any shell yourself. Call `start_tests` (optionally with a `filter`/`configuration`); it returns a runId immediately. Poll `get_test_results(runId)` until Done is true, then read the pass/fail counts and failing test names. If a run hangs or is no longer needed, call `cancel_tests(runId)`. Results are framework-agnostic (host runs dotnet test with a TRX logger). Tests run against the last-ACCEPTED on-disk source, so accept your change first if you want it covered.");
         builder.AppendLine("- Ground truth lives behind tools, not memory: get_self_check, get_monitor_status, list_watched_projects, get_source_map.");
         return builder.ToString();
     }

@@ -102,6 +102,10 @@ internal static class Program
         // add / remove + restore) out-of-process; not part of the agent surface.
         builder.Services.AddSingleton<AIMonitor.Workflow.NuGetPackageService>();
 
+        // Launchable background test runner behind the start_tests/get_test_results/cancel_tests MCP
+        // tools. Singleton so run state is shared across those calls (and the operator's Interrupt).
+        builder.Services.AddSingleton<AIMonitor.Workflow.BackgroundTestRunner>();
+
         // Operator-driven git backing for the watched solution (host-side; the agent
         // never runs git). GitService is a stateless CLI wrapper; GitWorkspaceService
         // binds it to the current watched workspace for the Git panel.
