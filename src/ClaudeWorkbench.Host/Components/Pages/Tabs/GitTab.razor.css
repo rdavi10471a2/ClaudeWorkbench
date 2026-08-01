@@ -175,6 +175,21 @@
     gap: 8px;
 }
 
+/* Private/public toggle in the Publish-to-GitHub inline form. */
+.git-inline-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--rz-text-color, #333);
+    cursor: pointer;
+    user-select: none;
+}
+
+.git-inline-check input {
+    cursor: pointer;
+}
+
 /* --- body: left list + right diff --- */
 .git-body {
     display: flex;

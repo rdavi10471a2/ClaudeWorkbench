@@ -100,6 +100,24 @@ public sealed partial class GitService
     public Task<GitResult> InitAsync(string directory, string defaultBranch = "main", CancellationToken cancellationToken = default)
         => RunAsync(directory, ["init", "-b", defaultBranch], cancellationToken);
 
+    // True once the repo has at least one commit (HEAD resolves). `gh repo create --push` needs a
+    // commit to push, so the publish flow checks this first for a clear message instead of a gh error.
+    public async Task<bool> HasCommitsAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        GitResult result = await RunAsync(directory, ["rev-parse", "--verify", "HEAD"], cancellationToken).ConfigureAwait(false);
+        return result.Ok;
+    }
+
+    // Create a NEW GitHub repository from this local repo, wire it as `origin`, and push the current
+    // branch — all in one `gh` call. Requires the GitHub CLI installed and authenticated. Runs in the
+    // repo directory so `--source .` targets it. A -1 exit means gh could not be started.
+    public Task<GitResult> CreateGitHubRepoAsync(string directory, string name, bool isPrivate, CancellationToken cancellationToken = default)
+        => RunExecutableAsync(
+            "gh",
+            directory,
+            ["repo", "create", name, "--source", ".", "--remote", "origin", "--push", isPrivate ? "--private" : "--public"],
+            cancellationToken);
+
     // GitHub CLI login state, so the command-bar dot reflects authentication and not
     // just that `gh` exists. Auth is machine-wide (cached under the user profile),
     // independent of any repo, so this takes no directory. `gh auth status` exits 0

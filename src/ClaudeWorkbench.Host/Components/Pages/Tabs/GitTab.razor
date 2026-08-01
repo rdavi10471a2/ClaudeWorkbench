@@ -98,6 +98,12 @@
                 <RadzenButton Icon="download" Text="Fetch" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory || !status.HasRemote)" Click="@FetchAsync" />
                 <RadzenButton Icon="south" Text="Pull" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory || !status.HasRemote)" Click="@PullAsync" />
                 <RadzenButton Icon="cloud_upload" Text="Push" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(busy || ViewingHistory || !status.HasRemote)" Click="@PushAsync" />
+                @if (!status.HasRemote)
+                {
+                    <RadzenButton Icon="rocket_launch" Text="Publish to GitHub" ButtonStyle="ButtonStyle.Info" Size="ButtonSize.Small"
+                                  Disabled="@(busy || ViewingHistory)" Click="@OpenPublish"
+                                  Title="Create a GitHub repository from this repo and push to it (uses the GitHub CLI)." />
+                }
                 <RadzenButton Icon="merge" Text="Merge to main" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
                               Disabled="@(busy || ViewingHistory || OnMain)" Click="@MergeToMainAsync"
                               Title="@(OnMain ? "Already on main" : "Merge this branch into main (requires a clean tree)")" />
@@ -112,6 +118,21 @@
                               Disabled="@(busy || string.IsNullOrWhiteSpace(newBranchName))" Click="@CreateBranchAsync" />
                 <RadzenButton Icon="close" Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                               Click="@(() => { newBranchOpen = false; newBranchName = string.Empty; })" />
+            </div>
+        }
+
+        @if (publishOpen)
+        {
+            <div class="git-inline-form">
+                <input class="git-inline-input" @bind="publishName" @bind:event="oninput" placeholder="repository-name" />
+                <label class="git-inline-check" title="Create a PRIVATE repository (recommended). Uncheck to make it public.">
+                    <input type="checkbox" @bind="publishPrivate" />
+                    <span>Private</span>
+                </label>
+                <RadzenButton Icon="rocket_launch" Text="Publish" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                              Disabled="@(busy || string.IsNullOrWhiteSpace(publishName))" Click="@PublishAsync" />
+                <RadzenButton Icon="close" Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                              Click="@(() => publishOpen = false)" />
             </div>
         }
 
