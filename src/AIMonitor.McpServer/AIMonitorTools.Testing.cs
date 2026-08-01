@@ -7,9 +7,9 @@ namespace AIMonitor.McpServer;
 public sealed partial class AIMonitorTools
 {
     [McpServerTool]
-    [Description("Start the watched solution's tests in the BACKGROUND and return a runId immediately (you never run a shell yourself). The host runs `dotnet test` from the solution root with a TRX logger, so results are framework-agnostic (xUnit/NUnit/MSTest). Because this does NOT block, you can keep working, then poll `get_test_results(runId)` for the outcome and `cancel_tests(runId)` to kill a hanging run. Tests the last-ACCEPTED on-disk source (accept your change first to cover it). Optionally scope with an xUnit/VSTest `filter` (e.g. \"FullyQualifiedName~Namespace.Class\") and set `configuration` (default Debug).")]
+    [Description("Start the watched solution's tests in the BACKGROUND and return a runId immediately (you never run a shell yourself). The host runs `dotnet test` from the solution root with a TRX logger, so results are framework-agnostic (xUnit/NUnit/MSTest). Because this does NOT block, you can keep working, then poll `get_test_results(runId)` for the outcome and `cancel_tests(runId)` to kill a hanging run. Tests the last-ACCEPTED on-disk source (accept your change first to cover it). Use `filter` to run tests INDIVIDUALLY or BY GROUP (see the parameter); omit it to run everything. Set `configuration` (default Debug).")]
     public BackgroundTestRunner.RunSnapshot StartTests(
-        [Description("Optional VSTest/xUnit --filter expression to scope which tests run (e.g. \"FullyQualifiedName~MyNamespace\"). Omit to run all tests in the watched solution.")] string? filter = null,
+        [Description("Optional --filter to scope the run (maps to `dotnet test --filter`). Run INDIVIDUALLY or BY GROUP: a single test = \"FullyQualifiedName=Namespace.Class.Method\"; a whole class = \"FullyQualifiedName~Namespace.Class\"; a namespace/group = \"FullyQualifiedName~Namespace\"; by trait/category = \"Category=Fast\" or \"Trait=Slow\". Combine with | (OR) and & (AND), e.g. \"FullyQualifiedName~ClassA|FullyQualifiedName~ClassB\". Omit to run ALL tests in the watched solution.")] string? filter = null,
         [Description("Build/test configuration: Debug (default) or Release.")] string configuration = "Debug")
     {
         runtimeState.Touch();
