@@ -124,7 +124,8 @@ public sealed class AgentNotesToolTests
             workspace,
             new AIMonitorMcpRuntimeState(logger),
             new StubApplicationLifetime(),
-            logger);
+            logger,
+            new AIMonitor.Workflow.BackgroundTestRunner());
     }
 
     private sealed class StubApplicationLifetime : IHostApplicationLifetime

@@ -14,19 +14,22 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
     private readonly WorkspaceManager workspace;
     private readonly AgentSettingsService agentSettings;
     private readonly AuthStatusProbe authProbe;
+    private readonly AIMonitor.Workflow.BackgroundTestRunner testRunner;
 
     public SidecarOperatorConsole(
         SidecarEventStream stream,
         SidecarClient client,
         WorkspaceManager workspace,
         AgentSettingsService agentSettings,
-        AuthStatusProbe authProbe)
+        AuthStatusProbe authProbe,
+        AIMonitor.Workflow.BackgroundTestRunner testRunner)
     {
         this.stream = stream;
         this.client = client;
         this.workspace = workspace;
         this.agentSettings = agentSettings;
         this.authProbe = authProbe;
+        this.testRunner = testRunner;
         this.stream.Changed += Relay;
         this.authProbe.Changed += Relay;
     }
@@ -126,6 +129,10 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
                 stoppedTurns.Add(interrupted);
             }
         }
+
+        // Also kill any in-flight background test run (start_tests). The agent normally cancels its
+        // own run via cancel_tests, but the operator's Interrupt should stop a hang regardless.
+        testRunner.CancelAll();
 
         await client.StopAsync();
     }

@@ -26,17 +26,20 @@ public sealed partial class AIMonitorTools
     private readonly AIMonitorMcpRuntimeState runtimeState;
     private readonly IHostApplicationLifetime applicationLifetime;
     private readonly IMonitorLogger logger;
+    private readonly BackgroundTestRunner testRunner;
 
     public AIMonitorTools(
         WorkspaceManager workspace,
         AIMonitorMcpRuntimeState runtimeState,
         IHostApplicationLifetime applicationLifetime,
-        IMonitorLogger logger)
+        IMonitorLogger logger,
+        BackgroundTestRunner testRunner)
     {
         this.workspace = workspace;
         this.runtimeState = runtimeState;
         this.applicationLifetime = applicationLifetime;
         this.logger = logger;
+        this.testRunner = testRunner;
     }
 
     // Workspace-scoped services are read through the manager so the whole tool
