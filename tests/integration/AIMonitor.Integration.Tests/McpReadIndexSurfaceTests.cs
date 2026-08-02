@@ -37,7 +37,7 @@ public sealed class McpReadIndexSurfaceTests
         Assert.Equal(0, McpSurfaceClient.JsonInt(statusJson, "staleFileCount"));
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Query_solution_index_scopes_and_clamps_limits()
     {
@@ -74,7 +74,7 @@ public sealed class McpReadIndexSurfaceTests
         Assert.Contains("Program.cs", fileJson, StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Get_solution_index_tree_and_status_expose_projects_and_namespaces()
     {
@@ -140,7 +140,7 @@ public sealed class McpReadIndexSurfaceTests
         Assert.Contains("symbol:program", McpSurfaceClient.Text(typeOnly), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Get_indexed_symbol_returns_one_row_by_stable_key()
     {
@@ -297,7 +297,7 @@ public sealed class McpReadIndexSurfaceTests
         Assert.Contains("fileContentHash", McpSurfaceClient.Text(rich), StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task List_package_references_returns_the_indexed_nuget_rows()
     {

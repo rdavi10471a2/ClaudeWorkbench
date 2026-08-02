@@ -13,7 +13,7 @@ public sealed class McpServerSmokeTests
         Environment.SetEnvironmentVariable("AIMONITOR_DISABLE_VALIDATION_DIALOG", "1");
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_server_lists_monitor_tools_and_serves_index_queries()
     {
         McpFixture fixture = CreateFixture();
@@ -23,69 +23,80 @@ public sealed class McpServerSmokeTests
         IList<McpClientTool> tools = await client.ListToolsAsync();
         string[] toolNames = tools.Select(tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
 
+        // Surface shrink 2026-08-02: commented names are OFF the agent surface (their [McpServerTool]
+        // attributes are commented out in AIMonitorTools.*.cs). Preserved here so uncommenting a tool
+        // re-asserts it. The active names are the shrunk keep-set (~24) plus the 4 read-only git tools.
         string[] expectedToolNames =
         [
             "get_monitor_status",
-            "get_workflow_status",
-            "get_self_check",
-            "refresh_solution_index",
-            "refresh_solution_index_file",
-            "refresh_file_and_index",
-            "get_solution_index_status",
-            "get_solution_index",
-            "get_solution_index_tree",
-            "query_solution_index",
+            // "get_workflow_status",
+            // "get_self_check",
+            // "refresh_solution_index",
+            // "refresh_solution_index_file",
+            // "refresh_file_and_index",
+            // "get_solution_index_status",
+            // "get_solution_index",
+            // "get_solution_index_tree",
+            // "query_solution_index",
             "find_indexed_symbols",
-            "get_indexed_symbol",
+            // "get_indexed_symbol",
             "find_indexed_references",
             "find_indexed_callers",
             "find_indexed_relationships",
+            "find_references_in_file",
             "start_monitor_session",
-            "list_monitor_sessions",
-            "get_monitor_session",
-            "record_monitor_session_event",
-            "list_session_staged_records",
+            "add_monitor_session_planned_file",
+            // "list_monitor_sessions",
+            // "get_monitor_session",
+            // "record_monitor_session_event",
+            // "list_session_staged_records",
             "refresh_file",
-            "new_file",
-            "get_file",
-            "check_file_hash",
-            "find_file",
-            "get_file_outline",
+            // "new_file",
+            // "get_file",
+            // "check_file_hash",
+            // "find_file",
+            // "get_file_outline",
             "get_source_map",
-            "get_symbol",
+            // "get_symbol",
             "submit_file",
             "replace_text_in_file",
-            "find_text_span",
-            "replace_span_in_file",
+            // "find_text_span",
+            // "replace_span_in_file",
             "stage_candidate_for_review",
-            "submit_symbol",
-            "add_using",
-            "remove_using",
-            "set_type_partial",
-            "add_symbol",
-            "add_field",
-            "add_property",
-            "add_method",
-            "add_constructor",
-            "add_nested_type",
-            "remove_symbol",
-            "record_diff_decision",
-            "compare_file",
-            "list_monitor_runs",
-            "get_monitor_run",
-            "list_ledgers",
-            "get_ledger",
-            "prune_monitor_history",
-            "get_tool_manifest",
-            "get_staging_guide",
-            "get_smoke_test_catalog",
-            "list_watched_projects",
+            "get_staged_record",
+            "complete_edit_plan",
+            // "submit_symbol",
+            // "add_using",
+            // "remove_using",
+            // "set_type_partial",
+            // "add_symbol",
+            // "add_field",
+            // "add_property",
+            // "add_method",
+            // "add_constructor",
+            // "add_nested_type",
+            // "remove_symbol",
+            // "record_diff_decision",
+            // "compare_file",
+            // "list_monitor_runs",
+            // "get_monitor_run",
+            // "list_ledgers",
+            // "get_ledger",
+            // "prune_monitor_history",
+            // "get_tool_manifest",
+            // "get_staging_guide",
+            // "get_smoke_test_catalog",
+            // "list_watched_projects",
             "write_note",
             "list_notes",
             "read_note",
             "delete_note",
             "restore_solution",
-            "shutdown_server"
+            "download_url",
+            "start_tests",
+            "get_test_results",
+            "cancel_tests",
+            // "shutdown_server"
         ];
         foreach (string expectedToolName in expectedToolNames)
         {
@@ -151,7 +162,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains("find_indexed_symbols", logText, StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_self_check_reports_real_guardrail_rows_and_path_collisions()
     {
         McpFixture fixture = CreateFixture(runtimeUnderWatchedRoot: true);
@@ -197,7 +208,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains("indexed symbol key", ExtractToolText(callers), StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_get_file_outline_returns_roslyn_structured_members()
     {
         McpFixture fixture = CreateFixture();
@@ -341,7 +352,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains("\"targetStableKey\":\"symbol:program\"", relationshipsJson, StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_refresh_solution_index_file_returns_timing_and_per_file_detail()
     {
         McpFixture fixture = CreateFixture();
@@ -412,7 +423,7 @@ public sealed class McpServerSmokeTests
         Assert.DoesNotContain("mcp", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_candidate_tools_edit_working_copy_only()
     {
         McpFixture fixture = CreateFixture();
@@ -523,7 +534,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains("replace_text_in_file", sourceMapError, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_source_map_exposes_mode_guidance_budget_and_symbol_source_kind()
     {
         McpFixture fixture = CreateFixture();
@@ -744,7 +755,7 @@ public sealed class McpServerSmokeTests
         Assert.DoesNotContain("submitted", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_find_text_span_and_replace_span_edit_working_copy_only()
     {
         McpFixture fixture = CreateFixture();
@@ -793,7 +804,7 @@ public sealed class McpServerSmokeTests
         Assert.DoesNotContain("span-new", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_span_tools_auto_refresh_when_no_working_session_exists()
     {
         McpFixture fixture = CreateFixture();
@@ -833,7 +844,7 @@ public sealed class McpServerSmokeTests
         Assert.DoesNotContain("fresh-replaced", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_new_file_stage_and_reject_leaves_watched_source_absent()
     {
         McpFixture fixture = CreateFixture();
@@ -884,7 +895,7 @@ public sealed class McpServerSmokeTests
         Assert.False(File.Exists(newFilePath));
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_planned_review_decide_interleaved_does_not_deadlock()
     {
         // Interleaving review -> decide -> review -> decide across planned files must not throw
@@ -1004,7 +1015,7 @@ public sealed class McpServerSmokeTests
         await client.DisposeAsync();
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_new_file_member_pair_edit_stress_removes_removed_members_before_review()
     {
         McpFixture fixture = CreateFixture();
@@ -1138,7 +1149,7 @@ public sealed class McpServerSmokeTests
         Assert.False(File.Exists(newFilePath));
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_session_multi_file_accept_flow_tracks_both_staged_records()
     {
         McpFixture fixture = CreateFixture();
@@ -1310,7 +1321,7 @@ public sealed class McpServerSmokeTests
         await client.DisposeAsync();
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_claude_skill_sequence_uses_source_map_symbol_read_and_roslyn_edits()
     {
         McpFixture fixture = CreateFixture();
@@ -1441,7 +1452,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains("return \"old\";", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_compare_and_stage_snapshot_without_mutating_watched_source()
     {
         McpFixture fixture = CreateFixture();
@@ -1483,7 +1494,7 @@ public sealed class McpServerSmokeTests
         Assert.DoesNotContain("compare", await File.ReadAllTextAsync(fixture.ProgramFilePath), StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_get_ledger_rejects_sibling_paths_that_share_the_ledger_prefix()
     {
         McpFixture fixture = CreateFixture();
@@ -1524,7 +1535,7 @@ public sealed class McpServerSmokeTests
         Assert.True(read.IsError == true);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_session_hash_check_detects_watched_source_changes()
     {
         McpFixture fixture = CreateFixture();
@@ -1590,7 +1601,7 @@ public sealed class McpServerSmokeTests
         Assert.Contains("\"previousAccess\"", changedJson, StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_record_decision_accept_requires_expected_staged_hash()
     {
         McpFixture fixture = CreateFixture();
@@ -1629,7 +1640,7 @@ public sealed class McpServerSmokeTests
         Assert.True(decision.IsError == true);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     public async Task Mcp_write_tools_reject_refresh_required_sessions_after_accept()
     {
         McpFixture fixture = CreateFixture();

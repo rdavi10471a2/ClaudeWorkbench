@@ -53,6 +53,8 @@ internal static class Program
             })
             .WithHttpTransport()
             .WithTools<AIMonitorTools>()
+            // Git tools KEPT: all 4 are READ-ONLY (status / diff / log / branches) — the agent's durable,
+            // queryable memory of the repo. Commits/writes stay the operator's.
             .WithTools<GitMcpTools>();
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
@@ -287,14 +289,16 @@ internal static class Program
         // tool, from the same source (AgentGuidance) — the sidecar is not an MCP client
         // itself, so it reads this the same way it already reads /health. Deliberately one
         // source: the card used to restate these steps as TypeScript literals and drifted.
-        app.MapGet("/guidance/staging", () => Results.Text(AgentGuidance.StagingGuide, "text/markdown"));
+        app.MapGet("/guidance/staging", () =>
+            Results.Text(AgentGuidance.ComposeStagingGuide(), "text/markdown"));
 
         // The full governed role card, authored in C# (AgentGuidance.ComposeGovernanceCard) and
         // fetched by the sidecar at startup — so the card's wording lives in one place, not
         // restated in the sidecar's TypeScript.
         app.MapGet("/guidance/card", (WorkspaceManager workspace) =>
         {
-            string card = AgentGuidance.ComposeGovernanceCard(workspace.WatchedSolutionPath ?? string.Empty);
+            string card = AgentGuidance.ComposeGovernanceCard(
+                workspace.WatchedSolutionPath ?? string.Empty);
 
             // Load the agent's durable preferences into the card so they're always in context — the
             // agent shouldn't have to remember to read them each session. Written by the agent via
@@ -326,6 +330,11 @@ internal static class Program
 
             return Results.Text(card, "text/markdown");
         });
+
+        // The governed tool surface (native tool sets + the withheld semantic MCP list), authored in
+        // C# (AgentToolSurface.Compose) and fetched by the sidecar at startup — same C#-single-source
+        // pattern as the card, so the sidecar no longer hand-copies these lists (they used to drift).
+        app.MapGet("/guidance/tool-policy", () => Results.Json(AgentToolSurface.Compose()));
 
         // --- test-only review HTTP surface -------------------------------------
         // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY

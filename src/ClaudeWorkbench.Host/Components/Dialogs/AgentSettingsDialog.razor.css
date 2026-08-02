@@ -134,3 +134,23 @@
     border-top: 1px solid #e4ebf1;
     background: #fbfdff;
 }
+
+/* A locked setting: shown (so the default is legible) but not operator-changeable. */
+.settings-row--locked {
+    opacity: .72;
+    cursor: default;
+}
+
+.settings-locked {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #eef1f5;
+    color: #6c7d8f;
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    vertical-align: middle;
+}

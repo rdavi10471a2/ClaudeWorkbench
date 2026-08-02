@@ -25,7 +25,7 @@ public sealed partial class AIMonitorTools
         return workflowService.Refresh(ResolveWatchedPath(sourceFilePath));
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Create a new-file edit session with an empty monitor-owned Working candidate. Watched source is not created.")]
     public EditSessionStatus NewFile(
         [Description("Future watched source path, absolute or relative to the watched solution folder.")] string sourceFilePath,
@@ -41,7 +41,7 @@ public sealed partial class AIMonitorTools
         return status;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Read a watched source file through the Monitor MCP server.")]
     public AIMonitorFileReadResult GetFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string sourceFilePath,
@@ -61,7 +61,7 @@ public sealed partial class AIMonitorTools
         return new AIMonitorFileReadResult(path, workflowPaths.GetRelativeWatchedPath(path), hashInfo, access, text);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Check whether a watched source file has changed since it was last fetched in a durable monitor session.")]
     public AIMonitorFileHashCheckResult CheckFileHash(
         [Description("Session handle returned by start_monitor_session.")] string sessionId,
@@ -86,7 +86,7 @@ public sealed partial class AIMonitorTools
             access);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Find source or related files under the watched project folder by filename or wildcard pattern.")]
     public IReadOnlyList<AIMonitorFileMatch> FindFile(
         [Description("Filename or wildcard pattern, such as Program.cs or *.razor.")] string fileNameOrPattern,
@@ -104,7 +104,7 @@ public sealed partial class AIMonitorTools
             : [];
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return a Roslyn-derived outline for a watched C# source file, including kind, name, span, signature, namespace, and containing type.")]
     public RoslynFileOutlineResult GetFileOutline(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path)
@@ -115,7 +115,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return a Roslyn-derived source map for a C# file, folder, namespace, or watched project — drill to the level the change needs. The selector it returns is the coordinate for a targeted edit: get selector mode before a C# symbol edit, then feed that selector to submit_symbol / add_method / add_property / replace_span_in_file.")]
+    [Description("Return a Roslyn-derived STRUCTURE MAP (bounded outline: kinds, signatures, spans) for a C# file, folder, namespace, or watched project. This is for UNDERSTANDING and DOCUMENTATION — building an accurate picture of a class/namespace/project's shape (for architecture docs, diagrams, or getting oriented) without reading every file. NOT an edit tool: to change code, read with native Read and edit with replace_text_in_file / submit_file.")]
     public object GetSourceMap(
         [Description("Optional source file/folder path, or namespace text when scope is namespace.")] string? path = null,
         [Description("Source map scope: auto, file, folder, namespace, or project.")] string scope = "auto",
@@ -142,7 +142,7 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Read one C# symbol body from the monitor-owned Working candidate using a Roslyn selector.")]
     public object GetSymbol(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
@@ -172,7 +172,7 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return edit workflow status for one watched source file.")]
     public EditSessionStatus GetEditStatus(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string sourceFilePath,
@@ -189,7 +189,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Write a full-file candidate into the monitor-owned Working mirror. Does not create a staged record. Prefer the semantic symbol/span tools (submit_symbol, add_method, add_property, replace_span_in_file) for a localized change — reserve submit_file for a NEW file or a genuine wholesale rewrite, since a full-file overwrite makes a larger, less reviewable diff and can clobber unrelated content. Use replace_text_in_file only as a LAST RESORT, or for non-semantic files (Razor/markup, Markdown, config) where the symbol tools do not apply.")]
+    [Description("Write a full-file candidate into the monitor-owned Working mirror. Does not create a staged record. Use submit_file for a NEW file or a genuine wholesale rewrite; for a localized change prefer replace_text_in_file, which makes a smaller, more reviewable diff and cannot clobber unrelated content.")]
     public EditSessionStatus SubmitFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
         [Description("Complete replacement file content.")] string content,
@@ -209,7 +209,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Replace exact oldText in the monitor-owned Working mirror candidate. LAST RESORT for C#: prefer the semantic symbol/span tools (submit_symbol, add_method, add_property, replace_span_in_file), which understand structure and produce smaller, safer diffs. Use this when no semantic edit fits, or for non-semantic files where the symbol tools cannot reach — Razor/markup, Markdown, config, plain text.")]
+    [Description("Replace exact oldText in the monitor-owned Working mirror candidate. THIS IS THE PRIMARY EDIT TOOL: read the file (native Read, or refresh_file to open the Working candidate), match a unique snippet, and replace it. Works for any file type (C#, Razor/markup, Markdown, config). Use submit_file instead only for a new file or a wholesale rewrite.")]
     public ReplaceTextResult ReplaceTextInFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
         [Description("Exact old text to replace using ordinal matching.")] string oldText,
@@ -250,7 +250,7 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Find exact text in the current Working candidate and return 1-based line/column bounds.")]
     public TextSpanResult FindTextSpan(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,
@@ -266,7 +266,7 @@ public sealed partial class AIMonitorTools
         return workflowService.FindTextSpan(fullPath, findText, occurrenceIndex, expectedFileHash);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Replace an exact 1-based line/column span in the monitor-owned Working mirror candidate.")]
     public EditSessionStatus ReplaceSpanInFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string path,

@@ -32,7 +32,7 @@ public sealed class McpRenameDiscoverySurfaceTests
     private const string OriginalPropertyName = "LegacyValue";
     private const string RenamedPropertyName = "CurrentValue";
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Index_discovers_every_external_consumer_before_a_contract_rename()
     {

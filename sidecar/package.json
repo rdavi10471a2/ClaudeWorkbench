@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "test:unit": "tsc && node --test dist/toolGating.test.js",
     "smoke": "tsc && node --test dist/smoke/flow.smoke.test.js"
   },
   "dependencies": {
