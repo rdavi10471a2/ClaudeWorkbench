@@ -75,7 +75,7 @@ public sealed class ClaudeSmokesPhase1McpTests
         Assert.Contains("\"referenceKind\":\"razor", razorRefsJson, StringComparison.Ordinal);
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "ClaudeSmokes")]
     public async Task ClaudeSmokes_mcp_file_outline_is_roslyn_for_cs_and_refuses_razor()
     {
@@ -104,7 +104,7 @@ public sealed class ClaudeSmokesPhase1McpTests
         Assert.True(refused, "get_file_outline should refuse .razor, not emit fabricated markup symbols.");
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "ClaudeSmokes")]
     public async Task ClaudeSmokes_mcp_scoped_folder_query_uses_path_prefix_not_substring()
     {

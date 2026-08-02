@@ -22,7 +22,7 @@ public sealed class McpPlannedSessionSurfaceTests
 
     // ---- AREA B: planned-session E2E ----
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Single_file_planned_session_runs_full_flow_to_terminal_accept()
     {
@@ -103,7 +103,7 @@ public sealed class McpPlannedSessionSurfaceTests
         await client.DisposeAsync();
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Multi_file_planned_session_defers_index_refresh_until_last_decision()
     {
@@ -206,7 +206,7 @@ public sealed class McpPlannedSessionSurfaceTests
         await client.DisposeAsync();
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Planned_new_file_flow_stages_and_rejects_without_creating_watched_source()
     {
@@ -259,7 +259,7 @@ public sealed class McpPlannedSessionSurfaceTests
     //   new_file(B) -> submit(B)   syntax-only, no build, no overlay result.
     //   complete_edit_plan         every planned file submitted => the REAL build runs ONCE over the whole
     //                              set; the two files are mutually consistent, so it builds clean.
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Multi_file_plan_builds_once_clean_at_complete_edit_plan()
     {
@@ -388,7 +388,7 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.True(submit.IsError == true, McpSurfaceClient.Text(submit));
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Accept_without_review_is_rejected()
     {
@@ -421,7 +421,7 @@ public sealed class McpPlannedSessionSurfaceTests
         Assert.True(decision.IsError == true, McpSurfaceClient.Text(decision));
     }
 
-    [Fact]
+    // [Fact] // off-surface tool test (shrink 2026-08-02): uncomment when the tool is restored
     [Trait("Suite", "McpSurface")]
     public async Task Accept_with_dirty_unexpected_watched_source_is_rejected()
     {
