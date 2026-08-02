@@ -287,14 +287,17 @@ internal static class Program
         // tool, from the same source (AgentGuidance) — the sidecar is not an MCP client
         // itself, so it reads this the same way it already reads /health. Deliberately one
         // source: the card used to restate these steps as TypeScript literals and drifted.
-        app.MapGet("/guidance/staging", () => Results.Text(AgentGuidance.StagingGuide, "text/markdown"));
+        app.MapGet("/guidance/staging", (AgentSettingsService settings) =>
+            Results.Text(AgentGuidance.ComposeStagingGuide(settings.Current.AllowSemanticEdits), "text/markdown"));
 
         // The full governed role card, authored in C# (AgentGuidance.ComposeGovernanceCard) and
         // fetched by the sidecar at startup — so the card's wording lives in one place, not
         // restated in the sidecar's TypeScript.
-        app.MapGet("/guidance/card", (WorkspaceManager workspace) =>
+        app.MapGet("/guidance/card", (WorkspaceManager workspace, AgentSettingsService settings) =>
         {
-            string card = AgentGuidance.ComposeGovernanceCard(workspace.WatchedSolutionPath ?? string.Empty);
+            string card = AgentGuidance.ComposeGovernanceCard(
+                workspace.WatchedSolutionPath ?? string.Empty,
+                settings.Current.AllowSemanticEdits);
 
             // Load the agent's durable preferences into the card so they're always in context — the
             // agent shouldn't have to remember to read them each session. Written by the agent via
