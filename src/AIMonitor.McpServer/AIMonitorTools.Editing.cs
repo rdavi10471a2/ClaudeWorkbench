@@ -115,7 +115,7 @@ public sealed partial class AIMonitorTools
     }
 
     [McpServerTool]
-    [Description("Return a Roslyn-derived source map (bounded outline: kinds, signatures, spans) for a C# file, folder, namespace, or watched project — drill to the level the change needs. Use it to LOCATE code on a large file instead of reading the whole thing, then edit that region with replace_text_in_file (or submit_file for a wholesale rewrite).")]
+    [Description("Return a Roslyn-derived STRUCTURE MAP (bounded outline: kinds, signatures, spans) for a C# file, folder, namespace, or watched project. This is for UNDERSTANDING and DOCUMENTATION — building an accurate picture of a class/namespace/project's shape (for architecture docs, diagrams, or getting oriented) without reading every file. NOT an edit tool: to change code, read with native Read and edit with replace_text_in_file / submit_file.")]
     public object GetSourceMap(
         [Description("Optional source file/folder path, or namespace text when scope is namespace.")] string? path = null,
         [Description("Source map scope: auto, file, folder, namespace, or project.")] string scope = "auto",
