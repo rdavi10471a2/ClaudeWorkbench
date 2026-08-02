@@ -25,7 +25,8 @@ public sealed partial class AIMonitorTools
         "field) instead of composing it yourself. Accepts the simple name (e.g. 'Calculator'), the " +
         "namespace-qualified name (e.g. 'CalculatorSample.Calculator'), or a nested chain (e.g. 'Outer.Inner').";
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Replace one C# symbol in the monitor-owned Working candidate using a Roslyn selector.")]
     public RoslynEditResult SubmitSymbol(string path, string symbolSelectorJson, string code, string? sessionId = null, string? manifestJson = null)
     {
@@ -37,7 +38,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a using directive to the monitor-owned Working candidate.")]
     public RoslynEditResult AddUsing(string path, string @namespace, string? sessionId = null, string? manifestJson = null)
     {
@@ -49,7 +51,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Remove a using directive from the monitor-owned Working candidate.")]
     public RoslynEditResult RemoveUsing(string path, string @namespace, string? sessionId = null, string? manifestJson = null)
     {
@@ -61,7 +64,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add or remove the partial modifier on a C# type in the monitor-owned Working candidate.")]
     public RoslynEditResult SetTypePartial(string path, [Description(ContainingTypeDescription)] string containingType, bool isPartial, string? sessionId = null, string? manifestJson = null)
     {
@@ -73,7 +77,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a C# member or nested type to a containing type in the monitor-owned Working candidate.")]
     public RoslynEditResult AddSymbol(string path, [Description(ContainingTypeDescription)] string containingType, string symbolType, string code, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
@@ -85,7 +90,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a C# field to a containing type in the monitor-owned Working candidate.")]
     public RoslynEditResult AddField(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
@@ -97,7 +103,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a C# property to a containing type in the monitor-owned Working candidate.")]
     public RoslynEditResult AddProperty(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
@@ -109,7 +116,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a C# method to a containing type in the monitor-owned Working candidate.")]
     public RoslynEditResult AddMethod(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
@@ -121,7 +129,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a C# constructor to a containing type in the monitor-owned Working candidate.")]
     public RoslynEditResult AddConstructor(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
@@ -133,7 +142,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Add a C# nested type to a containing type in the monitor-owned Working candidate.")]
     public RoslynEditResult AddNestedType(string path, [Description(ContainingTypeDescription)] string containingType, string declaration, string? afterSymbol = null, string? sessionId = null, string? manifestJson = null)
     {
@@ -145,7 +155,8 @@ public sealed partial class AIMonitorTools
         return result;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // SHRUNK 2026-08-02: withheld from agent surface (semantic edit family — proven to add round-trips w/ no benefit). Uncomment to restore. See tool-loading-economics.
+
     [Description("Remove one C# symbol from the monitor-owned Working candidate using a Roslyn selector.")]
     public RoslynEditResult RemoveSymbol(string path, string symbolSelectorJson, string? sessionId = null, string? manifestJson = null)
     {

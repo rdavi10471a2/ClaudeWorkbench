@@ -52,8 +52,9 @@ internal static class Program
                 options.ServerInfo = new Implementation { Name = "claude-workbench", Version = "0.1.0" };
             })
             .WithHttpTransport()
-            .WithTools<AIMonitorTools>()
-            .WithTools<GitMcpTools>();
+            // Surface shrink 2026-08-02: git tools are off the AGENT surface (GitService + the operator
+            // Git page are unaffected). Re-add .WithTools<GitMcpTools>() to restore.
+            .WithTools<AIMonitorTools>();
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });

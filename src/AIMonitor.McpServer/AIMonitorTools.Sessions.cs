@@ -192,7 +192,7 @@ public sealed partial class AIMonitorTools
                 : "Plan complete: the full pre-merge build passed. Stage the planned files for review.");
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Replace the watched files planned for this monitor edit session after explicit operator correction.")]
     public AIMonitorSessionState SetMonitorSessionEditPlan(
         [Description("Session handle returned by start_monitor_session.")] string sessionId,
@@ -216,7 +216,7 @@ public sealed partial class AIMonitorTools
         return updated;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("List durable monitor session handles known to this MCP server.")]
     public IReadOnlyList<AIMonitorSessionSummary> ListMonitorSessions()
     {
@@ -231,7 +231,7 @@ public sealed partial class AIMonitorTools
             : [];
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return a durable monitor session by explicit sessionId handle.")]
     public AIMonitorSessionState GetMonitorSession(
         [Description("Session handle returned by start_monitor_session.")] string sessionId)
@@ -241,7 +241,7 @@ public sealed partial class AIMonitorTools
             ?? throw new InvalidOperationException($"Monitor session was not found: {sessionId}");
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Append an event to a durable monitor session.")]
     public AIMonitorSessionState RecordMonitorSessionEvent(
         [Description("Session handle returned by start_monitor_session.")] string sessionId,
@@ -263,7 +263,7 @@ public sealed partial class AIMonitorTools
         return updated;
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("List staged edit records owned by a durable monitor session.")]
     public IReadOnlyList<StagedEditRecord> ListSessionStagedRecords(
         [Description("Session handle returned by start_monitor_session.")] string sessionId)

@@ -31,7 +31,7 @@ public sealed partial class AIMonitorTools
         return approxChars <= IndexToolCharBudget ? payload : overflow(approxChars);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Rebuild the monitor-owned SQLite index for the watched solution.")]
     public async Task<AIMonitorRefreshIndexResult> RefreshSolutionIndex()
     {
@@ -42,7 +42,7 @@ public sealed partial class AIMonitorTools
         return new AIMonitorRefreshIndexResult(summary, queryService.GetMonitorStatus(), stopwatch.ElapsedMilliseconds);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Refresh one watched C# file in the monitor-owned SQLite solution index. AIMonitor currently rebuilds the semantic index and returns the requested file slice.")]
     public async Task<AIMonitorRefreshIndexFileResult> RefreshSolutionIndexFile(
         [Description("Watched C# file path, absolute or relative to the watched solution folder.")] string path)
@@ -59,7 +59,7 @@ public sealed partial class AIMonitorTools
             detail.Symbols);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Refresh a watched source file into the monitor-owned Working folder, then refresh the same file in the monitor-owned SQLite solution index.")]
     public async Task<AIMonitorRefreshFileAndIndexResult> RefreshFileAndIndex(
         [Description("Watched source file path, absolute or relative to the watched solution folder.")] string sourceFilePath)
@@ -70,7 +70,7 @@ public sealed partial class AIMonitorTools
         return new AIMonitorRefreshFileAndIndexResult(refresh, index);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return status for the monitor-owned watched solution index, including database path and indexed counts.")]
     public MonitorStatusResult GetSolutionIndexStatus()
     {
@@ -78,7 +78,7 @@ public sealed partial class AIMonitorTools
         return queryService.GetMonitorStatus();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the monitor-owned watched solution index as compact JSON with indexed files and symbols. Use maxFiles/maxSymbols to budget the payload.")]
     public SolutionIndexQueryResult GetSolutionIndex(
         [Description("Maximum files to return.")] int maxFiles = 5000,
@@ -88,7 +88,7 @@ public sealed partial class AIMonitorTools
         return queryService.QueryIndex(maxFiles: maxFiles, maxSymbols: maxSymbols);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the monitor-owned watched solution index tree as compact JSON: projects, namespaces, and files. Budgeted: when the tree is too large to read inline it returns a compact overflow envelope (counts + highest-symbol namespaces + ready-to-run narrower calls) instead of spilling to a file. For structural discovery prefer get_source_map (folder/navigation).")]
     public object GetSolutionIndexTree()
     {
@@ -124,7 +124,7 @@ public sealed partial class AIMonitorTools
             ]));
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Query the monitor-owned watched solution index by scope. Scopes: solution, namespace, folder, file. Budgeted: an over-large result is returned as a compact overflow envelope (counts + ready-to-run narrower calls) instead of spilling to a file that cannot be read back inline. For structural discovery prefer get_source_map (folder/navigation, then file/selector).")]
     public object QuerySolutionIndex(
         [Description("Index scope: solution, namespace, folder, or file.")] string scope = "solution",
@@ -163,7 +163,7 @@ public sealed partial class AIMonitorTools
         return queryService.FindSymbols(text, kind, namespaceName, containingType, maxResults);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return one indexed C# symbol by stable symbol key from the monitor-owned watched solution index.")]
     public object? GetIndexedSymbol(
         [Description("Stable symbol key returned by query_solution_index or find_indexed_symbols.")] string stableSymbolKey)
@@ -182,7 +182,7 @@ public sealed partial class AIMonitorTools
     [McpServerTool]
     [Description("Return persisted indexed reference sites for one stable C# symbol key. Lean shape omits repeated project path and file hash fields; rich shape returns complete stored rows.")]
     public object FindIndexedReferences(
-        [Description("Stable symbol key returned by query_solution_index, find_indexed_symbols, or get_indexed_symbol.")] string stableSymbolKey,
+        [Description("Stable symbol key returned by find_indexed_symbols.")] string stableSymbolKey,
         [Description("Maximum reference rows to return.")] int maxResults = 500,
         [Description("Response shape: lean or rich. Lean is optimized for MCP token cost; rich preserves every persisted reference row field.")] string responseShape = "lean")
     {
@@ -226,7 +226,7 @@ public sealed partial class AIMonitorTools
         return references.Select(ToMcpReferenceRow).ToArray();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the NuGet PackageReference rows captured for the watched solution at index time, with the project that declares each one.")]
     public object ListPackageReferences(
         [Description("Maximum package rows to return.")] int maxResults = 500)
@@ -235,7 +235,7 @@ public sealed partial class AIMonitorTools
         return queryService.ListPackageReferences().Take(maxResults).ToArray();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the DECLARED project-to-project dependency edges for one project from the watched solution index, BOTH directions: the projects it references (its <ProjectReference>s), and the projects that reference IT (its dependents — the set affected by a change to it). Reads the persisted ProjectReference graph, not inferred from symbol usage, so it answers 'which projects reference X' even when no symbol crosses the boundary. Accepts a full .csproj path, a file name (Shared.csproj), or a bare project name (Shared).")]
     public object FindProjectDependencies(
         [Description("Project to look up: a full .csproj path, a file name like 'Shared.csproj', or a bare name like 'Shared'.")] string project)
@@ -275,7 +275,7 @@ public sealed partial class AIMonitorTools
     [McpServerTool]
     [Description("Return persisted indexed invocation/object-creation call sites for one stable C# method or constructor symbol key, including caller identity.")]
     public object FindIndexedCallers(
-        [Description("Stable method or constructor symbol key returned by query_solution_index, find_indexed_symbols, or get_indexed_symbol.")] string stableSymbolKey,
+        [Description("Stable method or constructor symbol key returned by find_indexed_symbols.")] string stableSymbolKey,
         [Description("Maximum caller rows to return.")] int maxResults = 500)
     {
         runtimeState.Touch();
@@ -292,7 +292,7 @@ public sealed partial class AIMonitorTools
     [McpServerTool]
     [Description("Return persisted indexed symbol relationship rows for one stable symbol key, including incoming and outgoing relationship direction.")]
     public object FindIndexedRelationships(
-        [Description("Stable symbol key returned by query_solution_index, find_indexed_symbols, or get_indexed_symbol.")] string stableSymbolKey,
+        [Description("Stable symbol key returned by find_indexed_symbols.")] string stableSymbolKey,
         [Description("Optional exact relationship kind filter.")] string? relationshipKind = null,
         [Description("Relationship direction: outgoing, incoming, or both.")] string direction = "both",
         [Description("Maximum relationship rows to return.")] int maxResults = 500)

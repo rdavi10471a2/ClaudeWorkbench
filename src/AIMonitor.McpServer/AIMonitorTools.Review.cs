@@ -45,7 +45,7 @@ public sealed partial class AIMonitorTools
             "Candidate staged. Use get_staged_record for full details; the operator reviews and decides in the ClaudeWorkbench Merge Review surface.");
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02 (legacy; host records decisions from in-app Merge Review)
     [Description("Legacy MCP/CLI path: classify a completed review for a staged edit. Accepted decisions require the expected staged hash. The ClaudeWorkbench host records decisions itself from the in-app Merge Review.")]
     public ReviewDecisionWithIndexRefreshResult RecordDiffDecision(
         [Description("Staged edit record id returned by stage_candidate_for_review.")] string stagedRecordId,
@@ -78,7 +78,7 @@ public sealed partial class AIMonitorTools
         return workflowService.GetStagedRecord(stagedRecordId);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Create a proposed compare snapshot for a monitor Working file and return review paths.")]
     public CompareSnapshotResult CompareFile(
         [Description("Source file path, absolute or relative to the watched solution folder.")] string sourceFilePath,

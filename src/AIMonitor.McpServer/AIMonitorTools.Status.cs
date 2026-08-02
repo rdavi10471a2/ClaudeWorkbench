@@ -42,7 +42,7 @@ public sealed partial class AIMonitorTools
             indexStatus.BlockedAtUtc);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the monitor workflow status: watched solution, runtime root, and the monitor-owned Working folder.")]
     public AIMonitorWorkflowStatus GetWorkflowStatus()
     {
@@ -54,7 +54,7 @@ public sealed partial class AIMonitorTools
             workflowPaths.WorkingRoot);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return evaluated self-check guardrails for configured roots, working folders, and watched-source safety boundaries.")]
     public AIMonitorSelfCheckResult GetSelfCheck()
     {
@@ -79,7 +79,7 @@ public sealed partial class AIMonitorTools
             guardrails);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("List monitor run/history entries recorded under monitor-owned workflow history.")]
     public IReadOnlyList<Dictionary<string, object?>> ListMonitorRuns(
         [Description("Maximum entries to return.")] int maxEntries = 100)
@@ -95,7 +95,7 @@ public sealed partial class AIMonitorTools
         return entries.TakeLast(maxEntries).ToArray();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return recorded entries for one monitor run id.")]
     public IReadOnlyList<Dictionary<string, object?>> GetMonitorRun(
         [Description("Run id from list_monitor_runs.")] string runId)
@@ -106,7 +106,7 @@ public sealed partial class AIMonitorTools
             .ToArray();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("List monitor-owned per-file ledgers.")]
     public IReadOnlyList<AIMonitorLedgerInfo> ListLedgers(
         [Description("Maximum ledgers to return.")] int maxEntries = 100)
@@ -123,7 +123,7 @@ public sealed partial class AIMonitorTools
             : [];
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Read one monitor-owned per-file ledger by source file or ledger path.")]
     public AIMonitorLedgerReadResult GetLedger(
         [Description("Optional source file path, absolute or relative to the watched solution folder.")] string? sourceFilePath = null,
@@ -146,7 +146,7 @@ public sealed partial class AIMonitorTools
         return new AIMonitorLedgerReadResult(path, File.Exists(path), File.Exists(path) ? File.ReadAllText(path) : string.Empty);
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Archive/prune monitor-owned history. AIMonitor keeps history by default; this compatibility tool reports the current retention posture without deleting files.")]
     public AIMonitorCompatibilityResult PruneMonitorHistory(
         [Description("Retention window in days.")] int retentionDays = 7)
@@ -158,7 +158,7 @@ public sealed partial class AIMonitorTools
             new Dictionary<string, string?> { ["retentionDays"] = retentionDays.ToString() });
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the Markdown tool manifest for the AIMonitor MCP Server tool surface.")]
     public string GetToolManifest()
     {
@@ -166,7 +166,7 @@ public sealed partial class AIMonitorTools
         return ComposeToolManifest();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the normal staging guide for AIMonitor watched-project edits.")]
     public string GetStagingGuide()
     {
@@ -174,7 +174,7 @@ public sealed partial class AIMonitorTools
         return ComposeStagingGuide();
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Return the smoke-test coverage todo/catalog for AIMonitor.")]
     public string GetSmokeTestCatalog()
     {
@@ -185,7 +185,7 @@ public sealed partial class AIMonitorTools
             : "AIMonitor smoke coverage catalog is missing.";
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("List watched project folders. AIMonitor currently has one configured watched project folder.")]
     public IReadOnlyList<AIMonitorWatchedProjectInfo> ListWatchedProjects()
     {
@@ -199,7 +199,7 @@ public sealed partial class AIMonitorTools
         ];
     }
 
-    [McpServerTool]
+    // [McpServerTool] // off-surface 2026-08-02
     [Description("Request graceful shutdown of this AIMonitor MCP server process.")]
     public AIMonitorServerShutdownResult ShutdownServer(
         [Description("Optional operator/client reason for the shutdown request.")] string? reason = null)
