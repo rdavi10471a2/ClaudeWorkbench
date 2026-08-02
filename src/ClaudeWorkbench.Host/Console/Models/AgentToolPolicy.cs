@@ -8,12 +8,6 @@ public sealed class AgentToolPolicy
     // Native read tools (Read/Grep/Glob). Off => force all access through the MCP.
     public bool AllowNativeReads { get; set; } = true;
 
-    // The semantic/structural Roslyn edit tools (add_method, submit_symbol, replace_span, …).
-    // OFF by default: the runtime re-feeds the whole file every round-trip, so structure-keyed edits
-    // buy no token saving over submit_file / replace_text_in_file and often add a discovery
-    // round-trip. Kept as an operator toggle so the effect can be compared. See AgentToolSurface.
-    public bool AllowSemanticEdits { get; set; }
-
     // Expose only the claude-workbench MCP server; ignore machine/account connectors.
     public bool StrictMcpConfig { get; set; } = true;
 
@@ -51,7 +45,6 @@ public sealed class AgentToolPolicy
         return new AgentToolPolicy
         {
             AllowNativeReads = AllowNativeReads,
-            AllowSemanticEdits = AllowSemanticEdits,
             StrictMcpConfig = StrictMcpConfig,
             EnabledOptionalTools = new HashSet<string>(EnabledOptionalTools, StringComparer.Ordinal),
             Model = Model,

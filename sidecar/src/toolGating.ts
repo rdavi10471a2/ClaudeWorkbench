@@ -10,10 +10,6 @@
 
 export interface ToolPolicy {
   allowNativeReads: boolean;
-  // When OFF (the default), the semantic/structural Roslyn edit family is withheld from the agent
-  // (it edits via submit_file / replace_text_in_file). An operator can flip it on from Settings to
-  // compare — the tools cost extra round-trips without token savings, so off is the governed default.
-  allowSemanticEdits: boolean;
   strictMcpConfig: boolean;
   enabledTools: string[];
   autoApprove: boolean;
@@ -23,7 +19,6 @@ export interface ToolPolicy {
 
 export const DEFAULT_TOOL_POLICY: ToolPolicy = {
   allowNativeReads: true,
-  allowSemanticEdits: false,
   strictMcpConfig: true,
   enabledTools: [],
   autoApprove: false,
@@ -45,11 +40,9 @@ export interface ToolSurfaceSpec {
   // A policy's enabledTools are validated against this so a bogus toggle can't widen the surface. This
   // is the OptionalAgentTools catalog — NOT every blockable tool.
   enableableNative: string[];
-  // The semantic/structural Roslyn edit MCP tools. Withheld from the agent UNLESS the operator turns
-  // allowSemanticEdits on (default off). Names are unprefixed; deriveToolGating prefixes them. Always
-  // registered in the MCP server — gating only removes them from the AGENT's advertised surface.
-  semanticEditMcpTools: string[];
 }
+// NOTE: MCP tools are NOT gated by the sidecar — the C# server owns the MCP surface (a tool the server
+// does not register simply isn't served). The sidecar only gates NATIVE SDK tools, below.
 
 // Built-in fallback, used ONLY when the host's /guidance/tool-policy is unreachable. Must mirror
 // AgentToolSurface.Compose() in C# — but the host is the source of truth; this is the lifeboat.
@@ -59,20 +52,6 @@ export const FALLBACK_TOOL_SURFACE: ToolSurfaceSpec = {
   blockableNative: ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"],
   // The offered opt-in set (writers Bash/PowerShell/Write/Edit + web) — NOT MultiEdit/NotebookEdit.
   enableableNative: ["Bash", "PowerShell", "Write", "Edit", "WebFetch", "WebSearch"],
-  semanticEditMcpTools: [
-    "submit_symbol",
-    "add_symbol",
-    "add_field",
-    "add_property",
-    "add_method",
-    "add_constructor",
-    "add_nested_type",
-    "remove_symbol",
-    "replace_span_in_file",
-    "set_type_partial",
-    "add_using",
-    "remove_using",
-  ],
 };
 
 // The set an operator may re-enable from Settings (H3): a policy's enabledTools are validated against
@@ -89,14 +68,10 @@ export interface ToolGating {
   disallowed: string[];
 }
 
-// Derive the governed tool surface from a policy + the host-authored surface. Pure: same inputs ->
-// same outputs, no I/O. `mcpPrefix` is the workbench MCP tool prefix (e.g. "mcp__claude-workbench__")
-// so the withheld MCP family can be disallowed by fully-qualified name.
-export function deriveToolGating(
-  policy: ToolPolicy,
-  surface: ToolSurfaceSpec,
-  mcpPrefix: string,
-): ToolGating {
+// Derive the governed NATIVE tool surface from a policy + the host-authored surface. Pure: same
+// inputs -> same outputs, no I/O. Only native SDK tools are gated here; the MCP surface is whatever
+// the C# server registers (nothing to disallow client-side).
+export function deriveToolGating(policy: ToolPolicy, surface: ToolSurfaceSpec): ToolGating {
   const enabled = new Set(policy.enabledTools);
 
   const allowedNative = new Set<string>([
@@ -109,11 +84,6 @@ export function deriveToolGating(
   const disallowed = surface.blockableNative.filter((tool) => !enabled.has(tool));
   if (!policy.allowNativeReads) {
     disallowed.push(...surface.readTools);
-  }
-  // The semantic/structural edit family is withheld unless the operator opted in. Default off:
-  // it costs extra round-trips without token savings (the runtime re-feeds the whole file anyway).
-  if (!policy.allowSemanticEdits) {
-    disallowed.push(...surface.semanticEditMcpTools.map((tool) => mcpPrefix + tool));
   }
 
   return { allowedNative, disallowed };

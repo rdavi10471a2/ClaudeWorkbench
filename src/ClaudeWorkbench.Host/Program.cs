@@ -52,9 +52,10 @@ internal static class Program
                 options.ServerInfo = new Implementation { Name = "claude-workbench", Version = "0.1.0" };
             })
             .WithHttpTransport()
-            // Surface shrink 2026-08-02: git tools are off the AGENT surface (GitService + the operator
-            // Git page are unaffected). Re-add .WithTools<GitMcpTools>() to restore.
-            .WithTools<AIMonitorTools>();
+            .WithTools<AIMonitorTools>()
+            // Git tools KEPT: all 4 are READ-ONLY (status / diff / log / branches) — the agent's durable,
+            // queryable memory of the repo. Commits/writes stay the operator's.
+            .WithTools<GitMcpTools>();
 
         string sidecarBase = builder.Configuration["Sidecar:BaseUrl"] ?? "http://localhost:6110";
         builder.Services.AddSingleton(new SidecarOptions { BaseUrl = sidecarBase });
@@ -288,17 +289,16 @@ internal static class Program
         // tool, from the same source (AgentGuidance) — the sidecar is not an MCP client
         // itself, so it reads this the same way it already reads /health. Deliberately one
         // source: the card used to restate these steps as TypeScript literals and drifted.
-        app.MapGet("/guidance/staging", (AgentSettingsService settings) =>
-            Results.Text(AgentGuidance.ComposeStagingGuide(settings.Current.AllowSemanticEdits), "text/markdown"));
+        app.MapGet("/guidance/staging", () =>
+            Results.Text(AgentGuidance.ComposeStagingGuide(), "text/markdown"));
 
         // The full governed role card, authored in C# (AgentGuidance.ComposeGovernanceCard) and
         // fetched by the sidecar at startup — so the card's wording lives in one place, not
         // restated in the sidecar's TypeScript.
-        app.MapGet("/guidance/card", (WorkspaceManager workspace, AgentSettingsService settings) =>
+        app.MapGet("/guidance/card", (WorkspaceManager workspace) =>
         {
             string card = AgentGuidance.ComposeGovernanceCard(
-                workspace.WatchedSolutionPath ?? string.Empty,
-                settings.Current.AllowSemanticEdits);
+                workspace.WatchedSolutionPath ?? string.Empty);
 
             // Load the agent's durable preferences into the card so they're always in context — the
             // agent shouldn't have to remember to read them each session. Written by the agent via

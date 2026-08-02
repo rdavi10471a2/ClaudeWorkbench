@@ -19,19 +19,10 @@
                     </div>
                 </label>
 
-                @* Locked OFF: a controlled A/B (2026-08-02) showed enabling the semantic edit family
-                   increases round-trips ~50% with no benefit — the agent falls back to replace_text_in_file
-                   even when they're offered and the card steers to them. Kept as a future bet: to re-enable,
-                   remove `disabled` here (and see AgentToolSurface). The checkbox stays visible so the locked
-                   default is legible, not hidden. *@
-                <label class="settings-row settings-row--locked">
-                    <input type="checkbox" @bind="draft.AllowSemanticEdits" disabled />
-                    <div class="settings-text">
-                        <strong>Semantic / structural edit tools <span class="settings-locked">locked · default off</span></strong>
-                        <small>The Roslyn edit family (add_method, submit_symbol, replace_span, …). Withheld and locked: measured to add round-trips with no token saving over submit_file / replace_text_in_file (the runtime re-feeds the whole file each turn), and the agent prefers text editing anyway. Kept as a future bet — re-enable in code if revisiting.</small>
-                    </div>
-                </label>
-
+                @* The semantic/structural Roslyn edit tools are OFF the agent surface entirely (their
+                   [McpServerTool] attributes are commented out — see AIMonitorTools.RoslynEdits.cs). A
+                   controlled A/B (2026-08-02) showed they add round-trips with no benefit and the agent
+                   prefers text editing. No toggle: to revisit, uncomment those tools in code. *@
                 <label class="settings-row">
                     <input type="checkbox" @bind="draft.StrictMcpConfig" />
                     <div class="settings-text">

@@ -46,26 +46,13 @@ public sealed class AgentToolSurfaceTests
     }
 
     [Fact]
-    public void Semantic_family_is_populated_and_holds_the_known_tools()
+    public void Governed_keep_set_is_never_blocked()
     {
         AgentToolSurfaceSpec spec = AgentToolSurface.Compose();
 
-        Assert.NotEmpty(spec.SemanticEditMcpTools);
-        foreach (string tool in new[] { "add_method", "submit_symbol", "replace_span_in_file", "add_using" })
-        {
-            Assert.Contains(tool, spec.SemanticEditMcpTools);
-        }
-    }
-
-    [Fact]
-    public void Governed_keep_set_is_never_withheld()
-    {
-        AgentToolSurfaceSpec spec = AgentToolSurface.Compose();
-
-        // The keep-set (how the agent actually edits) must never appear in any withhold/block list.
+        // The keep-set (how the agent actually edits) must never appear in the native deny list.
         foreach (string tool in KeepSet)
         {
-            Assert.DoesNotContain(tool, spec.SemanticEditMcpTools);
             Assert.DoesNotContain(tool, spec.BlockableNative);
         }
     }

@@ -12,8 +12,7 @@ public sealed record AgentToolSurfaceSpec(
     IReadOnlyList<string> AlwaysAllowedNative,
     IReadOnlyList<string> ReadTools,
     IReadOnlyList<string> BlockableNative,
-    IReadOnlyList<string> EnableableNative,
-    IReadOnlyList<string> SemanticEditMcpTools);
+    IReadOnlyList<string> EnableableNative);
 
 public static class AgentToolSurface
 {
@@ -30,28 +29,9 @@ public static class AgentToolSurface
     private static readonly string[] BlockableNative =
         ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
 
-    // The semantic/structural Roslyn edit MCP tools. Withheld from the agent unless the operator turns
-    // AllowSemanticEdits on (default off). The runtime re-feeds the whole file as cache-read every
-    // round-trip, so structure-keyed edits buy no token saving over submit_file / replace_text_in_file
-    // and often add a get_source_map discovery round-trip (round-trips are the real cost driver). They
-    // remain registered in the MCP server (callable by tests / by design); withholding only removes
-    // them from the AGENT's advertised surface. The agent edits via:
-    //   refresh_file (read/prep) -> submit_file (whole-file) | replace_text_in_file (coarse delta).
-    private static readonly string[] SemanticEditMcpTools =
-    [
-        "submit_symbol",
-        "add_symbol",
-        "add_field",
-        "add_property",
-        "add_method",
-        "add_constructor",
-        "add_nested_type",
-        "remove_symbol",
-        "replace_span_in_file",
-        "set_type_partial",
-        "add_using",
-        "remove_using",
-    ];
+    // NOTE: the semantic/structural Roslyn edit MCP tools are no longer part of the surface at all —
+    // their [McpServerTool] attributes are commented out in AIMonitorTools.RoslynEdits.cs, so the server
+    // never advertises them. There is nothing for the sidecar to gate; the server owns the MCP surface.
 
     public static AgentToolSurfaceSpec Compose()
     {
@@ -65,7 +45,6 @@ public static class AgentToolSurface
             AlwaysAllowedNative,
             ReadTools,
             BlockableNative,
-            enableable,
-            SemanticEditMcpTools);
+            enableable);
     }
 }

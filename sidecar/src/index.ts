@@ -154,14 +154,13 @@ async function resolveToolSurface(timeoutMs = 30_000): Promise<void> {
           Array.isArray(spec.alwaysAllowedNative) &&
           Array.isArray(spec.readTools) &&
           Array.isArray(spec.blockableNative) &&
-          Array.isArray(spec.enableableNative) &&
-          Array.isArray(spec.semanticEditMcpTools)
+          Array.isArray(spec.enableableNative)
         ) {
           toolSurface = spec as ToolSurfaceSpec;
           toolSurfaceResolved = true;
           console.log(
             `[sidecar] tool surface loaded from ${HOST_BASE} ` +
-              `(blockable ${toolSurface.blockableNative.length}, semantic ${toolSurface.semanticEditMcpTools.length}).`,
+              `(read ${toolSurface.readTools.length}, blockable ${toolSurface.blockableNative.length}, enableable ${toolSurface.enableableNative.length}).`,
           );
           return;
         }
@@ -431,7 +430,7 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
   // host-authored. Falls back to FALLBACK_TOOL_SURFACE if the host is unreachable.
   await resolveToolSurface();
 
-  const { allowedNative, disallowed } = deriveToolGating(policy, toolSurface, WORKBENCH_TOOL_PREFIX);
+  const { allowedNative, disallowed } = deriveToolGating(policy, toolSurface);
   activeAllowedNative = allowedNative;
 
   const input = new InputStream();
@@ -734,8 +733,6 @@ app.post("/prompt", (req, res) => {
   const enableable = enableableNative(toolSurface);
   const policy: ToolPolicy = {
     allowNativeReads: raw.allowNativeReads !== false,
-    // Default OFF: the semantic edit family is withheld unless the operator turns it on in Settings.
-    allowSemanticEdits: raw.allowSemanticEdits === true,
     strictMcpConfig: raw.strictMcpConfig !== false,
     enabledTools: Array.isArray(raw.enabledTools)
       ? raw.enabledTools.map(String).filter((tool) => enableable.has(tool))

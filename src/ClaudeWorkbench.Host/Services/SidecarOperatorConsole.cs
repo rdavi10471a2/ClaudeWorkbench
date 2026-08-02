@@ -102,7 +102,6 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         object toolPolicy = new
         {
             allowNativeReads = policy.AllowNativeReads,
-            allowSemanticEdits = policy.AllowSemanticEdits,
             strictMcpConfig = policy.StrictMcpConfig,
             enabledTools = policy.EnabledOptionalTools.ToArray(),
             autoApprove,
