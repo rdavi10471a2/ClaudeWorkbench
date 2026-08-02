@@ -439,7 +439,10 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
 
   const options: Options = {
     mcpServers: {
-      [MCP_SERVER_NAME]: { type: "http", url: WORKBENCH_MCP_URL },
+      // EXPERIMENT: alwaysLoad forces every workbench tool into the prompt from turn 1 (no tool-search
+      // deferral). This is the only defer control the SDK honors over HTTP (per-tool _meta is ignored).
+      // Kills the ToolSearch round-trips at the cost of all ~77 tool schemas in base context each turn.
+      [MCP_SERVER_NAME]: { type: "http", url: WORKBENCH_MCP_URL, alwaysLoad: true },
     },
     canUseTool,
     permissionMode: "default",
