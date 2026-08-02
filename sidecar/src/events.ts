@@ -64,6 +64,8 @@ export type SidecarEvent =
       turnId: string;
       inputTokens?: number;
       outputTokens?: number;
+      cacheReadInputTokens?: number;
+      cacheCreationInputTokens?: number;
     }
   | { type: "turn_finished"; turnId: string; stopReason?: string }
   | { type: "error"; turnId?: string; message: string };

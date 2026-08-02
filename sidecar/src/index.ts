@@ -511,6 +511,8 @@ function handleMessage(message: SDKMessage): void {
           turnId,
           inputTokens: usage.input_tokens,
           outputTokens: usage.output_tokens,
+          cacheReadInputTokens: usage.cache_read_input_tokens ?? undefined,
+          cacheCreationInputTokens: usage.cache_creation_input_tokens ?? undefined,
         });
       }
       break;
@@ -540,6 +542,8 @@ function handleMessage(message: SDKMessage): void {
           turnId,
           inputTokens: message.usage.input_tokens,
           outputTokens: message.usage.output_tokens,
+          cacheReadInputTokens: message.usage.cache_read_input_tokens ?? undefined,
+          cacheCreationInputTokens: message.usage.cache_creation_input_tokens ?? undefined,
         });
       }
       bus.emit({
