@@ -526,6 +526,21 @@
     gap: 4px;
 }
 
+/* Separate stacked blocks (Tokens / Context / limits) with a hairline. */
+.usage-block + .usage-block {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e3e9f0;
+}
+
+.usage-subhead {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #8494a5;
+    font-variant-numeric: tabular-nums;
+}
+
 .usage-row {
     display: flex;
     justify-content: space-between;

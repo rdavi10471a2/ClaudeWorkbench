@@ -19,6 +19,17 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
     private readonly object sync = new();
     private const int MaxEvents = 500;
 
+    // Cap-immune token accumulator. The `events` ring buffer evicts old entries (MaxEvents), so the
+    // thread total cannot be recomputed from the snapshot — accumulate it here as turns complete.
+    // Reset on thread_reset. All under `sync`. See TokenUsageBreakdown for the meaning of the split.
+    private ClaudeWorkbench.Host.Console.TurnTokenUsage threadUsage = ClaudeWorkbench.Host.Console.TurnTokenUsage.Empty;
+    private ClaudeWorkbench.Host.Console.TurnTokenUsage lastTurnUsage = ClaudeWorkbench.Host.Console.TurnTokenUsage.Empty;
+    // In-flight turn: round-trips counted from non-final usage events; token totals overwritten by
+    // the final (result) usage event, which carries the turn's cumulative numbers.
+    private int currentTurnRoundTrips;
+    private long currentTurnFresh, currentTurnCacheRead, currentTurnCacheCreation, currentTurnOutput;
+    private bool currentTurnHasFinal;
+
     public SidecarEventStream(IHttpClientFactory httpClientFactory, SidecarOptions options, AgentFileAccess fileAccess)
     {
         this.httpClientFactory = httpClientFactory;
@@ -50,6 +61,60 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
         {
             return events.ToArray();
         }
+    }
+
+    // The token anatomy for the just-finished turn and the running thread total. Available once at
+    // least one turn has produced a cumulative (result) usage event this thread.
+    public ClaudeWorkbench.Host.Console.TokenUsageBreakdown TokenUsage()
+    {
+        lock (sync)
+        {
+            // Available only once a turn has COMPLETED (a mid-first-turn read would render an all-zeros
+            // block — the in-flight turn's totals aren't promoted to lastTurn/thread until it finalizes).
+            bool available = !threadUsage.IsEmpty || !lastTurnUsage.IsEmpty;
+            return new ClaudeWorkbench.Host.Console.TokenUsageBreakdown(available, lastTurnUsage, threadUsage);
+        }
+    }
+
+    // Fold one usage event into the in-flight turn (called under sync).
+    private void AccumulateUsage(SidecarEvent evt)
+    {
+        if (evt.Final == true)
+        {
+            // The result message: authoritative cumulative totals for the whole turn.
+            currentTurnFresh = evt.InputTokens ?? 0;
+            currentTurnCacheRead = evt.CacheReadInputTokens ?? 0;
+            currentTurnCacheCreation = evt.CacheCreationInputTokens ?? 0;
+            currentTurnOutput = evt.OutputTokens ?? 0;
+            currentTurnHasFinal = true;
+        }
+        else
+        {
+            // One assistant message = one API round-trip.
+            currentTurnRoundTrips++;
+        }
+    }
+
+    // Close out the in-flight turn: promote it to "last turn", add it to the thread total, reset
+    // the per-turn counters (called under sync on turn_finished).
+    private void FinalizeTurnUsage()
+    {
+        if (currentTurnRoundTrips == 0 && !currentTurnHasFinal)
+        {
+            return; // nothing happened (e.g. an immediately-interrupted turn)
+        }
+
+        lastTurnUsage = new ClaudeWorkbench.Host.Console.TurnTokenUsage(
+            currentTurnRoundTrips, currentTurnFresh, currentTurnCacheRead, currentTurnCacheCreation, currentTurnOutput);
+        threadUsage = threadUsage.Add(lastTurnUsage);
+        ResetCurrentTurnUsage();
+    }
+
+    private void ResetCurrentTurnUsage()
+    {
+        currentTurnRoundTrips = 0;
+        currentTurnFresh = currentTurnCacheRead = currentTurnCacheCreation = currentTurnOutput = 0;
+        currentTurnHasFinal = false;
     }
 
     public IReadOnlyList<GateInfo> PendingGates()
@@ -258,6 +323,9 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
                     fileAccess.Clear();
                     ActiveTurn = null;
                     CurrentSessionId = null;
+                    threadUsage = ClaudeWorkbench.Host.Console.TurnTokenUsage.Empty;
+                    lastTurnUsage = ClaudeWorkbench.Host.Console.TurnTokenUsage.Empty;
+                    ResetCurrentTurnUsage();
                     break;
                 case "session_started" when !string.IsNullOrWhiteSpace(evt.SessionId):
                     CurrentSessionId = evt.SessionId;
@@ -271,10 +339,15 @@ public sealed class SidecarEventStream : BackgroundService, ICurrentSession
                     break;
                 case "turn_started":
                     ActiveTurn = evt.TurnId;
+                    ResetCurrentTurnUsage();
                     break;
                 case "turn_finished":
                     ActiveTurn = null;
                     sessionToMirror = CurrentSessionId;
+                    FinalizeTurnUsage();
+                    break;
+                case "usage":
+                    AccumulateUsage(evt);
                     break;
                 case "tool_call_started":
                     // Any file the agent touches (read/write/edit) becomes viewable in chat

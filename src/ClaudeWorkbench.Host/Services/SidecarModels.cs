@@ -18,6 +18,11 @@ public sealed record SidecarEvent
     public string? Message { get; init; }
     public int? InputTokens { get; init; }
     public int? OutputTokens { get; init; }
+    public int? CacheReadInputTokens { get; init; }
+    public int? CacheCreationInputTokens { get; init; }
+    // Set only on the turn's cumulative-total usage event (SDK result message); see the token
+    // accumulator in SidecarEventStream. Non-final usage events are per-round-trip.
+    public bool? Final { get; init; }
     public string? FilePath { get; init; }
     public JsonElement? Input { get; init; }
     public long? Ts { get; init; }

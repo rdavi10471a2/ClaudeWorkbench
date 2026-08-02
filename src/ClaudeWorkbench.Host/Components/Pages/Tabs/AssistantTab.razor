@@ -119,11 +119,23 @@
                                     <span>Usage</span>
                                     <button type="button" class="usage-close" @onclick="@(() => usageOpen = false)" aria-label="Close usage">&times;</button>
                                 </div>
-                                @if (usage is null || !usage.Available)
+                                @{ var tokens = Session.TokenUsage; }
+                                @if ((usage is null || !usage.Available) && !tokens.Available)
                                 {
                                     <div class="usage-empty">Usage appears once a turn has run in this thread.</div>
                                 }
-                                else
+                                @if (tokens.Available)
+                                {
+                                    <div class="usage-block">
+                                        <div class="usage-subhead">Tokens (this thread)</div>
+                                        <div class="usage-row"><span>Last turn</span><strong>@tokens.LastTurn.RoundTrips round-trips</strong></div>
+                                        <div class="usage-note">@Tk(tokens.LastTurn.CacheRead) cache-read (@Pct(tokens.LastTurn.CacheReadPercent)) · @Tk(tokens.LastTurn.FreshInput) fresh · @Tk(tokens.LastTurn.CacheCreation) cache-write</div>
+                                        <div class="usage-note">@Tk(tokens.LastTurn.Output) output</div>
+                                        <div class="usage-row"><span>Thread total</span><strong>@tokens.Thread.RoundTrips round-trips</strong></div>
+                                        <div class="usage-note">@Tk(tokens.Thread.TotalInput) input · @Tk(tokens.Thread.Output) output</div>
+                                    </div>
+                                }
+                                @if (usage is not null && usage.Available)
                                 {
                                     <div class="usage-block">
                                         <div class="usage-row"><span>Context</span><strong>@Pct(usage.ContextPercent) used</strong></div>

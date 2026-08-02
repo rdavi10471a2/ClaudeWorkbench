@@ -28,6 +28,11 @@ public interface IOperatorConsole
     // Live token/context + subscription usage off the agent's Query handle.
     Task<UsageSnapshot> GetUsageAsync();
 
+    // Per-turn + thread-cumulative token anatomy folded from the sidecar's usage events (round-trips,
+    // fresh input, cache-read, cache-creation, output). Synchronous — no SDK round-trip; updates live
+    // as the turn streams. Distinct from GetUsageAsync (context-window/subscription %).
+    TokenUsageBreakdown TokenUsage { get; }
+
     // Start a fresh conversation thread (drops resumed context, clears the transcript).
     Task NewThreadAsync();
 
