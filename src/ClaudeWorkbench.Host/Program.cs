@@ -327,6 +327,11 @@ internal static class Program
             return Results.Text(card, "text/markdown");
         });
 
+        // The governed tool surface (native tool sets + the withheld semantic MCP list), authored in
+        // C# (AgentToolSurface.Compose) and fetched by the sidecar at startup — same C#-single-source
+        // pattern as the card, so the sidecar no longer hand-copies these lists (they used to drift).
+        app.MapGet("/guidance/tool-policy", () => Results.Json(AgentToolSurface.Compose()));
+
         // --- test-only review HTTP surface -------------------------------------
         // Accept is normally an OPERATOR action at the Merge Review dialog and the ONLY
         // path that writes watched source. These endpoints expose the SAME

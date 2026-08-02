@@ -15,6 +15,13 @@ import {
 import { EventBus } from "./bus.js";
 import { OperatorGate, isGatedTool, isNeverAutoApproved, baseName } from "./gate.js";
 import type { SidecarEvent } from "./events.js";
+import {
+  type ToolPolicy,
+  type ToolSurfaceSpec,
+  FALLBACK_TOOL_SURFACE,
+  enableableNative,
+  deriveToolGating,
+} from "./toolGating.js";
 
 // --- config -------------------------------------------------------------
 const SIDECAR_PORT = Number(process.env.SIDECAR_PORT ?? 6110);
@@ -124,6 +131,57 @@ function buildGovernanceCard(): string {
   );
 }
 
+// The governed tool surface is authored in C# (AgentToolSurface.Compose) and served at GET
+// /guidance/tool-policy — the same C#-single-source pattern as the role card, so the withheld
+// MCP list and native tool sets live in ONE place and never drift into a stale TypeScript copy.
+// One fetch per process (the surface is static); on failure we keep FALLBACK_TOOL_SURFACE.
+let toolSurfaceResolved = false;
+let toolSurfaceWarned = false;
+
+async function resolveToolSurface(timeoutMs = 30_000): Promise<void> {
+  if (toolSurfaceResolved) {
+    return;
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${HOST_BASE}/guidance/tool-policy`);
+      if (response.ok) {
+        const spec = (await response.json()) as Partial<ToolSurfaceSpec>;
+        // Only accept a well-formed surface; a partial one would silently widen/narrow the gate.
+        if (
+          Array.isArray(spec.alwaysAllowedNative) &&
+          Array.isArray(spec.readTools) &&
+          Array.isArray(spec.blockableNative) &&
+          Array.isArray(spec.enableableNative) &&
+          Array.isArray(spec.semanticEditMcpTools)
+        ) {
+          toolSurface = spec as ToolSurfaceSpec;
+          toolSurfaceResolved = true;
+          console.log(
+            `[sidecar] tool surface loaded from ${HOST_BASE} ` +
+              `(blockable ${toolSurface.blockableNative.length}, semantic ${toolSurface.semanticEditMcpTools.length}).`,
+          );
+          return;
+        }
+      }
+    } catch {
+      // host not listening yet
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  if (!toolSurfaceWarned) {
+    toolSurfaceWarned = true;
+    console.warn(
+      `[sidecar] tool surface not available from ${HOST_BASE} after ${timeoutMs / 1000}s; ` +
+        "using the built-in fallback surface (governed defaults still hold).",
+    );
+  }
+}
+
 void resolveWorkspaceCwd();
 
 // --- minimal content-block shapes we read off SDK messages --------------
@@ -183,44 +241,23 @@ const elicitations = new Map<string, { resolve: (answers: Record<string, unknown
 // operator is interrupted only for changes that can reach watched source or the
 // review queue; mutations pause here until the host resolves the gate.
 // Deny-by-default tool surface, driven by the operator's per-turn tool policy.
-// ALWAYS_ALLOWED_NATIVE is needed for the agent to function (ToolSearch loads the
-// MCP tool schemas). READ_TOOLS gate on allowNativeReads. BLOCKABLE_TOOLS are the
-// writers/shells hard-removed unless the operator opts them in.
-const ALWAYS_ALLOWED_NATIVE = ["ToolSearch", "TodoWrite"];
-const READ_TOOLS = ["Read", "Grep", "Glob"];
-const BLOCKABLE_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"];
-// Web read tools the operator may also opt into. Unlike BLOCKABLE_TOOLS these reach OUTSIDE
-// the workspace (an outbound path), so they are deny-by-default and only enter the allow-set
-// when the operator explicitly enables them from Settings; canUseTool still gates every call.
-const OPTIONAL_WEB_TOOLS = ["WebFetch", "WebSearch"];
-// The full set an operator may re-enable from Settings. MUST stay in sync with the host's
-// OptionalAgentTools list (AgentToolPolicy.cs) -- anything the dialog offers but this rejects
-// is a toggle that silently no-ops (the "settings tab is a lie" bug).
-const ENABLEABLE_NATIVE = new Set<string>([...BLOCKABLE_TOOLS, ...OPTIONAL_WEB_TOOLS]);
+// The deny-by-default derivation (deriveToolGating) and the surface shape live in toolGating.ts so
+// the governance boundary can be unit-tested without the live stack. The AUTHORITATIVE surface is
+// authored in C# (AgentToolSurface.Compose) and fetched by resolveToolSurface(); FALLBACK_TOOL_SURFACE
+// is used only when the host is unreachable — the same C#-single-source pattern as the role card.
 const WORKBENCH_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
-
-interface ToolPolicy {
-  allowNativeReads: boolean;
-  strictMcpConfig: boolean;
-  enabledTools: string[];
-  autoApprove: boolean;
-  model: string;
-  effort: string;
-}
-
-const DEFAULT_TOOL_POLICY: ToolPolicy = {
-  allowNativeReads: true,
-  strictMcpConfig: true,
-  enabledTools: [],
-  autoApprove: false,
-  model: "",
-  effort: "",
-};
 
 const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
+// The tool surface currently in force. Starts at the built-in fallback; replaced by the host-authored
+// surface once resolveToolSurface() succeeds (before the first turn).
+let toolSurface: ToolSurfaceSpec = FALLBACK_TOOL_SURFACE;
+
 // Recomputed at the start of each turn from that turn's policy; canUseTool reads it.
-let activeAllowedNative = new Set<string>([...ALWAYS_ALLOWED_NATIVE, ...READ_TOOLS]);
+let activeAllowedNative = new Set<string>([
+  ...FALLBACK_TOOL_SURFACE.alwaysAllowedNative,
+  ...FALLBACK_TOOL_SURFACE.readTools,
+]);
 // When on, claude-workbench mutations auto-allow instead of pausing at the operator
 // gate. Watched source is still only written by the operator's merge-review Accept.
 let activeAutoApprove = false;
@@ -390,17 +427,12 @@ async function ensureSession(policy: ToolPolicy): Promise<void> {
   await resolveWorkspaceCwd();
   // Must complete before buildGovernanceCard(): the card embeds the host-authored procedure.
   await resolveGovernanceCard();
+  // Must complete before deriveToolGating(): the surface (native sets + withheld MCP list) is
+  // host-authored. Falls back to FALLBACK_TOOL_SURFACE if the host is unreachable.
+  await resolveToolSurface();
 
-  const enabled = new Set(policy.enabledTools);
-  activeAllowedNative = new Set<string>([
-    ...ALWAYS_ALLOWED_NATIVE,
-    ...(policy.allowNativeReads ? READ_TOOLS : []),
-    ...policy.enabledTools,
-  ]);
-  const disallowed = BLOCKABLE_TOOLS.filter((tool) => !enabled.has(tool));
-  if (!policy.allowNativeReads) {
-    disallowed.push(...READ_TOOLS);
-  }
+  const { allowedNative, disallowed } = deriveToolGating(policy, toolSurface, WORKBENCH_TOOL_PREFIX);
+  activeAllowedNative = allowedNative;
 
   const input = new InputStream();
   activeInput = input;
@@ -691,15 +723,19 @@ app.post("/prompt", (req, res) => {
     return;
   }
   const raw = (req.body?.toolPolicy ?? {}) as Partial<ToolPolicy>;
+  // H3: an operator may only re-enable tools from the current surface's enableable set (writers/
+  // shells + the opt-in web read tools). Arbitrary names (Agent, Workflow, anything unknown) still
+  // can NOT be spliced in, so a /prompt body cannot widen the deny-by-default surface beyond the
+  // intended, per-call-gated opt-ins. (Surface is the fallback until resolveToolSurface() lands;
+  // they share the enableable set, so first-turn validation is unaffected.)
+  const enableable = enableableNative(toolSurface);
   const policy: ToolPolicy = {
     allowNativeReads: raw.allowNativeReads !== false,
+    // Default OFF: the semantic edit family is withheld unless the operator turns it on in Settings.
+    allowSemanticEdits: raw.allowSemanticEdits === true,
     strictMcpConfig: raw.strictMcpConfig !== false,
-    // H3: an operator may only re-enable tools from the fixed ENABLEABLE_NATIVE set (writers/
-    // shells + the opt-in web read tools). Arbitrary names (Agent, Workflow, anything unknown)
-    // still can NOT be spliced in, so a /prompt body cannot widen the deny-by-default surface
-    // beyond the intended, per-call-gated opt-ins.
     enabledTools: Array.isArray(raw.enabledTools)
-      ? raw.enabledTools.map(String).filter((tool) => ENABLEABLE_NATIVE.has(tool))
+      ? raw.enabledTools.map(String).filter((tool) => enableable.has(tool))
       : [],
     autoApprove: raw.autoApprove === true,
     model: typeof raw.model === "string" ? raw.model : "",

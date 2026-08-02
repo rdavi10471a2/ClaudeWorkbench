@@ -20,6 +20,14 @@
                 </label>
 
                 <label class="settings-row">
+                    <input type="checkbox" @bind="draft.AllowSemanticEdits" />
+                    <div class="settings-text">
+                        <strong>Semantic / structural edit tools</strong>
+                        <small>Expose the Roslyn edit family (add_method, submit_symbol, replace_span, …). Off by default: the runtime re-feeds the whole file each turn, so these buy no token saving over submit_file / replace_text_in_file and often add a discovery round-trip. Turn on only to compare.</small>
+                    </div>
+                </label>
+
+                <label class="settings-row">
                     <input type="checkbox" @bind="draft.StrictMcpConfig" />
                     <div class="settings-text">
                         <strong>Isolate MCP surface</strong>
