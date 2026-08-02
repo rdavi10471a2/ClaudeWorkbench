@@ -153,6 +153,9 @@ public partial class AssistantTab : IDisposable, IAsyncDisposable
         return value is double d ? $"{d:0}%" : "—";
     }
 
+    // Thousands-separated token count for the usage breakdown.
+    private static string Tk(long value) => value.ToString("N0");
+
     private static string BarWidth(double? value)
     {
         return value is double d ? $"{Math.Clamp(d, 0, 100):0}%" : "0%";

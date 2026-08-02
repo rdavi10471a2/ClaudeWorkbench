@@ -155,6 +155,8 @@ public sealed partial class SidecarOperatorConsole : IOperatorConsole, IApproval
         return client.GetUsageAsync();
     }
 
+    public TokenUsageBreakdown TokenUsage => stream.TokenUsage();
+
     public async Task NewThreadAsync()
     {
         // A fresh conversation drops any resumed history so the new thread starts with an empty pane.

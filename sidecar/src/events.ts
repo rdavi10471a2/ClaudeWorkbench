@@ -66,6 +66,11 @@ export type SidecarEvent =
       outputTokens?: number;
       cacheReadInputTokens?: number;
       cacheCreationInputTokens?: number;
+      // True only on the usage event derived from the SDK `result` message: its numbers are the
+      // turn's CUMULATIVE total. Absent/false on per-assistant-message usage events, each of which
+      // is one API round-trip. The host counts the non-final events (round-trips) and reads the
+      // final one (turn total) — see SidecarEventStream token accumulator.
+      final?: boolean;
     }
   | { type: "turn_finished"; turnId: string; stopReason?: string }
   | { type: "error"; turnId?: string; message: string };

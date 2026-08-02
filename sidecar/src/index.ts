@@ -544,6 +544,7 @@ function handleMessage(message: SDKMessage): void {
           outputTokens: message.usage.output_tokens,
           cacheReadInputTokens: message.usage.cache_read_input_tokens ?? undefined,
           cacheCreationInputTokens: message.usage.cache_creation_input_tokens ?? undefined,
+          final: true,
         });
       }
       bus.emit({
