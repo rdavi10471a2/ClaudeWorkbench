@@ -7,7 +7,7 @@ query options; **Save** applies them, **Cancel** discards:
 
 | Setting | Effect |
 |---|---|
-| **Native read tools (Read / Grep / Glob)** | When off, even the agent's reads are disallowed, forcing *all* access — reads included — through the MCP surface. On by default (native reads are ergonomic and safe). |
+| **Native read tools (Read / Grep / Glob)** | **Locked on** (shown but not changeable). It used to force all reads through the MCP surface, which worked while `get_file` existed; the 894c33f surface shrink removed it and no remaining MCP tool returns file content, so turning it off would leave the agent unable to read source at all. Measured on the governed-loop bench: 3.5× the round-trips and 8.2× the output, and it still passes, so the breakage is invisible. To revisit, restore a content-returning MCP read tool first. |
 | **Isolate MCP surface** | Expose only `claude-workbench` and ignore the machine's account/user connectors (e.g. claude.ai connectors). |
 | **Model** | Which Claude model drives the turn |
 | **Reasoning level** | The effort/thinking level — default, `low`, `medium`, `high`, `xhigh`, `max` |
