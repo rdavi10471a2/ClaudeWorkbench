@@ -76,7 +76,7 @@ Even with auto-approve, candidate mutations only touch the monitor-owned Working
 | Constant / flag | Members / meaning |
 | --- | --- |
 | `ALWAYS_ALLOWED_NATIVE` | `ToolSearch`, `TodoWrite` — needed for the agent to function (`ToolSearch` loads the MCP tool schemas). Always allowed. |
-| `READ_TOOLS` | `Read`, `Grep`, `Glob` — allowed when `policy.allowNativeReads` (default true); otherwise added to `disallowedTools`. |
+| `READ_TOOLS` | `Read`, `Grep`, `Glob` — allowed when `policy.allowNativeReads` (default true); otherwise added to `disallowedTools`. The derivation is unchanged, but the operator toggle is **locked on** as of 2026-08-15: no MCP tool returns file content since the 894c33f shrink, so `false` leaves no read path. Still settable over HTTP (the bench exercises it). |
 | `BLOCKABLE_TOOLS` | `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, `PowerShell` — hard-removed via `disallowedTools` unless the operator opts them in through `enabledTools`. This list is also the **allowlist** `/prompt`'s `enabledTools` is filtered against: no other tool name can be opted in. |
 | `GATED_TOOLS` (gate.ts) | The workbench mutation set that pauses at the gate: `new_file`, `submit_file`, `replace_text_in_file`, `replace_span_in_file`, `submit_symbol`, `add_using`, `remove_using`, `set_type_partial`, `add_symbol`, `add_field`, `add_property`, `add_method`, `add_constructor`, `add_nested_type`, `remove_symbol`, `stage_candidate_for_review`, `record_diff_decision`. Git is **not** here: the agent has read-only git only (`git_status`/`git_diff`/`git_log`/`git_list_branches`, absent from this set so they auto-allow), and there are no git-write tools — commit/push/branch/merge are operator-only in the Git page. |
 

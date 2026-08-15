@@ -11,11 +11,21 @@
             </header>
 
             <div class="settings-body">
-                <label class="settings-row">
-                    <input type="checkbox" @bind="draft.AllowNativeReads" />
+@* LOCKED ON (2026-08-15). Turning this off used to route reads through the MCP surface via
+   get_file — but the 894c33f surface shrink cut get_file, and no remaining MCP tool returns
+   arbitrary source content (get_source_map is an outline, find_indexed_* are locations,
+   refresh_file returns status only). So Off now leaves NO read path at all. Measured on the
+   governed-loop bench (tests/bench, customer-datalayer, n=3): the agent guesses snippets for
+   replace_text_in_file and falls back to whole-file submit_file — 3.5x the round-trips and
+   8.2x the output of control, and it still PASSES, so nothing surfaces the problem to the
+   operator. Same treatment as the semantic-edit toggle below: kept visible and tagged rather
+   than deleted, so the capability is discoverable. To revisit, restore a content-returning
+   MCP read tool first, then re-enable here. *@
+                <label class="settings-row settings-row--locked">
+                    <input type="checkbox" @bind="draft.AllowNativeReads" disabled />
                     <div class="settings-text">
-                        <strong>Native read tools (Read / Grep / Glob)</strong>
-                        <small>Let the agent read the watched workspace directly. Off forces all reads through the claude-workbench MCP.</small>
+                        <strong>Native read tools (Read / Grep / Glob) <span class="settings-locked">always on</span></strong>
+                        <small>The agent reads the watched workspace directly. This can no longer be turned off: the MCP surface has no file-content read tool, so disabling it would leave the agent unable to read source at all.</small>
                     </div>
                 </label>
 

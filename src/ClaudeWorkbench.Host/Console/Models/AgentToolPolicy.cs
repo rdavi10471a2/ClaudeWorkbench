@@ -5,7 +5,11 @@ namespace ClaudeWorkbench.Host.Console;
 // settings dialog. Persisted host-side and sent to the sidecar per turn.
 public sealed class AgentToolPolicy
 {
-    // Native read tools (Read/Grep/Glob). Off => force all access through the MCP.
+    // Native read tools (Read/Grep/Glob). LOCKED ON at the UI since 2026-08-15: "off" used to
+    // route reads through the MCP surface via get_file, but the 894c33f shrink cut it and no
+    // remaining MCP tool returns arbitrary file content, so off leaves NO read path. The field
+    // stays settable (the HTTP surface and the bench still exercise it) — it just isn't an
+    // operator choice any more. See AgentSettingsDialog.razor and tests/bench.
     public bool AllowNativeReads { get; set; } = true;
 
     // Expose only the claude-workbench MCP server; ignore machine/account connectors.
